@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#05080f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>NOX</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icon.svg" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="hud">
+    <div class="brand">N<span>O</span>X</div>
+    <div class="telemetry">
+      <div id="clock">--:--</div>
+      <div id="place" title="Tu ubicación">Localizando…</div>
+    </div>
+    <button id="settingsBtn" class="icon-btn" aria-label="Ajustes">⚙</button>
+  </header>
+
+  <main>
+    <button id="core" class="core" aria-label="Pulsa para hablar">
+      <div class="ring r1"></div>
+      <div class="ring r2"></div>
+      <div class="ring r3"></div>
+      <div class="reactor"></div>
+    </button>
+    <div id="status" class="status">Toca el núcleo para hablar</div>
+
+    <section id="log" class="log" aria-live="polite"></section>
+  </main>
+
+  <form id="composer" class="composer">
+    <input id="input" autocomplete="off" placeholder="Escribe o di «Nox, …»" />
+    <button type="submit" class="icon-btn" aria-label="Enviar">➤</button>
+  </form>
+
+  <dialog id="settings">
+    <form method="dialog">
+      <h2>Ajustes de NOX</h2>
+      <label><input type="checkbox" id="optWake" /> Escucha continua con palabra clave «Nox»</label>
+      <label><input type="checkbox" id="optVoice" checked /> Responder en voz alta</label>
+      <label>Voz <select id="optVoiceName"></select></label>
+      <label>Clave de acceso (si tu servidor la pide) <input type="password" id="optKey" /></label>
+      <div class="row">
+        <button type="button" id="resetBtn">Borrar memoria</button>
+        <button value="ok">Listo</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

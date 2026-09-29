@@ -1,0 +1,14 @@
+{
+  "name": "nox-ai",
+  "version": "0.1.0",
+  "description": "NOX — asistente personal por voz estilo J.A.R.V.I.S., con ubicación en tiempo real, impulsado por Claude",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.129.0"
+  }
+}
