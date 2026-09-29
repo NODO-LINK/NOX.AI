@@ -36,8 +36,20 @@ El "cerebro" es Claude (Anthropic), con búsqueda web para información actual.
 | `ANTHROPIC_API_KEY` | Tu clave de Claude (obligatoria) | — |
 | `NOX_USER_NAME` | Cómo te llama NOX | `señor` |
 | `NOX_ACCESS_KEY` | Contraseña para usar tu NOX si lo publicas en internet (se pone en ⚙ de cada dispositivo) | sin clave |
+| `NOX_DAILY_BUDGET_USD` | Máximo que NOX puede gastar al día, en dólares (`0` = sin límite) | `1` |
+| `NOX_TIMEZONE` | Zona horaria para saber cuándo empieza "hoy" (ej. `America/Mexico_City`) | la del servidor |
 | `NOX_MODEL` | Modelo de Claude | `claude-opus-5-5` |
 | `PORT` | Puerto | `3000` |
+
+## Control de gasto
+
+La API de Claude es de prepago y va aparte de la suscripción de Claude.ai. NOX tiene **dos protecciones**:
+
+1. **Límite diario dentro de NOX** (`NOX_DAILY_BUDGET_USD`, 1 $ por defecto). Cuando lo alcanza, NOX avisa
+   y no responde más hasta el día siguiente. El gasto de hoy se ve en ⚙. Es una estimación calculada
+   con los precios públicos; la última pregunta del día puede pasarse unos céntimos.
+2. **Límite en la consola de Anthropic**: carga solo el crédito que quieras gastar, desactiva la
+   recarga automática y pon un límite mensual. Esto es lo que de verdad garantiza que nunca se gaste más.
 
 ## Tenerlo en todos tus dispositivos
 

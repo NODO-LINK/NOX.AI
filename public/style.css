@@ -144,6 +144,7 @@ dialog {
 }
 dialog::backdrop { background: rgba(0,0,0,0.6); }
 dialog h2 { margin-top: 0; color: var(--cyan); font-size: 1.1rem; }
+dialog .usage { color: var(--muted); font-size: 0.85rem; margin: 0 0 8px; }
 dialog label { display: flex; flex-direction: column; gap: 4px; margin: 12px 0; font-size: 0.9rem; }
 dialog label:has(input[type=checkbox]) { flex-direction: row; align-items: center; gap: 8px; }
 dialog select, dialog input[type=password] {

@@ -201,6 +201,8 @@ async function ask(text) {
           pending += data.text;
           flushSentences();
           $("log").scrollTop = $("log").scrollHeight;
+        } else if (event === "usage") {
+          showUsage(data);
         } else if (event === "status") {
           $("status").textContent = data.text;
         } else if (event === "error") {
@@ -295,10 +297,23 @@ $("composer").addEventListener("submit", (e) => {
 });
 
 // ---------- Ajustes ----------
+function showUsage(u) {
+  if (!u || typeof u.spentUsd !== "number") return;
+  $("usage").textContent = u.limitUsd > 0
+    ? `Gasto de hoy: ${u.spentUsd.toFixed(3)} $ de ${u.limitUsd} $ (quedan ${u.remainingUsd.toFixed(3)} $)`
+    : `Gasto de hoy: ${u.spentUsd.toFixed(3)} $ (sin límite)`;
+}
+async function refreshUsage() {
+  try {
+    const r = await fetch("/api/usage", { headers: settings.key ? { "x-nox-key": settings.key } : {} });
+    if (r.ok) showUsage(await r.json());
+  } catch {}
+}
+
 $("optWake").checked = settings.wake;
 $("optVoice").checked = settings.voice;
 $("optKey").value = settings.key;
-$("settingsBtn").addEventListener("click", () => { fillVoiceList(); $("settings").showModal(); });
+$("settingsBtn").addEventListener("click", () => { fillVoiceList(); refreshUsage(); $("settings").showModal(); });
 $("settings").addEventListener("close", () => {
   settings.wake = $("optWake").checked;
   settings.voice = $("optVoice").checked;

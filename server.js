@@ -16,7 +16,68 @@ const USER_NAME = process.env.NOX_USER_NAME || "señor";
 // Clave opcional para que solo tú puedas usar tu NOX si lo publicas en internet.
 const ACCESS_KEY = process.env.NOX_ACCESS_KEY || "";
 
+// Límite de gasto diario en dólares (0 = sin límite). Tú decides cuánto gasta NOX al día.
+const DAILY_BUDGET_USD = Number(process.env.NOX_DAILY_BUDGET_USD ?? 1);
+const USAGE_FILE = path.join(here, "usage.json");
+
 const client = new Anthropic();
+
+// ---------- Control de gasto diario ----------
+// Precios en dólares por millón de tokens (entrada, salida, lectura de caché).
+// La escritura en caché cuesta 1,25× la entrada. Revisa anthropic.com/pricing si cambian.
+const PRICES = {
+  "claude-opus-5-5": { in: 4, out: 20, cacheRead: 0.2 },
+  "claude-sonnet-5-5": { in: 2, out: 10, cacheRead: 0.2 },
+  "claude-haiku-4-5": { in: 1, out: 5, cacheRead: 0.1 },
+  "claude-fable-5-1": { in: 10, out: 50, cacheRead: 0.25 },
+};
+const WEB_SEARCH_USD = 0.01; // 10 $ por cada 1.000 búsquedas
+
+function today() {
+  return new Date().toLocaleDateString("sv-SE", { timeZone: process.env.NOX_TIMEZONE || undefined });
+}
+
+let usage = { day: today(), usd: 0, requests: 0 };
+try {
+  const saved = JSON.parse(await fs.readFile(USAGE_FILE, "utf8"));
+  if (saved.day === usage.day) usage = saved;
+} catch {}
+
+function currentUsage() {
+  if (usage.day !== today()) usage = { day: today(), usd: 0, requests: 0 };
+  return usage;
+}
+
+function costOf(model, u) {
+  const p = PRICES[model] || PRICES["claude-opus-5-5"];
+  const cacheWrite = u.cache_creation_input_tokens || 0;
+  const cacheRead = u.cache_read_input_tokens || 0;
+  return (
+    ((u.input_tokens || 0) * p.in + cacheWrite * p.in * 1.25 + cacheRead * p.cacheRead + (u.output_tokens || 0) * p.out) / 1e6 +
+    (u.server_tool_use?.web_search_requests || 0) * WEB_SEARCH_USD
+  );
+}
+
+function recordUsage(message) {
+  const u = currentUsage();
+  u.usd += costOf(message.model || MODEL, message.usage || {});
+  u.requests++;
+  fs.writeFile(USAGE_FILE, JSON.stringify(u)).catch(() => {});
+}
+
+function budgetInfo() {
+  const u = currentUsage();
+  return {
+    day: u.day,
+    spentUsd: Number(u.usd.toFixed(4)),
+    limitUsd: DAILY_BUDGET_USD,
+    remainingUsd: DAILY_BUDGET_USD > 0 ? Number(Math.max(0, DAILY_BUDGET_USD - u.usd).toFixed(4)) : null,
+  };
+}
+
+function overBudget() {
+  return DAILY_BUDGET_USD > 0 && currentUsage().usd >= DAILY_BUDGET_USD;
+}
 
 // Prompt fijo (no cambia entre peticiones, así se aprovecha la caché de Claude).
 const SYSTEM_PROMPT = `Eres NOX, el asistente personal de inteligencia artificial de ${USER_NAME}, inspirado en J.A.R.V.I.S. de Tony Stark.
@@ -123,6 +184,13 @@ async function handleChat(req, res) {
     Connection: "keep-alive",
   });
 
+  if (overBudget()) {
+    sse(res, "delta", { text: `He alcanzado el límite de gasto de hoy, ${USER_NAME}. Volveré a estar disponible mañana, o puede subir el límite en la configuración.` });
+    sse(res, "usage", budgetInfo());
+    sse(res, "done", { sessionId });
+    return res.end();
+  }
+
   const history = getHistory(sessionId);
   // Historial solo-añadir: el mensaje de contexto se guarda junto al turno,
   // así nunca se edita lo ya enviado (mantiene la caché y el razonamiento previo).
@@ -153,6 +221,7 @@ async function handleChat(req, res) {
         }
       });
       response = await stream.finalMessage();
+      recordUsage(response);
       messages.push({ role: "assistant", content: response.content });
       if (response.stop_reason !== "pause_turn") break;
     }
@@ -163,6 +232,7 @@ async function handleChat(req, res) {
     // Solo guardamos el turno cuando terminó bien.
     history.length = 0;
     history.push(...messages);
+    sse(res, "usage", budgetInfo());
     sse(res, "done", { sessionId });
   } catch (err) {
     console.error("Error de Claude:", err);
@@ -209,6 +279,10 @@ const server = http.createServer(async (req, res) => {
       return res.end(JSON.stringify({ error: "Clave de acceso incorrecta" }));
     }
     if (req.method === "POST" && req.url === "/api/chat") return handleChat(req, res);
+    if (req.method === "GET" && req.url === "/api/usage") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify(budgetInfo()));
+    }
     if (req.method === "POST" && req.url === "/api/reset") {
       const { sessionId } = await readJson(req).catch(() => ({}));
       sessions.delete(String(sessionId));
@@ -223,6 +297,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`NOX en línea → http://localhost:${PORT}  (modelo: ${MODEL})`);
+  console.log(DAILY_BUDGET_USD > 0 ? `Límite diario: ${DAILY_BUDGET_USD} $ (gastado hoy: ${budgetInfo().spentUsd} $)` : "Sin límite diario de gasto");
   if (!process.env.ANTHROPIC_API_KEY) {
     console.warn("⚠  ANTHROPIC_API_KEY no está definida. Consíguela en https://console.anthropic.com");
   }
