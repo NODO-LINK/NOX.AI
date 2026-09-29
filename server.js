@@ -175,6 +175,7 @@ function friendlyError(err) {
     if (status === 400 && /api key/i.test(err.message)) return "La clave GEMINI_API_KEY del servidor no es válida.";
     if (status === 401 || status === 403) return "La clave GEMINI_API_KEY del servidor no es válida o no tiene permiso.";
     if (status === 404) return `El modelo ${MODEL} no existe. Cambie NOX_MODEL.`;
+    if (status === 503 || status === 500) return "Los servidores de Google están saturados ahora mismo. Inténtelo en unos segundos.";
   } else {
     if (err instanceof Anthropic.AuthenticationError || /authentication/i.test(err.message)) return "Falta o es inválida la clave ANTHROPIC_API_KEY en el servidor.";
     if (err instanceof Anthropic.RateLimitError) return "Demasiadas peticiones; dame un momento.";
@@ -226,14 +227,17 @@ async function chatClaude(res, history, text, ctx) {
 }
 
 // ---------- Cerebro: Gemini ----------
-let geminiSearch = true; // se desactiva solo si la cuenta no permite la búsqueda de Google
+// Si un modelo está saturado (503) o sin cuota (429), NOX prueba el siguiente.
+const GEMINI_MODELS = [...new Set([MODEL, "gemini-3.6-flash", "gemini-3.5-flash", "gemini-flash-lite-latest"])];
+// La búsqueda de Google no siempre entra en el plan gratuito: si falla, se pausa una hora.
+let geminiSearchOffUntil = 0;
 
 async function chatGemini(res, history, text, ctx) {
   const userTurn = { role: "user", parts: [{ text: `[Contexto actual]\n${describeContext(ctx)}\n\n${text}` }] };
   const contents = [...history, userTurn];
-  const request = (withSearch) =>
+  const request = (model, withSearch) =>
     gemini.models.generateContentStream({
-      model: MODEL,
+      model,
       contents,
       config: {
         systemInstruction: SYSTEM_PROMPT,
@@ -242,16 +246,33 @@ async function chatGemini(res, history, text, ctx) {
     });
 
   let stream;
-  try {
-    stream = await request(geminiSearch);
-  } catch (err) {
-    // Si falla por la búsqueda (no incluida en el plan), reintenta sin ella.
-    const keyProblem = /api key|API_KEY/i.test(err?.message);
-    if (!geminiSearch || keyProblem || !(err instanceof GeminiApiError) || err.status !== 400) throw err;
-    console.warn("Gemini sin búsqueda de Google:", err.message);
-    geminiSearch = false;
-    stream = await request(false);
+  let lastErr;
+  for (const model of GEMINI_MODELS) {
+    const withSearch = Date.now() > geminiSearchOffUntil;
+    try {
+      stream = await request(model, withSearch);
+      break;
+    } catch (err) {
+      lastErr = err;
+      if (/api key|API_KEY/i.test(err?.message) || !(err instanceof GeminiApiError)) throw err;
+      if (withSearch && (err.status === 429 || err.status === 400)) {
+        // Reintenta el mismo modelo sin búsqueda.
+        try {
+          stream = await request(model, false);
+          console.warn("Búsqueda de Google no disponible en este plan; NOX sigue sin ella durante 1 hora.");
+          geminiSearchOffUntil = Date.now() + 60 * 60_000;
+          break;
+        } catch (err2) {
+          lastErr = err2;
+          if (![429, 503, 404, 500].includes(err2.status)) throw err2;
+        }
+      } else if (![429, 503, 404, 500].includes(err.status)) {
+        throw err;
+      }
+      console.warn(`Gemini ${model} no disponible (${lastErr.status}); probando otro modelo…`);
+    }
   }
+  if (!stream) throw lastErr;
 
   let full = "";
   let searched = false;
