@@ -298,6 +298,7 @@ $("composer").addEventListener("submit", (e) => {
 
 // ---------- Ajustes ----------
 function showUsage(u) {
+  if (u?.free) { $("usage").textContent = "Cerebro: Gemini (plan gratuito)"; return; }
   if (!u || typeof u.spentUsd !== "number") return;
   $("usage").textContent = u.limitUsd > 0
     ? `Gasto de hoy: ${u.spentUsd.toFixed(3)} $ de ${u.limitUsd} $ (quedan ${u.remainingUsd.toFixed(3)} $)`

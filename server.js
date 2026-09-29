@@ -1,17 +1,21 @@
 // NOX — servidor del asistente.
-// Sirve la app web (carpeta /public) y hace de puente seguro hacia Claude:
-// la clave ANTHROPIC_API_KEY nunca sale del servidor.
+// Sirve la app web (carpeta /public) y hace de puente seguro hacia la IA
+// (Gemini de Google o Claude de Anthropic): las claves nunca salen del servidor.
 import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI, ApiError as GeminiApiError } from "@google/genai";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(here, "public");
 const PORT = Number(process.env.PORT) || 3000;
-const MODEL = process.env.NOX_MODEL || "claude-opus-5-5";
+// Cerebro de NOX: "gemini" (tiene plan gratuito) o "claude".
+// Si no se indica, usa Gemini cuando hay GEMINI_API_KEY; si no, Claude.
+const PROVIDER = (process.env.NOX_PROVIDER || (process.env.GEMINI_API_KEY ? "gemini" : "claude")).toLowerCase();
+const MODEL = process.env.NOX_MODEL || (PROVIDER === "gemini" ? "gemini-flash-latest" : "claude-opus-5-5");
 const USER_NAME = process.env.NOX_USER_NAME || "señor";
 // Clave opcional para que solo tú puedas usar tu NOX si lo publicas en internet.
 const ACCESS_KEY = process.env.NOX_ACCESS_KEY || "";
@@ -20,7 +24,8 @@ const ACCESS_KEY = process.env.NOX_ACCESS_KEY || "";
 const DAILY_BUDGET_USD = Number(process.env.NOX_DAILY_BUDGET_USD ?? 1);
 const USAGE_FILE = path.join(here, "usage.json");
 
-const client = new Anthropic();
+const client = PROVIDER === "claude" ? new Anthropic() : null;
+const gemini = PROVIDER === "gemini" ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
 
 // ---------- Control de gasto diario ----------
 // Precios en dólares por millón de tokens (entrada, salida, lectura de caché).
@@ -92,7 +97,7 @@ Formato:
 - Da primero la respuesta directa; amplía solo si te lo piden.
 
 Contexto:
-- En cada turno recibirás un mensaje de sistema con la fecha, hora y ubicación actual del dispositivo del usuario. Úsalo cuando sea relevante (clima, lugares cercanos, "dónde estoy", distancias, hora local), sin repetirlo innecesariamente.
+- En cada turno recibirás (como mensaje de sistema o como bloque [Contexto actual]) la fecha, hora y ubicación actual del dispositivo del usuario. Úsalo cuando sea relevante (clima, lugares cercanos, "dónde estoy", distancias, hora local), sin repetirlo innecesariamente.
 - Tienes búsqueda web para información actual: noticias, clima, horarios, lugares. Úsala cuando la pregunta lo necesite.
 - Si no conoces la ubicación (permiso denegado), dilo con naturalidad y sigue ayudando.`;
 
@@ -163,6 +168,109 @@ function sse(res, event, data) {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
+function friendlyError(err) {
+  const status = err?.status;
+  if (PROVIDER === "gemini") {
+    if (status === 429) return "He agotado las preguntas gratuitas de Gemini por ahora. Inténtelo en un rato o mañana.";
+    if (status === 400 && /api key/i.test(err.message)) return "La clave GEMINI_API_KEY del servidor no es válida.";
+    if (status === 401 || status === 403) return "La clave GEMINI_API_KEY del servidor no es válida o no tiene permiso.";
+    if (status === 404) return `El modelo ${MODEL} no existe. Cambie NOX_MODEL.`;
+  } else {
+    if (err instanceof Anthropic.AuthenticationError || /authentication/i.test(err.message)) return "Falta o es inválida la clave ANTHROPIC_API_KEY en el servidor.";
+    if (err instanceof Anthropic.RateLimitError) return "Demasiadas peticiones; dame un momento.";
+  }
+  if (err instanceof Anthropic.APIConnectionError || /fetch failed|ENOTFOUND|ECONNRESET/i.test(err?.message)) return "No puedo conectar con la red.";
+  return "Tengo problemas para conectar con mis sistemas.";
+}
+
+// ---------- Cerebro: Claude ----------
+async function chatClaude(res, history, text, ctx) {
+  // Historial solo-añadir: el mensaje de contexto se guarda junto al turno,
+  // así nunca se edita lo ya enviado (mantiene la caché y el razonamiento previo).
+  const messages = [
+    ...history,
+    { role: "user", content: text },
+    { role: "system", content: describeContext(ctx) },
+  ];
+  let response;
+  // Las búsquedas web largas pueden pausar el turno (pause_turn): se continúa.
+  for (let i = 0; i < 4; i++) {
+    const stream = client.beta.messages.stream({
+      model: MODEL,
+      max_tokens: 16000,
+      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+      output_config: { effort: "low" }, // conversación en voz: rápido y fluido
+      tools: [webSearchTool(ctx)],
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      messages,
+    });
+    stream.on("text", (delta) => sse(res, "delta", { text: delta }));
+    stream.on("streamEvent", (event) => {
+      if (event.type === "content_block_start" && event.content_block.type === "server_tool_use") {
+        sse(res, "status", { text: "Buscando en la red…" });
+      }
+    });
+    response = await stream.finalMessage();
+    recordUsage(response);
+    messages.push({ role: "assistant", content: response.content });
+    if (response.stop_reason !== "pause_turn") break;
+  }
+  if (response.stop_reason === "refusal") {
+    sse(res, "delta", { text: "Lo siento, no puedo ayudar con eso." });
+  }
+  // Solo guardamos el turno cuando terminó bien.
+  history.length = 0;
+  history.push(...messages);
+  sse(res, "usage", budgetInfo());
+}
+
+// ---------- Cerebro: Gemini ----------
+let geminiSearch = true; // se desactiva solo si la cuenta no permite la búsqueda de Google
+
+async function chatGemini(res, history, text, ctx) {
+  const userTurn = { role: "user", parts: [{ text: `[Contexto actual]\n${describeContext(ctx)}\n\n${text}` }] };
+  const contents = [...history, userTurn];
+  const request = (withSearch) =>
+    gemini.models.generateContentStream({
+      model: MODEL,
+      contents,
+      config: {
+        systemInstruction: SYSTEM_PROMPT,
+        ...(withSearch && { tools: [{ googleSearch: {} }] }),
+      },
+    });
+
+  let stream;
+  try {
+    stream = await request(geminiSearch);
+  } catch (err) {
+    // Si falla por la búsqueda (no incluida en el plan), reintenta sin ella.
+    const keyProblem = /api key|API_KEY/i.test(err?.message);
+    if (!geminiSearch || keyProblem || !(err instanceof GeminiApiError) || err.status !== 400) throw err;
+    console.warn("Gemini sin búsqueda de Google:", err.message);
+    geminiSearch = false;
+    stream = await request(false);
+  }
+
+  let full = "";
+  let searched = false;
+  for await (const chunk of stream) {
+    if (!searched && chunk.candidates?.[0]?.groundingMetadata?.webSearchQueries?.length) {
+      searched = true;
+      sse(res, "status", { text: "Buscando en la red…" });
+    }
+    const delta = chunk.text;
+    if (delta) {
+      full += delta;
+      sse(res, "delta", { text: delta });
+    }
+  }
+  if (!full) sse(res, "delta", { text: (full = "Lo siento, no tengo respuesta para eso.") });
+  history.push(userTurn, { role: "model", parts: [{ text: full }] });
+  sse(res, "usage", { provider: "gemini", free: true });
+}
+
 async function handleChat(req, res) {
   let body;
   try {
@@ -184,7 +292,7 @@ async function handleChat(req, res) {
     Connection: "keep-alive",
   });
 
-  if (overBudget()) {
+  if (PROVIDER === "claude" && overBudget()) {
     sse(res, "delta", { text: `He alcanzado el límite de gasto de hoy, ${USER_NAME}. Volveré a estar disponible mañana, o puede subir el límite en la configuración.` });
     sse(res, "usage", budgetInfo());
     sse(res, "done", { sessionId });
@@ -192,55 +300,13 @@ async function handleChat(req, res) {
   }
 
   const history = getHistory(sessionId);
-  // Historial solo-añadir: el mensaje de contexto se guarda junto al turno,
-  // así nunca se edita lo ya enviado (mantiene la caché y el razonamiento previo).
-  const turn = [
-    { role: "user", content: text },
-    { role: "system", content: describeContext(body.context) },
-  ];
-  const messages = [...history, ...turn];
-
   try {
-    let response;
-    // Las búsquedas web largas pueden pausar el turno (pause_turn): se continúa.
-    for (let i = 0; i < 4; i++) {
-      const stream = client.beta.messages.stream({
-        model: MODEL,
-        max_tokens: 16000,
-        system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-        output_config: { effort: "low" }, // conversación en voz: rápido y fluido
-        tools: [webSearchTool(body.context)],
-        betas: ["server-side-fallback-2026-07-01"],
-        fallbacks: "default",
-        messages,
-      });
-      stream.on("text", (delta) => sse(res, "delta", { text: delta }));
-      stream.on("streamEvent", (event) => {
-        if (event.type === "content_block_start" && event.content_block.type === "server_tool_use") {
-          sse(res, "status", { text: "Buscando en la red…" });
-        }
-      });
-      response = await stream.finalMessage();
-      recordUsage(response);
-      messages.push({ role: "assistant", content: response.content });
-      if (response.stop_reason !== "pause_turn") break;
-    }
-
-    if (response.stop_reason === "refusal") {
-      sse(res, "delta", { text: "Lo siento, no puedo ayudar con eso." });
-    }
-    // Solo guardamos el turno cuando terminó bien.
-    history.length = 0;
-    history.push(...messages);
-    sse(res, "usage", budgetInfo());
+    if (PROVIDER === "gemini") await chatGemini(res, history, text, body.context);
+    else await chatClaude(res, history, text, body.context);
     sse(res, "done", { sessionId });
   } catch (err) {
-    console.error("Error de Claude:", err);
-    let msg = "Tengo problemas para conectar con mis sistemas.";
-    if (err instanceof Anthropic.AuthenticationError || /authentication/i.test(err.message)) msg = "Falta o es inválida la clave ANTHROPIC_API_KEY en el servidor.";
-    else if (err instanceof Anthropic.RateLimitError) msg = "Demasiadas peticiones; dame un momento.";
-    else if (err instanceof Anthropic.APIConnectionError) msg = "No puedo conectar con la red.";
-    sse(res, "error", { text: msg });
+    console.error(`Error de ${PROVIDER}:`, err);
+    sse(res, "error", { text: friendlyError(err) });
   }
   res.end();
 }
@@ -281,7 +347,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && req.url === "/api/chat") return handleChat(req, res);
     if (req.method === "GET" && req.url === "/api/usage") {
       res.writeHead(200, { "Content-Type": "application/json" });
-      return res.end(JSON.stringify(budgetInfo()));
+      return res.end(JSON.stringify(PROVIDER === "claude" ? budgetInfo() : { provider: PROVIDER, free: true }));
     }
     if (req.method === "POST" && req.url === "/api/reset") {
       const { sessionId } = await readJson(req).catch(() => ({}));
@@ -296,9 +362,11 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`NOX en línea → http://localhost:${PORT}  (modelo: ${MODEL})`);
-  console.log(DAILY_BUDGET_USD > 0 ? `Límite diario: ${DAILY_BUDGET_USD} $ (gastado hoy: ${budgetInfo().spentUsd} $)` : "Sin límite diario de gasto");
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.warn("⚠  ANTHROPIC_API_KEY no está definida. Consíguela en https://console.anthropic.com");
+  console.log(`NOX en línea → http://localhost:${PORT}  (cerebro: ${PROVIDER}, modelo: ${MODEL})`);
+  if (PROVIDER === "gemini") {
+    if (!process.env.GEMINI_API_KEY) console.warn("⚠  GEMINI_API_KEY no está definida. Consíguela gratis en https://aistudio.google.com/apikey");
+  } else {
+    console.log(DAILY_BUDGET_USD > 0 ? `Límite diario: ${DAILY_BUDGET_USD} $ (gastado hoy: ${budgetInfo().spentUsd} $)` : "Sin límite diario de gasto");
+    if (!process.env.ANTHROPIC_API_KEY) console.warn("⚠  ANTHROPIC_API_KEY no está definida. Consíguela en https://console.anthropic.com");
   }
 });
