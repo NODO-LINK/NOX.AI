@@ -3,64 +3,24 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#111111" />
-  <title>El Spot — Catálogo</title>
-  <meta name="description" content="Catálogo de El Spot. Mira nuestros productos y pide por WhatsApp." />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='%23ff5a1f'/><text x='50' y='66' font-size='48' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>S</text></svg>" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>Spot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="estilos.css" />
 </head>
 <body>
-  <header class="top">
-    <div class="wrap top-inner">
-      <a class="logo" href="#"><span class="dot">S</span><span id="nombreTienda">El Spot</span></a>
-      <button id="verPedido" class="cart-btn" aria-label="Ver mi pedido">
-        🛍️ <span id="contador" class="badge" hidden>0</span>
-      </button>
-    </div>
+  <header class="barra">
+    <a href="#" class="marca" id="marca">S P O T</a>
   </header>
 
-  <section class="hero">
-    <div class="wrap">
-      <h1 id="eslogan">Todo lo que buscas</h1>
-      <p class="hero-sub">Elige tus productos y pídelos por WhatsApp. Así de fácil.</p>
-      <input id="buscar" class="search" type="search" placeholder="Buscar productos…" autocomplete="off" />
-    </div>
-  </section>
-
-  <main class="wrap">
-    <nav id="categorias" class="chips" aria-label="Categorías"></nav>
-    <p id="vacio" class="empty" hidden>No encontramos productos con esa búsqueda.</p>
-    <section id="grid" class="grid"></section>
+  <main class="producto">
+    <div class="galeria" id="galeria"></div>
+    <div class="info" id="info"></div>
   </main>
 
-  <footer class="foot">
-    <div class="wrap">
-      <strong id="pieNombre">El Spot</strong>
-      <p id="pieHorario"></p>
-      <p id="pieDireccion"></p>
-      <p id="pieInstagram"></p>
-    </div>
-  </footer>
-
-  <!-- Panel del pedido -->
-  <div id="fondo" class="backdrop" hidden></div>
-  <aside id="panel" class="panel" aria-label="Mi pedido" aria-hidden="true">
-    <div class="panel-head">
-      <h2>Mi pedido</h2>
-      <button id="cerrar" class="icon" aria-label="Cerrar">✕</button>
-    </div>
-    <div id="lineas" class="lines"></div>
-    <div class="panel-foot">
-      <div class="total"><span>Total</span><strong id="total">$0</strong></div>
-      <input id="clienteNombre" class="field" placeholder="Tu nombre (opcional)" autocomplete="name" />
-      <button id="enviar" class="btn wa" disabled>Enviar pedido por WhatsApp</button>
-      <button id="vaciar" class="link">Vaciar pedido</button>
-    </div>
-  </aside>
-
-  <div id="aviso" class="toast" role="status" hidden></div>
-
-  <script src="productos.js"></script>
-  <script src="catalogo.js"></script>
+  <script src="contenido.js"></script>
+  <script src="pagina.js"></script>
 </body>
 </html>
