@@ -36,3 +36,8 @@ Crea una cuenta gratis en [goatcounter.com](https://www.goatcounter.com) y pon t
 ## Créditos
 
 Generador de QR: [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) de Kazuhiko Arase (licencia MIT), en `vendor/qrcode.js`.
+
+## Si cambias el diseño o el código
+
+Los enlaces a `estilos.css`, `datos.js` y `app.js` en los `.html` llevan `?v=número`.
+Cambia ese número cada vez que publiques cambios, para que los navegadores no muestren la versión vieja guardada.

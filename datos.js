@@ -17,7 +17,7 @@ window.SPOT = {
     // Estadísticas gratis con GoatCounter (goatcounter.com): pon aquí tu código, ej. "spot"
     estadisticas: "",
     // Dirección pública del sitio cuando esté publicado (para el QR y compartir)
-    url: "",
+    url: "https://nodo-link.github.io/NOX.AI/",
   },
 
   portada: {
