@@ -448,3 +448,6 @@ body.con-widget .aviso { bottom: calc(176px + env(safe-area-inset-bottom)); }
 .seguir-pie { text-align: center; margin: 22px 0 8px; }
 
 .ico.girada { transform: rotate(180deg); }
+
+/* Con 6 pestañas (panel) los textos se achican para que quepan */
+.barra button:first-child:nth-last-child(n+6), .barra button:first-child:nth-last-child(n+6) ~ button { font-size: .58rem; padding-left: 0; padding-right: 0; letter-spacing: -.01em; }

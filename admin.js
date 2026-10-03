@@ -10,7 +10,7 @@ import {
 import {
   auth, authSecundaria, db, NOMBRE, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
   leerTarifas, aviso, avisoSinConfigurar,
-} from "./comun.js?v=19";
+} from "./comun.js?v=20";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -63,7 +63,7 @@ function iniciar() {
 
   // Cada snapshot redibuja la pestaña abierta, salvo que se esté escribiendo en un formulario.
   function refrescar() {
-    $("#punto-motos").hidden = !porVencer().length;
+    $("#punto-pagos").hidden = !porVencer().length;
     $("#punto-resenas").hidden = !resenas.some((r) => !r.aprobada);
     const foco = document.activeElement;
     if (foco && /INPUT|TEXTAREA|SELECT/.test(foco.tagName) && $("#vista").contains(foco)) return;
@@ -74,7 +74,7 @@ function iniciar() {
     ruta = r;
     activarBarra(r);
     const y = window.scrollY;
-    ({ motos: vistaMotos, carreras: vistaCarreras, resenas: vistaResenas, tarifas: vistaTarifas, stats: vistaStats })[r]();
+    ({ motos: vistaMotos, pagos: vistaPagos, carreras: vistaCarreras, resenas: vistaResenas, tarifas: vistaTarifas, stats: vistaStats })[r]();
     if (!quieto) transicion();
     window.scrollTo(0, quieto ? y : 0);
   }
@@ -88,22 +88,17 @@ function iniciar() {
     const cuando = d <= 0 ? `se venció el ${fechaTexto(m.pagadoHasta)}` : `vence el ${fechaTexto(m.pagadoHasta)}`;
     return `Hola ${m.nombre}, tu quincena de ${NOMBRE} ${cuando}. La cuota es de ${usd(tarifas.cuota)}. Si no se paga, dejas de salir en la app como activo.`;
   };
+  const yaPago = (m) => pagos.some((p) => p.motoUid === m.id);
   const estadoPago = (m) => {
     const d = diasRestantes(m);
+    if (d <= 0 && !yaPago(m)) return `<span class="pildora mal">Sin pagar</span>`;
     if (d <= 0) return `<span class="pildora mal">Vencido</span>`;
     if (d <= 3) return `<span class="pildora alerta">Vence en ${d} día${d === 1 ? "" : "s"}</span>`;
     return `<span class="pildora ok">Pagado</span>`;
   };
 
   function vistaMotos() {
-    const avisos = porVencer();
     $("#vista").innerHTML = `
-      ${avisos.length ? `<h1 class="titulo">${icono("alerta")} Cuotas por vencer o vencidas</h1><div class="lista">${avisos.map((m) => `
-        <article class="tarjeta"><div class="info"><h3>${esc(m.nombre)}</h3><p>${estadoPago(m)} · hasta ${fechaTexto(m.pagadoHasta)}</p></div>
-          <div class="acciones">
-            <a class="boton verde" href="https://wa.me/${telWa(m.telefono)}?text=${encodeURIComponent(mensajeCobro(m))}" target="_blank" rel="noopener">Avisar por WhatsApp</a>
-            <button class="boton" data-pago="${m.id}">Registrar pago ${usd(tarifas.cuota)}</button></div>
-        </article>`).join("")}</div>` : ""}
       <h1 class="titulo">Motorizados (${motos.length}) · ${motos.filter(habilitado).length} saliendo en la app</h1>
       <button class="boton" id="nuevo">+ Agregar motorizado</button>
       ${motos.some((x) => x.usuario === "prueba") ? "" : `<button class="boton secundario" id="prueba">${icono("moto")} Crear motorizado de prueba</button>`}
@@ -112,10 +107,9 @@ function iniciar() {
           <h3>${esc(m.nombre)} ${habilitado(m) ? `<span class="pildora ok">En la app</span>` : `<span class="pildora mal">No sale</span>`}</h3>
           <p>Usuario: <b>${esc(m.usuario)}</b> · ${icono("telefono")} ${esc(m.telefono)}</p>
           <p>${icono("moto")} ${esc(m.moto)} · Placa ${esc(m.placa)} · <span class="rating">${estrellas(m)}</span></p>
-          <p>${estadoPago(m)} hasta ${fechaTexto(m.pagadoHasta)} · ${llamadas[m.id] || 0} llamadas</p></div>
+          <p>${estadoPago(m)} · ${llamadas[m.id] || 0} llamadas</p></div>
           <div class="acciones">
             <button class="boton ${m.activo ? "peligro" : "verde"}" data-activo="${m.id}">${m.activo ? "Desactivar" : "Activar"}</button>
-            <button class="boton secundario" data-pago="${m.id}">Pago ${usd(tarifas.cuota)}</button>
             <button class="boton secundario" data-editar="${m.id}">Editar</button></div>
         </article>`).join("") || `<div class="vacio">${icono("moto")}Aún no hay motorizados.</div>`}</div>`;
     $("#nuevo").onclick = () => formularioMoto();
@@ -124,9 +118,33 @@ function iniciar() {
       const m = motos.find((x) => x.id === b.dataset.activo);
       updateDoc(doc(db, "motorizados", m.id), { activo: !m.activo });
     }));
-    $$("[data-pago]").forEach((b) => (b.onclick = () => registrarPago(motos.find((x) => x.id === b.dataset.pago))));
     $$("[data-editar]").forEach((b) => (b.onclick = () => formularioMoto(motos.find((x) => x.id === b.dataset.editar))));
   }
+
+  // ---------- Pagos de la cuota ----------
+  function vistaPagos() {
+    const avisos = porVencer();
+    const orden = [...motos].sort((a, b) => diasRestantes(a) - diasRestantes(b));
+    $("#vista").innerHTML = `
+      ${avisos.length ? `<h1 class="titulo">${icono("alerta")} Por vencer o vencidas (${avisos.length})</h1><div class="lista">${avisos.map((m) => `
+        <article class="tarjeta"><div class="info"><h3>${esc(m.nombre)}</h3><p>${estadoPago(m)} · ${fechaPago(m)}</p></div>
+          <div class="acciones">
+            <a class="boton verde" href="https://wa.me/${telWa(m.telefono)}?text=${encodeURIComponent(mensajeCobro(m))}" target="_blank" rel="noopener">Avisar por WhatsApp</a>
+            <button class="boton" data-pago="${m.id}">Registrar pago</button></div>
+        </article>`).join("")}</div>` : ""}
+      <h1 class="titulo">Registrar pago</h1>
+      <p class="nota">Cuota de ${usd(tarifas.cuota)} cada ${tarifas.diasCuota} días. Al registrar, se le suman ${tarifas.diasCuota} días desde que vence (o desde hoy si ya venció).</p>
+      <div class="lista">${orden.map((m) => `
+        <article class="tarjeta"><div class="info"><h3>${esc(m.nombre)}</h3><p>${estadoPago(m)} · ${fechaPago(m)}</p></div>
+          <button class="boton chico" data-pago="${m.id}">${icono("tarjeta")} Pago ${usd(tarifas.cuota)}</button>
+        </article>`).join("") || `<div class="vacio">${icono("tarjeta")}Aún no hay motorizados.</div>`}</div>
+      <h1 class="titulo">Últimos pagos</h1>
+      <div class="caja"><table class="tabla"><tr><th>Fecha</th><th>Motorizado</th><th class="num">Monto</th></tr>
+        ${pagos.slice(0, 30).map((p) => `<tr><td>${fechaTexto(p.fecha)}</td><td>${esc(p.nombre)}</td><td class="num">${usd(p.monto)}</td></tr>`).join("") || `<tr><td colspan="3">Todavía no hay pagos</td></tr>`}
+      </table></div>`;
+    $$("[data-pago]").forEach((b) => (b.onclick = () => registrarPago(motos.find((x) => x.id === b.dataset.pago))));
+  }
+  const fechaPago = (m) => (yaPago(m) || diasRestantes(m) > 0 ? `pagado hasta ${fechaTexto(m.pagadoHasta)}` : "nunca ha pagado");
 
   async function registrarPago(m) {
     if (!confirm(`¿Registrar pago de ${usd(tarifas.cuota)} de ${m.nombre}? Se le suman ${tarifas.diasCuota} días.`)) return;
@@ -186,7 +204,7 @@ function iniciar() {
       ${m ? `<p class="nota">Usuario: <b>${esc(m.usuario)}</b>. Para cambiar la clave, bórralo y créalo de nuevo, o cámbiala en la consola de Firebase.</p>` : `
       <div class="dos"><div><label>Usuario</label><input name="usuario" autocapitalize="none" required></div>
       <div><label>Clave (mín. 6)</label><input name="clave" minlength="6" required></div></div>
-      <label class="opcion" style="margin-top:12px"><input type="checkbox" name="pagado" checked> Ya pagó la primera quincena</label>`}
+      <p class="nota">El pago de la quincena se registra en la pestaña Pagos.</p>`}
       <button class="boton">${m ? "Guardar" : "Crear motorizado"}</button>
       ${m ? `<button type="button" class="boton peligro" data-borrar>Eliminar motorizado</button>` : ""}
       <button type="button" class="boton secundario" data-cerrar>Cerrar</button></form>`;
@@ -211,8 +229,8 @@ function iniciar() {
         if (m) {
           await updateDoc(doc(db, "motorizados", m.id), datos);
         } else {
-          await crearMoto(datos, v.usuario, v.clave, { pagado: v.pagado === "on" });
-          aviso("Motorizado creado. Actívalo cuando esté de turno.");
+          await crearMoto(datos, v.usuario, v.clave);
+          aviso("Motorizado creado. Registra su pago en Pagos y actívalo.");
         }
         cerrar();
       } catch (err) {
