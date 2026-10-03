@@ -1,7 +1,7 @@
 // Whereapp — app del cliente: pedir carrera, ver motorizados, seguir la carrera y calificar.
 
 import {
-  RecaptchaVerifier, signInWithPhoneNumber, onAuthStateChanged, signOut,
+  signInAnonymously, onAuthStateChanged, signOut,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   doc, getDoc, setDoc, addDoc, updateDoc, collection, query, where, onSnapshot, serverTimestamp, increment,
@@ -24,72 +24,68 @@ function iniciar() {
 
   contarVisita();
 
+  // Mientras se guarda el registro, el aviso de sesión nueva no debe mostrar el formulario otra vez.
+  let registrando = false;
+
   onAuthStateChanged(auth, async (u) => {
     cancelarSubs.forEach((f) => f()); cancelarSubs = [];
     usuario = u;
+    if (registrando) return;
     if (!u) return pantallaEntrada();
-    const s = await getDoc(doc(db, "clientes", u.uid));
-    cliente = s.exists() ? s.data() : null;
-    if (!cliente || !cliente.nombre) return pantallaNombre();
+    const s = await getDoc(doc(db, "clientes", u.uid)).catch(() => null);
+    cliente = s && s.exists() ? s.data() : null;
+    if (!cliente || !cliente.nombre) return pantallaEntrada();
     arrancar();
   });
 
-  // ---------- Entrada con teléfono ----------
+  // ---------- Entrada: nombre, cédula y teléfono (sin verificación por SMS) ----------
   function pantallaEntrada() {
     $("#cabecera").hidden = true; $("#barra").hidden = true; document.body.classList.add("sin-barra");
     $("#vista").innerHTML = `<div class="entrada">
       <div class="logo">${NOMBRE}</div><div class="logo-sub">Delivery y mototaxi en El Moján</div>
-      <div class="caja" id="paso-tel"><h2>Entra con tu teléfono</h2>
-        <label for="tel">Número de teléfono</label>
-        <input id="tel" type="tel" inputmode="tel" placeholder="0414-1234567" autocomplete="tel">
-        <button class="boton" id="enviar-codigo">Enviarme un código por SMS</button></div>
-      <div class="caja" id="paso-codigo" hidden><h2>Escribe el código</h2>
-        <p class="nota" id="enviado-a"></p>
-        <input id="codigo" inputmode="numeric" maxlength="6" placeholder="123456" autocomplete="one-time-code">
-        <button class="boton" id="confirmar">Entrar</button>
-        <button class="boton secundario" id="otro-numero">Usar otro número</button></div>
-      <p class="nota" style="text-align:center;margin-top:18px">¿Eres motorizado? <a href="moto.html" style="color:var(--marca);font-weight:600">Entra aquí</a></p>
+      <form class="caja" id="registro"><h2>Entra con tus datos</h2>
+        <label for="nombre">Nombre completo</label>
+        <input id="nombre" autocomplete="name" placeholder="Ej.: María José Pérez González" required>
+        <label for="cedula">Cédula</label>
+        <div class="cedula">
+          <select id="nacionalidad" aria-label="Nacionalidad"><option>V</option><option>E</option></select>
+          <input id="cedula" inputmode="numeric" placeholder="12345678" required>
+        </div>
+        <label for="tel">Teléfono</label>
+        <input id="tel" type="tel" inputmode="tel" placeholder="0414-1234567" autocomplete="tel" required>
+        <button class="boton">Entrar</button>
+        <p class="nota">El motorizado verá tu nombre y tu teléfono para poder llamarte.</p>
+      </form>
+      <p class="nota" style="text-align:center;margin-top:18px">¿Eres motorizado? <a href="moto.html" style="color:var(--marca);font-weight:700">Entra aquí</a></p>
     </div>`;
-    let verificador = new RecaptchaVerifier(auth, "recaptcha", { size: "invisible" });
-    let confirmacion = null;
-    $("#enviar-codigo").onclick = async () => {
-      const tel = normalizarTel($("#tel").value);
-      if (!tel) return aviso("Escribe un número válido, ej. 0414-1234567");
-      $("#enviar-codigo").disabled = true;
+    transicion();
+    $("#registro").onsubmit = async (e) => {
+      e.preventDefault();
+      const nombre = $("#nombre").value.trim().replace(/\s+/g, " ");
+      const numero = $("#cedula").value.replace(/\D/g, "");
+      const telefono = normalizarTel($("#tel").value);
+      if (nombre.split(" ").length < 2) return aviso("Escribe tu nombre y apellido");
+      if (numero.length < 6 || numero.length > 9) return aviso("Escribe una cédula válida");
+      if (!telefono) return aviso("Escribe un teléfono válido, ej. 0414-1234567");
+      const boton = $("#registro button");
+      boton.disabled = true;
+      registrando = true;
       try {
-        confirmacion = await signInWithPhoneNumber(auth, tel, verificador);
-        $("#paso-tel").hidden = true; $("#paso-codigo").hidden = false;
-        $("#enviado-a").textContent = `Te enviamos un código al ${tel}`;
-      } catch (e) {
-        console.error(e);
-        aviso(motivoSms(e.code));
-        // El verificador de Google no se puede reusar después de un error.
-        try { verificador.clear(); } catch {}
-        verificador = new RecaptchaVerifier(auth, "recaptcha", { size: "invisible" });
+        const cred = usuario ? { user: usuario } : await signInAnonymously(auth);
+        usuario = cred.user;
+        cliente = { nombre, cedula: `${$("#nacionalidad").value}-${numero}`, telefono, creado: serverTimestamp() };
+        await setDoc(doc(db, "clientes", usuario.uid), cliente);
+        registrando = false;
+        arrancar();
+      } catch (err) {
+        console.error(err);
+        registrando = false;
+        boton.disabled = false;
+        aviso(err.code === "auth/operation-not-allowed" || err.code === "auth/admin-restricted-operation"
+          ? "Falta activar la entrada Anónima en Firebase (Authentication → Método de acceso → Anónimo)."
+          : `No se pudo entrar. Revisa tu internet e intenta de nuevo. (${err.code || "error"})`);
       }
-      $("#enviar-codigo").disabled = false;
     };
-    $("#confirmar").onclick = async () => {
-      try { await confirmacion.confirm($("#codigo").value.trim()); }
-      catch { aviso("Código incorrecto"); }
-    };
-    $("#otro-numero").onclick = () => { $("#paso-tel").hidden = false; $("#paso-codigo").hidden = true; };
-  }
-
-  // Explica en palabras simples por qué no salió el SMS (el código va al final para soporte).
-  function motivoSms(codigo) {
-    const m = {
-      "auth/operation-not-allowed": "La entrada por teléfono no está activada en Firebase (Authentication → Método de acceso → Teléfono).",
-      "auth/billing-not-enabled": "Firebase necesita el plan Blaze para enviar SMS.",
-      "auth/unauthorized-domain": "Este dominio no está autorizado en Firebase (Authentication → Configuración → Dominios autorizados).",
-      "auth/invalid-app-credential": "Este dominio no está autorizado en Firebase o falló la verificación de Google.",
-      "auth/captcha-check-failed": "Falló la verificación de Google. Recarga la página e intenta de nuevo.",
-      "auth/invalid-phone-number": "El número no es válido. Escríbelo así: 0414-1234567.",
-      "auth/too-many-requests": "Demasiados intentos. Espera unos minutos.",
-      "auth/quota-exceeded": "Se alcanzó el límite de SMS de hoy en Firebase.",
-      "auth/network-request-failed": "Sin conexión a internet.",
-    }[codigo];
-    return `${m || "No se pudo enviar el SMS."} (${codigo || "sin código"})`;
   }
 
   function normalizarTel(v) {
@@ -99,28 +95,13 @@ function iniciar() {
     return d.length === 10 ? "+58" + d : null;
   }
 
-  function pantallaNombre() {
-    $("#vista").innerHTML = `<div class="entrada"><div class="logo">${NOMBRE}</div>
-      <div class="caja"><h2>¿Cómo te llamas?</h2>
-        <p class="nota">Así te verá el motorizado cuando acepte tu carrera.</p>
-        <input id="nombre" autocomplete="name" placeholder="Tu nombre">
-        <button class="boton" id="guardar">Continuar</button></div></div>`;
-    $("#guardar").onclick = async () => {
-      const nombre = $("#nombre").value.trim();
-      if (!nombre) return aviso("Escribe tu nombre");
-      cliente = { nombre, telefono: usuario.phoneNumber, creado: serverTimestamp() };
-      await setDoc(doc(db, "clientes", usuario.uid), cliente);
-      arrancar();
-    };
-  }
-
   // ---------- App ----------
   async function arrancar() {
     document.body.classList.remove("sin-barra");
     $("#cabecera").hidden = false; $("#barra").hidden = false;
     $("#cabecera").innerHTML = `<div class="dentro"><div><div class="logo">${NOMBRE}</div><div class="logo-sub">Hola, ${esc(cliente.nombre)}</div></div>
       <div class="derecha"><button class="boton secundario chico" id="salir">Salir</button></div></div>`;
-    $("#salir").onclick = () => signOut(auth);
+    $("#salir").onclick = () => { if (confirm("¿Salir? Tendrás que escribir tus datos otra vez.")) signOut(auth); };
     $$("#barra button").forEach((b) => (b.onclick = () => ir(b.dataset.ruta)));
     tarifas = await leerTarifas();
 
@@ -263,7 +244,8 @@ function iniciar() {
       await addDoc(collection(db, "carreras"), {
         clienteUid: usuario.uid,
         clienteNombre: cliente.nombre,
-        clienteTel: cliente.telefono || usuario.phoneNumber,
+        clienteTel: cliente.telefono,
+        clienteCedula: cliente.cedula || "",
         tipo: pedido.tipo,
         origen: { lat: pedido.origen.lat, lng: pedido.origen.lng, dir: pedido.dirOrigen.trim() },
         destino: { lat: pedido.destino.lat, lng: pedido.destino.lng, dir: pedido.dirDestino.trim() },

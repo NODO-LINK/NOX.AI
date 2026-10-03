@@ -220,7 +220,7 @@ function iniciar() {
           c.cancelacion ? `${c.cancelacion.por === "admin" ? `${icono("escudo")} Admin` : `${icono("usuario")} Cliente`} canceló: ${esc(c.cancelacion.motivo)}` : ""].filter(Boolean);
         return `<article class="tarjeta"><div class="info">
           <h3>${c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`} · ${usd(c.precio)} · ${c.km} km <span class="pildora ${cl}">${tx}</span></h3>
-          <p>${icono("usuario")} ${esc(c.clienteNombre)} · ${esc(c.clienteTel)}</p>
+          <p>${icono("usuario")} ${esc(c.clienteNombre)}${c.clienteCedula ? ` · C.I. ${esc(c.clienteCedula)}` : ""} · ${esc(c.clienteTel)}</p>
           <p>${icono("moto")} ${c.motoNombre && c.motoUid ? esc(c.motoNombre) : c.paraMotoNombre ? `Pedida a ${esc(c.paraMotoNombre)}` : "—"}</p>
           <p>A: ${esc(c.origen?.dir)} ${icono("flecha")} B: ${esc(c.destino?.dir)}</p>
           <p>${fechaTexto(c.creada)}</p>

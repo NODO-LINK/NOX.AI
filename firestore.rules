@@ -28,7 +28,11 @@ service cloud.firestore {
     }
 
     match /clientes/{uid} {
-      allow read, write: if dentro() && request.auth.uid == uid;
+      allow read: if dentro() && request.auth.uid == uid;
+      allow write: if dentro() && request.auth.uid == uid
+        && request.resource.data.nombre is string && request.resource.data.nombre.size() >= 5
+        && request.resource.data.cedula is string && request.resource.data.cedula.matches('^[VE]-[0-9]{6,9}$')
+        && request.resource.data.telefono is string && request.resource.data.telefono.matches('^[+]58[0-9]{10}$');
       allow read: if esAdmin();
     }
 

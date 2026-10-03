@@ -4,7 +4,7 @@ App de delivery y mototaxi para El Moján. Tiene tres partes:
 
 | Página | Para quién | Qué hace |
 |---|---|---|
-| `index.html` | Clientes | Entran con su teléfono (código por SMS), marcan el punto A y el B en el mapa, ven el precio por km (Delivery o Mototaxi) y piden a todos o a un motorizado. Ven quién viene, su moto y placa, su ubicación en vivo, pueden llamarlo, cancelar con motivo y calificar al terminar. |
+| `index.html` | Clientes | Entran con su nombre completo, cédula y teléfono (sin código por SMS), marcan el punto A y el B en el mapa, ven el precio por km (Delivery o Mototaxi) y piden a todos o a un motorizado. Ven quién viene, su moto y placa, su ubicación en vivo, pueden llamarlo, cancelar con motivo y calificar al terminar. |
 | `moto.html` | Motorizados | Entran con usuario y clave. Ven las carreras nuevas (con sonido), las aceptan, ven A y B y los abren en Google Maps, llaman al cliente, marcan "Terminé" o cancelan con motivo. Mientras tienen una carrera comparten su ubicación. |
 | `admin.html` | Administrador | Crea motorizados, los activa o desactiva, registra la cuota quincenal y ve los avisos 3 días antes del vencimiento (con botón de WhatsApp). También ve las carreras y las cancelaciones, aprueba las reseñas, cambia las tarifas y ve los números (visitas, llamadas por motorizado y pagos por quincena). |
 
@@ -17,7 +17,7 @@ Las estrellas cuentan solo cuando el admin aprueba la reseña.
 2. **Agregar app web** (ícono `</>`). Copia los datos de `firebaseConfig` y pégalos en **`firebase-config.js`**.
 3. **Authentication → Método de acceso**, activa:
    - **Correo electrónico/contraseña** (para motorizados y admin).
-   - **Teléfono** (para clientes). Los SMS de Firebase requieren el **plan Blaze** (pago por uso) y cada SMS a Venezuela tiene costo.
+   - **Anónimo** (para clientes: entran con nombre, cédula y teléfono, sin SMS y gratis).
 4. **Authentication → Configuración → Dominios autorizados**: agrega el dominio donde publiques la app (ej. `tuusuario.github.io`).
 5. **Firestore Database → Crear base de datos**. Luego, en **Reglas**, pega el contenido de **`firestore.rules`** y toca **Publicar**.
 6. **Crea tu usuario de administrador:**

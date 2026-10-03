@@ -133,6 +133,7 @@ input, select, textarea {
 }
 input:focus, select:focus, textarea:focus { border-color: var(--marca-clara); background: #fff; box-shadow: 0 0 0 5px rgba(124, 58, 237, .13), var(--sombra-1); }
 textarea { resize: vertical; min-height: 70px; }
+.cedula { display: grid; grid-template-columns: 78px 1fr; gap: 8px; }
 .dos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
 /* ---------- Botones redondos (píldora) ---------- */
