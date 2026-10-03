@@ -114,7 +114,7 @@ export function aviso(texto) {
   a.textContent = texto;
   a.classList.add("ver");
   clearTimeout(temporizador);
-  temporizador = setTimeout(() => a.classList.remove("ver"), 3000);
+  temporizador = setTimeout(() => a.classList.remove("ver"), Math.max(3000, texto.length * 70));
 }
 
 // Ventana para elegir un motivo (cancelaciones).

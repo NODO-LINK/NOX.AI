@@ -50,7 +50,7 @@ function iniciar() {
         <button class="boton secundario" id="otro-numero">Usar otro número</button></div>
       <p class="nota" style="text-align:center;margin-top:18px">¿Eres motorizado? <a href="moto.html" style="color:var(--marca);font-weight:600">Entra aquí</a></p>
     </div>`;
-    const verificador = new RecaptchaVerifier(auth, "recaptcha", { size: "invisible" });
+    let verificador = new RecaptchaVerifier(auth, "recaptcha", { size: "invisible" });
     let confirmacion = null;
     $("#enviar-codigo").onclick = async () => {
       const tel = normalizarTel($("#tel").value);
@@ -62,7 +62,10 @@ function iniciar() {
         $("#enviado-a").textContent = `Te enviamos un código al ${tel}`;
       } catch (e) {
         console.error(e);
-        aviso("No se pudo enviar el SMS. Revisa el número e intenta de nuevo.");
+        aviso(motivoSms(e.code));
+        // El verificador de Google no se puede reusar después de un error.
+        try { verificador.clear(); } catch {}
+        verificador = new RecaptchaVerifier(auth, "recaptcha", { size: "invisible" });
       }
       $("#enviar-codigo").disabled = false;
     };
@@ -71,6 +74,22 @@ function iniciar() {
       catch { aviso("Código incorrecto"); }
     };
     $("#otro-numero").onclick = () => { $("#paso-tel").hidden = false; $("#paso-codigo").hidden = true; };
+  }
+
+  // Explica en palabras simples por qué no salió el SMS (el código va al final para soporte).
+  function motivoSms(codigo) {
+    const m = {
+      "auth/operation-not-allowed": "La entrada por teléfono no está activada en Firebase (Authentication → Método de acceso → Teléfono).",
+      "auth/billing-not-enabled": "Firebase necesita el plan Blaze para enviar SMS.",
+      "auth/unauthorized-domain": "Este dominio no está autorizado en Firebase (Authentication → Configuración → Dominios autorizados).",
+      "auth/invalid-app-credential": "Este dominio no está autorizado en Firebase o falló la verificación de Google.",
+      "auth/captcha-check-failed": "Falló la verificación de Google. Recarga la página e intenta de nuevo.",
+      "auth/invalid-phone-number": "El número no es válido. Escríbelo así: 0414-1234567.",
+      "auth/too-many-requests": "Demasiados intentos. Espera unos minutos.",
+      "auth/quota-exceeded": "Se alcanzó el límite de SMS de hoy en Firebase.",
+      "auth/network-request-failed": "Sin conexión a internet.",
+    }[codigo];
+    return `${m || "No se pudo enviar el SMS."} (${codigo || "sin código"})`;
   }
 
   function normalizarTel(v) {
