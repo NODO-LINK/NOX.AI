@@ -3,8 +3,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, connectFirestoreEmulator, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=22";
-import { icono, pintarIconos } from "./iconos.js?v=22";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=23";
+import { icono, pintarIconos } from "./iconos.js?v=23";
 
 export { icono };
 pintarIconos();

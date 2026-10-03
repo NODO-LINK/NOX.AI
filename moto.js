@@ -7,7 +7,7 @@ import {
 import {
   auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, nuevoMapa, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar,
-} from "./comun.js?v=22";
+} from "./comun.js?v=23";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -63,6 +63,11 @@ function iniciar() {
     subsCarreras.push(onSnapshot(query(collection(db, "carreras"), where("motoUid", "==", yo.uid), where("estado", "==", "aceptada")), (s) => {
       miCarrera = s.docs.length ? { id: s.docs[0].id, ...s.docs[0].data() } : null;
       if (miCarrera) iniciarGps(); else pararGps();
+      // Avisa a los clientes si está ocupado: sale activo pero con la etiqueta "Carrera en curso".
+      // Se sincroniza siempre con la carrera real (aunque la cancele el cliente o el admin).
+      if (perfil && !!perfil.enCarrera !== !!miCarrera) {
+        updateDoc(doc(db, "motorizados", yo.uid), { enCarrera: !!miCarrera }).catch(() => {});
+      }
       pintar();
     }, () => {}));
     if (!habilitado(perfil)) { disponibles = []; return; }

@@ -9,7 +9,7 @@ import {
 import {
   auth, db, NOMBRE, SERVICIOS, CENTRO as CENTRO_MAPA, $, $$, esc, usd, fechaTexto, estrellas, promedio, habilitado, leerTarifas, precio, ruta,
   ICONOS, icono, nuevoMapa, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
-} from "./comun.js?v=22";
+} from "./comun.js?v=23";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -145,7 +145,9 @@ function iniciar() {
 
     cancelarSubs.push(onSnapshot(query(collection(db, "motorizados"), where("activo", "==", true)), (s) => {
       const antes = JSON.stringify(motos.map(sinUbicacion));
-      motos = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter(habilitado).sort((a, b) => promedio(b) - promedio(a) || (b.ratingCount || 0) - (a.ratingCount || 0));
+      // Primero los libres, luego los que tienen una carrera en curso; dentro de cada grupo, por calificación.
+      motos = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter(habilitado)
+        .sort((a, b) => !!a.enCarrera - !!b.enCarrera || promedio(b) - promedio(a) || (b.ratingCount || 0) - (a.ratingCount || 0));
       // La ubicación de los motorizados cambia seguido; solo se redibuja si cambió otra cosa.
       if (rutaActual === "motorizados" && JSON.stringify(motos.map(sinUbicacion)) !== antes) vistaMotorizados();
     }));
@@ -376,16 +378,17 @@ function iniciar() {
   const iniciales = (n) => String(n).trim().split(/\s+/).slice(0, 2).map((p) => p[0] || "").join("").toUpperCase();
   function vistaMotorizados() {
     $("#vista").innerHTML = `<h1 class="titulo">Motorizados activos</h1>
-      <p class="nota">Ordenados por calificación. Llama directo o pídele una carrera.</p>
+      <p class="nota">Primero los disponibles, ordenados por calificación. Los que tienen <b>carrera en curso</b> reciben tu pedido al terminar.</p>
       <div class="lista">${motos.length ? motos.map((m) => `
         <article class="tarjeta">
           <div class="avatar">${esc(iniciales(m.nombre))}</div>
           <div class="info"><h3>${esc(m.nombre)}</h3>
             <p>${icono("moto")} ${esc(m.moto || "")}${m.placa ? ` · Placa ${esc(m.placa)}` : ""}</p>
-            <span class="rating">${estrellas(m)}</span></div>
+            <div class="etiquetas">${m.enCarrera ? `<span class="pildora ocupado">${icono("ruta")} Carrera en curso</span>` : `<span class="pildora ok">Disponible</span>`}
+            <span class="rating">${estrellas(m)}</span></div></div>
           <div class="acciones">
             <a class="boton secundario" href="tel:${esc(m.telefono)}" data-llamar="${m.id}">${icono("telefono")} Llamar</a>
-            <button class="boton" data-pedir="${m.id}">Pedir a este</button>
+            <button class="boton ${m.enCarrera ? "secundario" : ""}" data-pedir="${m.id}">${m.enCarrera ? "Pedir (al terminar)" : "Pedir a este"}</button>
           </div>
         </article>`).join("") : `<div class="vacio">${icono("moto")}No hay motorizados activos ahora.<br>Intenta en un rato.</div>`}
       </div>`;
