@@ -8,7 +8,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   auth, db, NOMBRE, $, $$, esc, usd, fechaTexto, estrellas, promedio, habilitado, leerTarifas, precio, ruta,
-  ICONOS, icono, nuevoMapa, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
+  ICONOS, icono, nuevoMapa, transicion, activarBarra, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
 } from "./comun.js";
 
 if (!avisoSinConfigurar()) iniciar();
@@ -137,10 +137,11 @@ function iniciar() {
 
   function ir(r) {
     rutaActual = r;
-    $$("#barra button").forEach((b) => b.classList.toggle("activo", b.dataset.ruta === r));
+    activarBarra(r);
     if (mapa) { mapa.remove(); mapa = null; }
     if (motoSeguida) { motoSeguida(); motoSeguida = null; }
     ({ pedir: vistaPedir, motorizados: vistaMotorizados, carrera: vistaCarrera })[r]();
+    transicion();
     window.scrollTo(0, 0);
   }
 
@@ -181,6 +182,7 @@ function iniciar() {
       }
       $$(".punto").forEach((b) => b.classList.toggle("activo", b.dataset.p === pedido.marcando));
       $$("#tipo button").forEach((b) => b.classList.toggle("activo", b.dataset.t === pedido.tipo));
+      $("#tipo").dataset.activo = pedido.tipo;
       $("#caja-nota").hidden = pedido.tipo !== "delivery";
       $("#txt-origen").textContent = pedido.origen ? "Marcado en el mapa (puedes arrastrarlo)" : "Toca aquí y luego en el mapa";
       $("#txt-destino").textContent = pedido.destino ? "Marcado en el mapa (puedes arrastrarlo)" : "Toca aquí y luego en el mapa";
@@ -372,7 +374,13 @@ function iniciar() {
         <button class="boton secundario" id="omitir">Ahora no</button>
       </div>`;
     const pintar = () => $$("#estrellas button").forEach((b) => b.classList.toggle("on", Number(b.dataset.n) <= puntos));
-    $$("#estrellas button").forEach((b) => (b.onclick = () => { puntos = Number(b.dataset.n); pintar(); }));
+    $$("#estrellas button").forEach((b) => (b.onclick = () => {
+      puntos = Number(b.dataset.n); pintar();
+      $$("#estrellas button").forEach((x, i) => {
+        x.classList.remove("salta");
+        if (i < puntos) { void x.offsetWidth; x.style.animationDelay = `${i * 50}ms`; x.classList.add("salta"); }
+      });
+    }));
     pintar();
     $("#calificar").onclick = async () => {
       $("#calificar").disabled = true;

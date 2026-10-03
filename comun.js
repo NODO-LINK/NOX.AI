@@ -145,3 +145,55 @@ export function avisoSinConfigurar() {
     <p class="nota">Abre el archivo <b>firebase-config.js</b> y pega los datos de tu proyecto de Firebase. Los pasos están en el README.</p></div></div>`;
   return true;
 }
+
+// ---------- Sensación de app: sin zoom con los dedos, onda al tocar, transiciones ----------
+
+// Sin pellizcar para hacer zoom (el mapa sí se puede pellizcar).
+document.addEventListener("gesturestart", (e) => { if (!e.target.closest?.(".leaflet-container")) e.preventDefault(); });
+document.addEventListener("touchmove", (e) => {
+  if (e.touches.length > 1 && !e.target.closest?.(".leaflet-container")) e.preventDefault();
+}, { passive: false });
+document.addEventListener("wheel", (e) => { if (e.ctrlKey && !e.target.closest?.(".leaflet-container")) e.preventDefault(); }, { passive: false });
+
+// Onda que sale desde donde tocas un botón.
+document.addEventListener("pointerdown", (e) => {
+  const b = e.target.closest?.(".boton, .barra button, .punto, .opcion");
+  if (!b || b.disabled) return;
+  const r = b.getBoundingClientRect();
+  const lado = Math.max(r.width, r.height) * 2;
+  const o = document.createElement("span");
+  o.className = "onda";
+  o.style.cssText = `width:${lado}px;height:${lado}px;left:${e.clientX - r.left - lado / 2}px;top:${e.clientY - r.top - lado / 2}px`;
+  b.append(o);
+  setTimeout(() => o.remove(), 650);
+});
+
+// Entrada animada de la pantalla (solo al cambiar de pestaña, no en cada actualización).
+let finTransicion;
+export function transicion() {
+  const v = $("#vista");
+  if (!v) return;
+  v.classList.remove("entrar");
+  void v.offsetWidth;
+  v.classList.add("entrar");
+  clearTimeout(finTransicion);
+  finTransicion = setTimeout(() => v.classList.remove("entrar"), 900);
+}
+
+// Barra inferior: marca la pestaña activa y desliza la píldora de fondo hasta ella.
+export function activarBarra(ruta) {
+  const barra = $("#barra");
+  if (!barra) return;
+  let ind = $(".indicador", barra);
+  if (!ind) { ind = document.createElement("i"); ind.className = "indicador"; barra.prepend(ind); }
+  const mover = () => {
+    const b = $(`button[data-ruta="${barra.dataset.ruta}"]`, barra);
+    if (!b) return;
+    ind.style.width = b.offsetWidth + "px";
+    ind.style.transform = `translateX(${b.offsetLeft}px)`;
+  };
+  barra.dataset.ruta = ruta;
+  $$("button", barra).forEach((b) => b.classList.toggle("activo", b.dataset.ruta === ruta));
+  mover();
+  if (!barra.dataset.escucha) { barra.dataset.escucha = "1"; addEventListener("resize", mover); }
+}

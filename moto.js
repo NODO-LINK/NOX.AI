@@ -5,7 +5,7 @@ import {
   doc, onSnapshot, updateDoc, collection, query, where, runTransaction, serverTimestamp, arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  auth, db, NOMBRE, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, nuevoMapa,
+  auth, db, NOMBRE, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, nuevoMapa, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar,
 } from "./comun.js";
 
@@ -15,12 +15,12 @@ function iniciar() {
   const L = window.L;
   let yo = null, perfil = null, subs = [], subsCarreras = [];
   let disponibles = [], miCarrera = null, conocidas = new Set(), primeraCarga = true;
-  let mapa = null, vigilaGps = null, sonido = null;
+  let mapa = null, vigilaGps = null, sonido = null, ultimoModo = null;
 
   onAuthStateChanged(auth, (u) => {
     subs.forEach((f) => f()); subs = [];
     pararCarreras(); pararGps();
-    yo = u; perfil = null; miCarrera = null; disponibles = [];
+    yo = u; perfil = null; miCarrera = null; disponibles = []; ultimoModo = null;
     if (!u) return pantallaEntrada();
     subs.push(onSnapshot(doc(db, "motorizados", u.uid), (s) => {
       if (!s.exists()) { aviso("Esta cuenta no es de un motorizado"); signOut(auth); return; }
@@ -112,7 +112,7 @@ function iniciar() {
     const vence = fecha(perfil.pagadoHasta);
     $("#cabecera").hidden = false;
     $("#cabecera").innerHTML = `<div class="dentro"><div><div class="logo">${NOMBRE}</div><div class="logo-sub">${esc(perfil.nombre)} · ${estrellas(perfil)}</div></div>
-      <div class="derecha"><span class="pildora ${ok ? "ok" : "mal"}">${ok ? "● Activo" : "Inactivo"}</span>
+      <div class="derecha"><span class="pildora ${ok ? "ok" : "mal"}">${ok ? "Activo" : "Inactivo"}</span>
       <button class="boton secundario chico" id="salir">Salir</button></div></div>`;
     $("#salir").onclick = () => signOut(auth);
 
@@ -128,6 +128,9 @@ function iniciar() {
         <div class="lista">${disponibles.length ? disponibles.map(tarjetaCarrera).join("") : `<div class="vacio">${icono("ruta")}No hay carreras por ahora.<br>Deja esta pantalla abierta: te avisamos con un sonido.</div>`}</div>`;
     }
     $("#vista").innerHTML = html;
+    // Animar la entrada solo cuando cambia lo que se muestra (lista, carrera o aviso de inactivo).
+    const modo = `${ok}-${miCarrera ? miCarrera.id : "lista"}`;
+    if (modo !== ultimoModo) { ultimoModo = modo; transicion(); }
 
     const s = $("#activar-sonido");
     if (s) s.onclick = () => { sonido = new (window.AudioContext || window.webkitAudioContext)(); sonar(); pintar(); };

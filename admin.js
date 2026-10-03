@@ -8,7 +8,7 @@ import {
   serverTimestamp, increment, writeBatch, Timestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  auth, authSecundaria, db, NOMBRE, icono, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
+  auth, authSecundaria, db, NOMBRE, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
   leerTarifas, aviso, avisoSinConfigurar,
 } from "./comun.js";
 
@@ -71,9 +71,10 @@ function iniciar() {
 
   function ir(r, quieto) {
     ruta = r;
-    $$("#barra button").forEach((b) => b.classList.toggle("activo", b.dataset.ruta === r));
+    activarBarra(r);
     const y = window.scrollY;
     ({ motos: vistaMotos, carreras: vistaCarreras, resenas: vistaResenas, tarifas: vistaTarifas, stats: vistaStats })[r]();
+    if (!quieto) transicion();
     window.scrollTo(0, quieto ? y : 0);
   }
 
