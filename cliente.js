@@ -83,6 +83,8 @@ function iniciar() {
         boton.disabled = false;
         aviso(err.code === "auth/operation-not-allowed" || err.code === "auth/admin-restricted-operation"
           ? "Falta activar la entrada Anónima en Firebase (Authentication → Método de acceso → Anónimo)."
+          : err.code === "permission-denied"
+          ? "Firebase no dejó guardar tus datos: faltan publicar las reglas de Whereapp (Firestore → Reglas)."
           : `No se pudo entrar. Revisa tu internet e intenta de nuevo. (${err.code || "error"})`);
       }
     };
