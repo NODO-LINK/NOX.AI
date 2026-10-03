@@ -3,8 +3,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, connectFirestoreEmulator, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=23";
-import { icono, pintarIconos } from "./iconos.js?v=23";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=24";
+import { icono, pintarIconos } from "./iconos.js?v=24";
 
 export { icono };
 pintarIconos();
@@ -152,20 +152,28 @@ const LIMITES = [[CENTRO[0] - 0.15, CENTRO[1] - 0.15], [CENTRO[0] + 0.15, CENTRO
 
 // El mapa queda quieto al hacer scroll: solo se mueve con el botón de la mano,
 // con + / − o pellizcando con dos dedos. Los puntos se marcan tocando y se ajustan arrastrándolos.
-export function nuevoMapa(id) {
+// modo "libre": pantalla completa, se mueve con el dedo (no hay scroll que estorbe).
+// modo "mini": vista previa quieta, sin botones; tocarla abre el mapa completo.
+export function nuevoMapa(id, modo = "") {
   const L = window.L;
+  const libre = modo === "libre", mini = modo === "mini";
   const m = L.map(id, {
-    zoomControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false,
+    zoomControl: false, dragging: libre, scrollWheelZoom: libre, doubleClickZoom: false, boxZoom: false, keyboard: false,
+    touchZoom: !mini, attributionControl: !mini,
     maxBounds: LIMITES, maxBoundsViscosity: 1, minZoom: 12,
   }).setView(CENTRO, 14);
+  if (mini) {
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(m);
+    return m;
+  }
   L.control.zoom({ position: "bottomleft" }).addTo(m);
   const Controles = L.Control.extend({
     options: { position: "bottomleft" },
     onAdd() {
       const caja = L.DomUtil.create("div", "leaflet-bar controles-mapa");
-      caja.innerHTML = `<a href="#" role="button" data-mover title="Mover el mapa">${icono("mano")}</a><a href="#" role="button" data-centro title="Volver al centro de El Moján">${icono("centro")}</a>`;
+      caja.innerHTML = `${libre ? "" : `<a href="#" role="button" data-mover title="Mover el mapa">${icono("mano")}</a>`}<a href="#" role="button" data-centro title="Volver al centro de El Moján">${icono("centro")}</a>`;
       L.DomEvent.disableClickPropagation(caja);
-      caja.querySelector("[data-mover]").onclick = (e) => {
+      if (!libre) caja.querySelector("[data-mover]").onclick = (e) => {
         e.preventDefault();
         const activo = !m.dragging.enabled();
         activo ? m.dragging.enable() : m.dragging.disable();
@@ -333,4 +341,86 @@ export function motivoEntrada(e) {
     "auth/unauthorized-domain": "Falta autorizar este dominio en Firebase (Authentication → Configuración → Dominios autorizados).",
   }[e && e.code];
   return `${m || "No se pudo entrar."} (${(e && e.code) || "error"})`;
+}
+
+// ---------- Lugares de El Moján (escuelas, mercados, playas…) desde OpenStreetMap ----------
+
+// Tipo de lugar → ícono, color y nombre en español.
+const TIPOS_LUGAR = {
+  educacion: { icono: "escuela", color: "#2563eb", nombre: "Educación" },
+  salud: { icono: "salud", color: "#dc2626", nombre: "Salud" },
+  farmacia: { icono: "salud", color: "#16a34a", nombre: "Farmacia" },
+  mercado: { icono: "carrito", color: "#ea580c", nombre: "Mercado y tiendas" },
+  comida: { icono: "comida", color: "#d97706", nombre: "Comida" },
+  playa: { icono: "olas", color: "#0891b2", nombre: "Playa" },
+  parque: { icono: "arbol", color: "#15803d", nombre: "Parques y deporte" },
+  iglesia: { icono: "iglesia", color: "#7c3aed", nombre: "Iglesia" },
+  gobierno: { icono: "institucion", color: "#475569", nombre: "Instituciones" },
+  banco: { icono: "institucion", color: "#0f766e", nombre: "Banco" },
+  gasolina: { icono: "gasolina", color: "#b91c1c", nombre: "Gasolina" },
+  transporte: { icono: "moto", color: "#4f46e5", nombre: "Transporte" },
+  otro: { icono: "pin", color: "#6b7280", nombre: "Lugar" },
+};
+export const tipoLugar = (t) => TIPOS_LUGAR[t] || TIPOS_LUGAR.otro;
+
+function clasificar(tag) {
+  const a = tag.amenity, sh = tag.shop, l = tag.leisure;
+  if (["school", "college", "university", "kindergarten", "library"].includes(a)) return "educacion";
+  if (["hospital", "clinic", "doctors", "dentist"].includes(a)) return "salud";
+  if (a === "pharmacy" || sh === "chemist") return "farmacia";
+  if (a === "marketplace" || sh) return "mercado";
+  if (["restaurant", "fast_food", "cafe", "bar", "ice_cream"].includes(a)) return "comida";
+  if (tag.natural === "beach") return "playa";
+  if (l) return "parque";
+  if (a === "place_of_worship") return "iglesia";
+  if (["townhall", "police", "fire_station", "post_office", "courthouse", "community_centre", "public_building"].includes(a) || tag.office === "government") return "gobierno";
+  if (a === "bank" || a === "atm") return "banco";
+  if (a === "fuel") return "gasolina";
+  if (a === "bus_station" || tag.highway === "bus_stop") return "transporte";
+  return "otro";
+}
+
+// Se descargan una vez y se guardan 7 días en el teléfono (Overpass, gratis).
+export async function cargarLugares() {
+  const CLAVE = "whereapp.lugares.v1";
+  try { const g = JSON.parse(localStorage.getItem(CLAVE)); if (g && Date.now() - g.t < 7 * 864e5 && g.l.length) return g.l; } catch {}
+  const [s, w, n, e] = [CENTRO[0] - 0.09, CENTRO[1] - 0.09, CENTRO[0] + 0.09, CENTRO[1] + 0.09].map((x) => x.toFixed(4));
+  const caja = `(${s},${w},${n},${e})`;
+  const q = `[out:json][timeout:25];(
+    nwr["name"]["amenity"~"^(school|college|university|kindergarten|library|hospital|clinic|doctors|dentist|pharmacy|marketplace|restaurant|fast_food|cafe|bar|ice_cream|place_of_worship|townhall|police|fire_station|post_office|courthouse|community_centre|bank|fuel|bus_station)$"]${caja};
+    nwr["name"]["shop"]${caja};
+    nwr["natural"="beach"]${caja};
+    nwr["name"]["leisure"~"^(park|stadium|sports_centre|pitch|playground)$"]${caja};
+    nwr["name"]["tourism"]${caja};
+    nwr["name"]["office"="government"]${caja};
+  );out center tags;`;
+  const r = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+  const j = await r.json();
+  const vistos = new Set();
+  const lugares = (j.elements || []).map((el) => {
+    const tag = el.tags || {};
+    const lat = el.lat ?? el.center?.lat, lng = el.lon ?? el.center?.lon;
+    const tipo = clasificar(tag);
+    const nombre = tag.name || (tipo === "playa" ? "Playa" : "");
+    return { n: nombre, t: tipo, lat, lng };
+  }).filter((x) => {
+    if (!x.n || x.lat == null) return false;
+    const k = x.n + x.lat.toFixed(3) + x.lng.toFixed(3);
+    if (vistos.has(k)) return false;
+    vistos.add(k); return true;
+  });
+  try { localStorage.setItem(CLAVE, JSON.stringify({ t: Date.now(), l: lugares })); } catch {}
+  return lugares;
+}
+
+// Quita acentos y mayúsculas para buscar por nombre.
+export const normalizar = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+export function iconoLugar(l) {
+  const t = tipoLugar(l.t);
+  return window.L.divIcon({
+    className: "",
+    html: `<div class="lugar" style="background:${t.color}">${icono(t.icono)}</div>`,
+    iconSize: [26, 26], iconAnchor: [13, 13],
+  });
 }

@@ -24,8 +24,18 @@ const T = {
   reloj: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   mano: '<path d="M18 11V6a2 2 0 0 0-4 0"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-2.3l-3.6-3.6a2 2 0 0 1 2.8-2.8L7 15"/>',
   centro: '<circle cx="12" cy="12" r="3"/><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/>',
+  buscar: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  escuela: '<path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M6 12v5c3 2 9 2 12 0v-5"/>',
+  salud: '<rect x="3" y="3" width="18" height="18" rx="5"/><path d="M12 8v8M8 12h8"/>',
+  carrito: '<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2 2h2l2.7 12.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L22 7H5.1"/>',
+  olas: '<path d="M2 7c1 .8 2 1.2 3.3 1.2C8 8.2 8 6 10.7 6s2.6 2.2 5.3 2.2C18.7 8.2 19 6 22 6"/><path d="M2 13c1 .8 2 1.2 3.3 1.2 2.7 0 2.7-2.2 5.4-2.2s2.6 2.2 5.3 2.2c2.7 0 3-2.2 6-2.2"/><path d="M2 19c1 .8 2 1.2 3.3 1.2 2.7 0 2.7-2.2 5.4-2.2s2.6 2.2 5.3 2.2c2.7 0 3-2.2 6-2.2"/>',
+  iglesia: '<path d="M12 2v5M10 4h4"/><path d="M6 22V12l6-5 6 5v10"/><path d="M10 22v-4a2 2 0 0 1 4 0v4"/>',
+  institucion: '<path d="M3 22h18M6 18v-7M10 18v-7M14 18v-7M18 18v-7"/><path d="M12 2 21 7H3z"/>',
+  comida: '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>',
+  arbol: '<path d="M12 22v-6"/><path d="M12 2 5 13h4l-3 4h12l-3-4h4z"/>',
+  gasolina: '<path d="M3 22h12M4 9h10M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 4 0V9.8a2 2 0 0 0-.6-1.4L18 5"/>',
   mas: '<path d="M12 5v14M5 12h14"/>',
-    flecha: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+  flecha: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
 };
 
 export function icono(nombre, clase = "") {
