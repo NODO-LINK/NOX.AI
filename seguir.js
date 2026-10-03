@@ -3,7 +3,7 @@
 
 import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { auth, db, NOMBRE, $, esc, icono, ICONOS, nuevoMapa, progreso, transicion, avisoSinConfigurar } from "./comun.js?v=21";
+import { auth, db, NOMBRE, $, esc, icono, ICONOS, nuevoMapa, marcarRecorrido, filasRecorrido, progreso, transicion, avisoSinConfigurar } from "./comun.js?v=22";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -11,7 +11,7 @@ function iniciar() {
   const L = window.L;
   const id = new URLSearchParams(location.search).get("c");
   let carrera = null, ubic = null, memoria = {}, quitarMoto = null, empezado = false;
-  let mapa = null, marcaMoto = null, ultimaVista = "";
+  let mapa = null, marcaMoto = null, ultimaVista = "", limites = null;
 
   $("#cabecera").hidden = false;
   $("#cabecera").innerHTML = `<div class="dentro"><div><div class="logo">${NOMBRE}</div><div class="logo-sub">Seguimiento en vivo</div></div>
@@ -76,14 +76,12 @@ function iniciar() {
         </article>
         <div class="mapa" id="mapa"></div>
         <div class="caja">
-          <div class="fila"><span><i class="letra-a">A</i></span><span>${esc(c.origen.dir)}</span></div>
-          <div class="fila"><span><i class="letra-b">B</i></span><span>${esc(c.destino.dir)}</span></div>
+          ${filasRecorrido(c)}
         </div>${pie()}`;
       transicion();
       mapa = nuevoMapa("mapa");
-      L.marker(c.origen, { icon: ICONOS.origen }).addTo(mapa);
-      L.marker(c.destino, { icon: ICONOS.destino }).addTo(mapa);
-      mapa.fitBounds(L.latLngBounds([c.origen, c.destino]).pad(0.3), { animate: false });
+      limites = marcarRecorrido(mapa, c);
+      mapa.fitBounds(limites.pad(0.3), { animate: false });
     }
     $("#vivo").innerHTML = `
       <div class="vivo-cabeza"><span class="vivo-punto"></span>En vivo</div>
@@ -94,7 +92,7 @@ function iniciar() {
     if (ubic && mapa) {
       if (!marcaMoto) {
         marcaMoto = L.marker([ubic.lat, ubic.lng], { icon: ICONOS.moto }).addTo(mapa);
-        mapa.fitBounds(L.latLngBounds([c.origen, c.destino, [ubic.lat, ubic.lng]]).pad(0.3), { animate: false });
+        mapa.fitBounds(L.latLngBounds([limites.getSouthWest(), limites.getNorthEast(), [ubic.lat, ubic.lng]]).pad(0.3), { animate: false });
       } else marcaMoto.setLatLng([ubic.lat, ubic.lng]);
     }
   }

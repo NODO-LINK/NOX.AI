@@ -5,9 +5,9 @@ import {
   doc, onSnapshot, updateDoc, collection, query, where, runTransaction, serverTimestamp, arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, nuevoMapa, transicion,
+  auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, nuevoMapa, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar,
-} from "./comun.js?v=21";
+} from "./comun.js?v=22";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -142,7 +142,10 @@ function iniciar() {
   const tarjetaCarrera = (c) => `
     <article class="tarjeta"><div class="info">
       <h3>${tipoTexto(c)} · ${usd(c.precio)} · ${c.km} km ${c.paraMoto ? `<span class="pildora">Para ti</span>` : ""}</h3>
-      <p><b>A:</b> ${esc(c.origen.dir)}</p><p><b>B:</b> ${esc(c.destino.dir)}</p>
+      <p><b>A:</b> ${esc(c.origen.dir)}</p>
+      ${(c.paradas || []).map((p, i) => `<p><b>Parada ${i + 1}:</b> ${esc(p.dir)}</p>`).join("")}
+      <p><b>B:</b> ${esc(c.destino.dir)}</p>
+      ${c.retorno ? `<p><b>Ida y vuelta:</b> regresa al punto A</p>` : ""}
       ${c.nota ? `<p><b>Llevar:</b> ${esc(c.nota)}</p>` : ""}
       <p>${esc(c.clienteNombre)} · ${fechaTexto(c.creada)}</p></div>
       <div class="acciones">
@@ -178,10 +181,12 @@ function iniciar() {
       </div>
       <div class="mapa" id="mapa"></div>
       <div class="caja">
-        <div class="fila"><span><i class="letra-a">A</i> Origen</span><span>${esc(c.origen.dir)}</span></div>
-        <a class="boton secundario" href="${mapsLink(c.origen)}" target="_blank" rel="noopener">Ir al punto A con Google Maps</a>
-        <div class="fila" style="margin-top:10px"><span><i class="letra-b">B</i> Destino</span><span>${esc(c.destino.dir)}</span></div>
-        <a class="boton secundario" href="${mapsLink(c.destino)}" target="_blank" rel="noopener">Ir al punto B con Google Maps</a>
+        ${filasRecorrido(c)}
+        <a class="boton" href="${mapsRuta(c)}" target="_blank" rel="noopener">${icono("ruta")} Abrir la ruta completa en Google Maps</a>
+        <div class="botones">
+          <a class="boton secundario" href="${mapsLink(c.origen)}" target="_blank" rel="noopener">Ir a A</a>
+          <a class="boton secundario" href="${mapsLink(c.destino)}" target="_blank" rel="noopener">Ir a B</a>
+        </div>
       </div>
       <a class="boton" href="tel:${esc(c.clienteTel)}">${icono("telefono")} Llamar a ${esc(c.clienteNombre)}</a>
       ${c.recogido
@@ -193,9 +198,7 @@ function iniciar() {
 
   function activarMiCarrera(c) {
     mapa = nuevoMapa("mapa");
-    L.marker(c.origen, { icon: ICONOS.origen }).addTo(mapa);
-    L.marker(c.destino, { icon: ICONOS.destino }).addTo(mapa);
-    mapa.fitBounds(L.latLngBounds([c.origen, c.destino]).pad(0.3), { animate: false });
+    mapa.fitBounds(marcarRecorrido(mapa, c).pad(0.3), { animate: false });
     const recogi = $("#recogi");
     if (recogi) recogi.onclick = async () => {
       recogi.disabled = true;

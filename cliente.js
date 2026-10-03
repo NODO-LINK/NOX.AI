@@ -7,9 +7,9 @@ import {
   doc, getDoc, setDoc, addDoc, updateDoc, collection, query, where, onSnapshot, serverTimestamp, increment,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fechaTexto, estrellas, promedio, habilitado, leerTarifas, precio, ruta,
-  ICONOS, icono, nuevoMapa, transicion, activarBarra, progreso, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
-} from "./comun.js?v=21";
+  auth, db, NOMBRE, SERVICIOS, CENTRO as CENTRO_MAPA, $, $$, esc, usd, fechaTexto, estrellas, promedio, habilitado, leerTarifas, precio, ruta,
+  ICONOS, icono, nuevoMapa, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
+} from "./comun.js?v=22";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -19,7 +19,9 @@ function iniciar() {
   let rutaActual = "motorizados", mapa = null;
   let motos = [], carreras = [], cancelarSubs = [];
   // Estado del formulario de pedido (se conserva al cambiar de pestaña).
-  const pedido = { tipo: SERVICIOS[0], origen: null, destino: null, dirOrigen: "", dirDestino: "", nota: "", para: null, km: null, linea: null };
+  // puntos[0] = A (donde te buscan), los del medio = paradas, el último = B (destino).
+  const pedido = { tipo: SERVICIOS[0], puntos: [], refs: [], retorno: false, agregando: false, nota: "", para: null, km: null, linea: null };
+  const MAX_PUNTOS = 6;
 
   contarVisita();
 
@@ -185,7 +187,11 @@ function iniciar() {
     window.scrollTo(0, 0);
   }
 
-  // ---------- Pedir carrera: A y B en el mismo mapa ----------
+  // ---------- Pedir carrera: A, paradas y B en el mismo mapa ----------
+  const letraPunto = (i, n) => (i === 0 ? "A" : i === n - 1 && n > 1 ? "B" : String(i));
+  const clasePunto = (i, n) => (i === 0 ? "letra-a" : i === n - 1 && n > 1 ? "letra-b" : "letra-p");
+  const iconoPunto = (i, n) => (i === 0 ? ICONOS.origen : i === n - 1 && n > 1 ? ICONOS.destino : ICONOS.parada(i));
+
   function vistaPedir() {
     const activa = carreraActual();
     $("#vista").innerHTML = `
@@ -195,114 +201,157 @@ function iniciar() {
         <button data-t="delivery">${icono("paquete")} Delivery</button><button data-t="mototaxi">${icono("moto")} Mototaxi</button>
       </div>` : ""}
       ${pedido.para ? `<div class="para pildora">Para: ${esc(pedido.para.nombre)} <button id="quitar-para" aria-label="Quitar">${icono("cerrar")}</button></div>` : ""}
+      <button class="boton secundario" id="mi-ubicacion">${icono("ubicarme")} Usar mi ubicación actual como punto A</button>
       <div class="mapa-pedir">
         <div class="mapa alto" id="mapa"></div>
         <div class="guia" id="guia"></div>
         <div class="mapa-botones">
-          <button class="redondo" id="mi-ubicacion" aria-label="Usar mi ubicación como punto A">${icono("ubicarme")}</button>
           <button class="redondo" id="reiniciar" aria-label="Marcar de nuevo">${icono("deshacer")}</button>
         </div>
       </div>
+      <div class="paradas" id="paradas"></div>
+      <div class="botones">
+        <button class="boton secundario" id="agregar">${icono("mas")} Agregar parada</button>
+        <label class="opcion interruptor"><input type="checkbox" id="retorno" ${pedido.retorno ? "checked" : ""}><span>Ida y vuelta</span></label>
+      </div>
       <div class="precio-caja" id="precio"></div>
-      <label for="dir-origen"><i class="letra-a">A</i> Referencia de dónde se busca</label>
-      <input id="dir-origen" placeholder="Casa, calle, al lado de…" value="${esc(pedido.dirOrigen)}">
-      <label for="dir-destino"><i class="letra-b">B</i> Referencia de a dónde se lleva</label>
-      <input id="dir-destino" placeholder="Casa, calle, al lado de…" value="${esc(pedido.dirDestino)}">
       <div id="caja-nota"><label for="nota">¿Qué hay que llevar?</label>
       <textarea id="nota" placeholder="Ej.: una pizza de la pizzería…, un sobre, unas compras">${esc(pedido.nota)}</textarea></div>
       <button class="boton" id="pedir" ${activa ? "disabled" : ""}>${pedido.para ? `Pedir a ${esc(pedido.para.nombre)}` : "Pedir a todos los motorizados"}</button>
       ${activa ? `<p class="nota">Ya tienes una carrera en curso. Mírala en "Mi carrera".</p>` : ""}`;
 
     mapa = nuevoMapa("mapa");
-    let marcas = {}, linea = null;
+    const capa = L.layerGroup().addTo(mapa);
+    let linea = null;
+
+    // Lista de puntos con su referencia escrita (se puede quitar cada parada).
+    const pintarLista = () => {
+      const n = pedido.puntos.length;
+      $("#paradas").innerHTML = pedido.puntos.map((_, i) => `
+        <div class="parada-fila">
+          <i class="${clasePunto(i, n)}">${letraPunto(i, n)}</i>
+          <input data-ref="${i}" placeholder="${i === 0 ? "¿Dónde te buscan? Casa, calle, referencia…" : i === n - 1 ? "¿A dónde vas? Referencia…" : "Referencia de la parada…"}" value="${esc(pedido.refs[i] || "")}">
+          ${i > 0 ? `<button class="quitar" data-quitar="${i}" aria-label="Quitar punto">${icono("cerrar")}</button>` : ""}
+        </div>`).join("");
+      $$("[data-ref]").forEach((el) => el.addEventListener("input", () => { pedido.refs[Number(el.dataset.ref)] = el.value; }));
+      $$("[data-quitar]").forEach((b) => (b.onclick = () => {
+        const i = Number(b.dataset.quitar);
+        pedido.puntos.splice(i, 1); pedido.refs.splice(i, 1);
+        calcular();
+      }));
+    };
+
     const pintar = () => {
-      for (const p of ["origen", "destino"]) {
-        if (pedido[p] && !marcas[p]) {
-          marcas[p] = L.marker(pedido[p], { icon: ICONOS[p], draggable: true }).addTo(mapa);
-          marcas[p].on("dragend", (e) => { pedido[p] = e.target.getLatLng(); calcular(); });
-        } else if (pedido[p]) marcas[p].setLatLng(pedido[p]);
-      }
-      const taxi = pedido.tipo === "mototaxi";
-      $("#guia").innerHTML = !pedido.origen
-        ? `<i class="letra-a">A</i><span>Toca el mapa donde ${taxi ? "te buscamos" : "se busca el pedido"}</span>`
-        : !pedido.destino
-        ? `<i class="letra-b">B</i><span>Ahora toca a dónde ${taxi ? "vas" : "se lleva"}</span>`
-        : `${icono("check")}<span>¡Listo! Arrastra A o B si quieres ajustar</span>`;
+      const n = pedido.puntos.length;
+      capa.clearLayers();
+      pedido.puntos.forEach((p, i) => {
+        const marca = L.marker(p, { icon: iconoPunto(i, n), draggable: true }).addTo(capa);
+        marca.on("dragend", (e) => { pedido.puntos[i] = e.target.getLatLng(); calcular(); });
+      });
+      $("#guia").innerHTML = n === 0
+        ? `<i class="letra-a">A</i><span>Toca el mapa donde te buscamos, o usa tu ubicación actual</span>`
+        : n === 1
+        ? `<i class="letra-b">B</i><span>Ahora toca a dónde vas</span>`
+        : pedido.agregando
+        ? `<i class="letra-p">${n - 1}</i><span>Toca el mapa donde quieres la parada</span>`
+        : `${icono("check")}<span>¡Listo! Arrastra los puntos si quieres ajustar</span>`;
       $("#guia").classList.remove("cambia"); void $("#guia").offsetWidth; $("#guia").classList.add("cambia");
       $$("#tipo button").forEach((b) => b.classList.toggle("activo", b.dataset.t === pedido.tipo));
       if ($("#tipo")) $("#tipo").dataset.activo = pedido.tipo;
-      $("#caja-nota").hidden = taxi;
+      $("#caja-nota").hidden = pedido.tipo === "mototaxi";
+      $("#agregar").disabled = n < 2 || n >= MAX_PUNTOS;
+      $("#agregar").classList.toggle("activo", pedido.agregando);
+      $("#agregar").innerHTML = pedido.agregando ? `${icono("cerrar")} No agregar` : `${icono("mas")} Agregar parada`;
       const t = tarifas[pedido.tipo];
-      $("#precio").innerHTML = pedido.km != null
-        ? `<span>${pedido.km.toFixed(1)} km</span><b>${usd(precio(tarifas, pedido.tipo, pedido.km))}</b>`
+      $("#precio").innerHTML = pedido.km != null && n >= 2
+        ? `<span>${pedido.km.toFixed(1)} km${n > 2 ? ` · ${n - 2} parada${n > 3 ? "s" : ""}` : ""}${pedido.retorno ? " · ida y vuelta" : ""}</span><b>${usd(precio(tarifas, pedido.tipo, pedido.km))}</b>`
         : `<span>${usd(t.base)} + ${usd(t.porKm)} por km</span><span class="nota">Marca A y B</span>`;
       if (linea) { linea.remove(); linea = null; }
-      if (pedido.linea) linea = L.polyline(pedido.linea, { color: "#7c3aed", weight: 5, opacity: .75 }).addTo(mapa);
-    };
-    const calcular = async () => {
-      pintar();
-      if (!pedido.origen || !pedido.destino) return;
-      $("#precio").innerHTML = `<span>Calculando distancia…</span>`;
-      const r = await ruta(pedido.origen, pedido.destino);
-      if (!mapa) return;
-      pedido.km = r.km; pedido.linea = r.linea;
-      pintar();
-      mapa.fitBounds(L.latLngBounds([pedido.origen, pedido.destino]).pad(0.35), { animate: false });
+      if (pedido.linea && n >= 2) linea = L.polyline(pedido.linea, { color: "#7c3aed", weight: 5, opacity: .75 }).addTo(mapa);
+      pintarLista();
     };
 
-    // Primer toque = A, segundo toque = B. Después se ajustan arrastrando.
+    const encuadrar = () => {
+      if (pedido.puntos.length >= 2) mapa.fitBounds(L.latLngBounds(pedido.puntos).pad(0.35), { animate: false });
+      else if (pedido.puntos.length === 1) mapa.setView(pedido.puntos[0], 15, { animate: false });
+    };
+    let vuelta = 0;
+    const calcular = async () => {
+      pedido.km = null; pedido.linea = null;
+      pintar();
+      if (pedido.puntos.length < 2) return;
+      const mia = ++vuelta;
+      $("#precio").innerHTML = `<span>Calculando distancia…</span>`;
+      const pts = [...pedido.puntos, ...(pedido.retorno ? [pedido.puntos[0]] : [])];
+      const r = await ruta(pts);
+      if (!mapa || mia !== vuelta) return;
+      pedido.km = r.km; pedido.linea = r.linea;
+      pintar();
+    };
+
+    // 1.er toque = A, 2.º = B. Las paradas se agregan con el botón y quedan antes de B.
     mapa.on("click", (e) => {
-      if (!pedido.origen) pedido.origen = e.latlng;
-      else if (!pedido.destino) pedido.destino = e.latlng;
-      else return aviso("Arrastra A o B para moverlos, o toca el botón de reiniciar");
+      const n = pedido.puntos.length;
+      if (n < 2) { pedido.puntos.push(e.latlng); pedido.refs.push(""); }
+      else if (pedido.agregando) { pedido.puntos.splice(n - 1, 0, e.latlng); pedido.refs.splice(n - 1, 0, ""); pedido.agregando = false; }
+      else return aviso("Para otra parada toca «Agregar parada». Para mover un punto, arrástralo.");
       calcular();
+      if (pedido.puntos.length === 2) encuadrar();
     });
+    $("#agregar").onclick = () => { pedido.agregando = !pedido.agregando; pintar(); };
+    $("#retorno").onchange = (e) => { pedido.retorno = e.target.checked; calcular(); };
     $("#reiniciar").onclick = () => {
-      Object.values(marcas).forEach((m) => m.remove()); marcas = {};
-      Object.assign(pedido, { origen: null, destino: null, km: null, linea: null });
+      Object.assign(pedido, { puntos: [], refs: [], km: null, linea: null, agregando: false });
+      mapa.setView(CENTRO_MAPA, 14, { animate: false });
       pintar();
     };
     $$("#tipo button").forEach((b) => (b.onclick = () => { pedido.tipo = b.dataset.t; pintar(); }));
     $("#mi-ubicacion").onclick = () => {
       if (!navigator.geolocation) return aviso("Tu teléfono no permite usar la ubicación");
-      aviso("Buscando tu ubicación…");
+      const boton = $("#mi-ubicacion");
+      boton.disabled = true; boton.innerHTML = `${icono("ubicarme")} Buscando tu ubicación…`;
       navigator.geolocation.getCurrentPosition(
         (p) => {
           if (!mapa) return;
-          pedido.origen = L.latLng(p.coords.latitude, p.coords.longitude);
-          mapa.setView(pedido.origen, 16, { animate: false });
-          calcular();
+          const aqui = L.latLng(p.coords.latitude, p.coords.longitude);
+          if (pedido.puntos.length) pedido.puntos[0] = aqui; else { pedido.puntos.push(aqui); pedido.refs.push(""); }
+          if (!pedido.refs[0]) pedido.refs[0] = "Mi ubicación actual";
+          boton.disabled = false; boton.innerHTML = `${icono("check")} Punto A: tu ubicación actual`;
+          calcular(); encuadrar();
         },
-        () => aviso("No se pudo obtener tu ubicación"),
+        () => { boton.disabled = false; boton.innerHTML = `${icono("ubicarme")} Usar mi ubicación actual como punto A`; aviso("No se pudo obtener tu ubicación. Activa el GPS y da permiso."); },
         { enableHighAccuracy: true, timeout: 15000 }
       );
     };
-    ["dir-origen", "dir-destino", "nota"].forEach((id) => $("#" + id).addEventListener("input", (e) => {
-      pedido[{ "dir-origen": "dirOrigen", "dir-destino": "dirDestino", nota: "nota" }[id]] = e.target.value;
-    }));
+    const nota = $("#nota");
+    if (nota) nota.addEventListener("input", (e) => { pedido.nota = e.target.value; });
     $("#volver").onclick = () => ir("motorizados");
     const quitar = $("#quitar-para");
     if (quitar) quitar.onclick = () => { pedido.para = null; ir("motorizados"); };
-    if (pedido.origen && pedido.destino) mapa.fitBounds(L.latLngBounds([pedido.origen, pedido.destino]).pad(0.35), { animate: false });
+    encuadrar();
     pintar();
     $("#pedir").onclick = enviarPedido;
   }
 
   async function enviarPedido() {
     if (carreraActual()) return aviso("Ya tienes una carrera en curso");
-    if (!pedido.origen || !pedido.destino || pedido.km == null) return aviso("Marca el punto A y el punto B en el mapa");
-    if (!pedido.dirOrigen.trim() || !pedido.dirDestino.trim()) return aviso("Escribe una referencia para A y para B");
+    const n = pedido.puntos.length;
+    if (n < 2 || pedido.km == null) return aviso("Marca el punto A y el punto B en el mapa");
+    if (pedido.puntos.some((_, i) => !(pedido.refs[i] || "").trim())) return aviso("Escribe una referencia para cada punto");
     if (pedido.tipo === "delivery" && !pedido.nota.trim()) return aviso("Cuéntanos qué hay que llevar");
     $("#pedir").disabled = true;
     pedirPermisoAvisos();
+    const punto = (i) => ({ lat: pedido.puntos[i].lat, lng: pedido.puntos[i].lng, dir: pedido.refs[i].trim() });
     try {
       await addDoc(collection(db, "carreras"), {
         clienteUid: usuario.uid,
         clienteNombre: cliente.nombre,
         clienteTel: cliente.telefono,
         tipo: pedido.tipo,
-        origen: { lat: pedido.origen.lat, lng: pedido.origen.lng, dir: pedido.dirOrigen.trim() },
-        destino: { lat: pedido.destino.lat, lng: pedido.destino.lng, dir: pedido.dirDestino.trim() },
+        origen: punto(0),
+        destino: punto(n - 1),
+        paradas: pedido.puntos.slice(1, -1).map((_, j) => punto(j + 1)),
+        retorno: pedido.retorno,
         nota: pedido.tipo === "delivery" ? pedido.nota.trim() : "",
         km: Math.round(pedido.km * 10) / 10,
         precio: precio(tarifas, pedido.tipo, pedido.km),
@@ -314,7 +363,7 @@ function iniciar() {
         cancelaciones: [],
         creada: serverTimestamp(),
       });
-      Object.assign(pedido, { origen: null, destino: null, km: null, linea: null, dirOrigen: "", dirDestino: "", nota: "", para: null });
+      Object.assign(pedido, { puntos: [], refs: [], retorno: false, agregando: false, km: null, linea: null, nota: "", para: null });
       ir("carrera");
     } catch (e) {
       console.error(e);
@@ -365,8 +414,7 @@ function iniciar() {
     const resumen = `
       <div class="caja">
         <div class="fila"><span>Servicio</span><b>${c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`}</b></div>
-        <div class="fila"><span><i class="letra-a">A</i></span><span>${esc(c.origen.dir)}</span></div>
-        <div class="fila"><span><i class="letra-b">B</i></span><span>${esc(c.destino.dir)}</span></div>
+        ${filasRecorrido(c)}
         ${c.nota ? `<div class="fila"><span>Llevar</span><span>${esc(c.nota)}</span></div>` : ""}
         <div class="fila"><span>Distancia</span><span>${c.km} km</span></div>
         <div class="fila"><span>Precio</span><b>${usd(c.precio)}</b></div>
@@ -402,9 +450,8 @@ function iniciar() {
         ${resumen}
         <button class="boton peligro" id="cancelar">Cancelar carrera</button>`;
       mapa = nuevoMapa("mapa");
-      L.marker(c.origen, { icon: ICONOS.origen }).addTo(mapa);
-      L.marker(c.destino, { icon: ICONOS.destino }).addTo(mapa);
-      mapa.fitBounds(L.latLngBounds([c.origen, c.destino]).pad(0.3), { animate: false });
+      const limites = marcarRecorrido(mapa, c);
+      mapa.fitBounds(limites.pad(0.3), { animate: false });
       let marcaMoto = null, centrado = false;
       seguimiento.alMover = (info, u) => {
         if (!$("#vivo")) return;
@@ -412,7 +459,7 @@ function iniciar() {
         if (!u || !mapa) return;
         if (!marcaMoto) marcaMoto = L.marker([u.lat, u.lng], { icon: ICONOS.moto }).addTo(mapa);
         else marcaMoto.setLatLng([u.lat, u.lng]);
-        if (!centrado) { mapa.fitBounds(L.latLngBounds([c.origen, c.destino, [u.lat, u.lng]]).pad(0.3), { animate: false }); centrado = true; }
+        if (!centrado) { mapa.fitBounds(limites.extend([u.lat, u.lng]).pad(0.3), { animate: false }); centrado = true; }
       };
       seguimiento.alMover(seguimiento.info || progreso(c, null), seguimiento.ubic);
     }

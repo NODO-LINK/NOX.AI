@@ -10,7 +10,7 @@ import {
 import {
   auth, authSecundaria, db, NOMBRE, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
   leerTarifas, aviso, avisoSinConfigurar,
-} from "./comun.js?v=21";
+} from "./comun.js?v=22";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -268,7 +268,7 @@ function iniciar() {
           <h3>${c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`} · ${usd(c.precio)} · ${c.km} km <span class="pildora ${cl}">${tx}</span></h3>
           <p>${icono("usuario")} ${esc(c.clienteNombre)}${cedulas[c.clienteUid] ? ` · C.I. ${esc(cedulas[c.clienteUid])}` : ""} · ${esc(c.clienteTel)}</p>
           <p>${icono("moto")} ${c.motoNombre && c.motoUid ? esc(c.motoNombre) : c.paraMotoNombre ? `Pedida a ${esc(c.paraMotoNombre)}` : "—"}</p>
-          <p>A: ${esc(c.origen?.dir)} ${icono("flecha")} B: ${esc(c.destino?.dir)}</p>
+          <p>A: ${esc(c.origen?.dir)} ${icono("flecha")} B: ${esc(c.destino?.dir)}${c.paradas?.length ? ` · ${c.paradas.length} parada${c.paradas.length > 1 ? "s" : ""}` : ""}${c.retorno ? " · ida y vuelta" : ""}</p>
           <p>${fechaTexto(c.creada)}</p>
           ${cancel.map((x) => `<p style="color:var(--rojo)">${x}</p>`).join("")}</div>
           ${c.estado === "esperando" || c.estado === "aceptada" ? `<div class="acciones"><button class="boton peligro" data-cancelar="${c.id}">Cancelar</button></div>` : ""}

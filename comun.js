@@ -3,8 +3,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, connectFirestoreEmulator, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=21";
-import { icono, pintarIconos } from "./iconos.js?v=21";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=22";
+import { icono, pintarIconos } from "./iconos.js?v=22";
 
 export { icono };
 pintarIconos();
@@ -85,19 +85,55 @@ export function lineaRecta(a, b) {
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
-export async function ruta(a, b) {
+// Distancia por calle pasando por todos los puntos en orden (OSRM, gratis).
+// Si falla, suma las líneas rectas × 1,3. Acepta ruta([p1, p2, …]) o ruta(p1, p2).
+export async function ruta(...args) {
+  const pts = Array.isArray(args[0]) ? args[0] : args;
   try {
-    const url = `https://router.project-osrm.org/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=geojson`;
-    const r = await fetch(url);
+    const coords = pts.map((p) => `${p.lng},${p.lat}`).join(";");
+    const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`);
     const j = await r.json();
     if (j.code !== "Ok") throw 0;
     return { km: j.routes[0].distance / 1000, linea: j.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]) };
   } catch {
-    return { km: lineaRecta(a, b) * 1.3, linea: [[a.lat, a.lng], [b.lat, b.lng]] };
+    let km = 0;
+    for (let i = 1; i < pts.length; i++) km += lineaRecta(pts[i - 1], pts[i]) * 1.3;
+    return { km, linea: pts.map((p) => [p.lat, p.lng]) };
   }
 }
 
 export const mapsLink = (p) => `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
+
+// Todos los puntos de una carrera en orden: A, paradas, B y, si es ida y vuelta, A otra vez.
+export const puntosCarrera = (c) => [c.origen, ...(c.paradas || []), c.destino, ...(c.retorno ? [c.origen] : [])];
+
+// Ruta completa en Google Maps (con las paradas como puntos intermedios).
+export function mapsRuta(c) {
+  const pts = puntosCarrera(c);
+  const txt = (p) => `${p.lat},${p.lng}`;
+  const medio = pts.slice(1, -1).map(txt).join("|");
+  return `https://www.google.com/maps/dir/?api=1&origin=${txt(pts[0])}&destination=${txt(pts[pts.length - 1])}${medio ? `&waypoints=${encodeURIComponent(medio)}` : ""}&travelmode=driving`;
+}
+
+// Filas con el recorrido (A, paradas, B y regreso) para los resúmenes.
+export function filasRecorrido(c) {
+  const fila = (letra, clase, dir) => `<div class="fila"><span><i class="${clase}">${letra}</i></span><span>${esc(dir)}</span></div>`;
+  return [
+    fila("A", "letra-a", c.origen.dir),
+    ...(c.paradas || []).map((p, i) => fila(i + 1, "letra-p", p.dir)),
+    fila("B", "letra-b", c.destino.dir),
+    c.retorno ? `<div class="fila"><span>${icono("deshacer")}</span><span>Ida y vuelta: regresa al punto A</span></div>` : "",
+  ].join("");
+}
+
+// Marcadores de la carrera en un mapa (A, paradas numeradas y B).
+export function marcarRecorrido(mapa, c) {
+  const L = window.L;
+  L.marker(c.origen, { icon: ICONOS.origen }).addTo(mapa);
+  (c.paradas || []).forEach((p, i) => L.marker(p, { icon: ICONOS.parada(i + 1) }).addTo(mapa));
+  L.marker(c.destino, { icon: ICONOS.destino }).addTo(mapa);
+  return L.latLngBounds([c.origen, ...(c.paradas || []), c.destino]);
+}
 
 // Íconos de mapa (Leaflet).
 const pin = (color, letra) => window.L.divIcon({
@@ -109,11 +145,39 @@ export const ICONOS = {
   get origen() { return pin("#16a34a", "A"); },
   get destino() { return pin("#7c3aed", "B"); },
   get moto() { return pin("#111827", icono("moto")); },
+  parada(n) { return pin("#f59e0b", n); },
 };
+// Límites del mapa: El Moján y sus alrededores. El mapa no se sale de aquí.
+const LIMITES = [[CENTRO[0] - 0.15, CENTRO[1] - 0.15], [CENTRO[0] + 0.15, CENTRO[1] + 0.15]];
+
+// El mapa queda quieto al hacer scroll: solo se mueve con el botón de la mano,
+// con + / − o pellizcando con dos dedos. Los puntos se marcan tocando y se ajustan arrastrándolos.
 export function nuevoMapa(id) {
-  const m = window.L.map(id, { zoomControl: false }).setView(CENTRO, 14);
-  window.L.control.zoom({ position: "bottomleft" }).addTo(m);
-  window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(m);
+  const L = window.L;
+  const m = L.map(id, {
+    zoomControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false,
+    maxBounds: LIMITES, maxBoundsViscosity: 1, minZoom: 12,
+  }).setView(CENTRO, 14);
+  L.control.zoom({ position: "bottomleft" }).addTo(m);
+  const Controles = L.Control.extend({
+    options: { position: "bottomleft" },
+    onAdd() {
+      const caja = L.DomUtil.create("div", "leaflet-bar controles-mapa");
+      caja.innerHTML = `<a href="#" role="button" data-mover title="Mover el mapa">${icono("mano")}</a><a href="#" role="button" data-centro title="Volver al centro de El Moján">${icono("centro")}</a>`;
+      L.DomEvent.disableClickPropagation(caja);
+      caja.querySelector("[data-mover]").onclick = (e) => {
+        e.preventDefault();
+        const activo = !m.dragging.enabled();
+        activo ? m.dragging.enable() : m.dragging.disable();
+        e.currentTarget.classList.toggle("activo", activo);
+        aviso(activo ? "Ahora puedes mover el mapa con el dedo" : "Mapa fijo");
+      };
+      caja.querySelector("[data-centro]").onclick = (e) => { e.preventDefault(); m.setView(CENTRO, 14, { animate: false }); };
+      return caja;
+    },
+  });
+  new Controles().addTo(m);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(m);
   return m;
 }
 
