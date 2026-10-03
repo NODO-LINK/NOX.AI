@@ -77,9 +77,10 @@ service cloud.firestore {
         // El motorizado avisa que ya recogió, termina o cancela su carrera (al cancelar vuelve a quedar disponible).
         || (esMoto() && resource.data.motoUid == request.auth.uid && resource.data.estado == 'aceptada'
             && ((request.resource.data.estado == 'aceptada' && request.resource.data.recogido == true && soloCambia(['recogido', 'recogidoEn']))
+             || (request.resource.data.estado == 'aceptada' && soloCambia(['llegoEn']))
              || (request.resource.data.estado == 'terminada' && soloCambia(['estado', 'terminada']))
              || (request.resource.data.estado == 'esperando' && request.resource.data.motoUid == null
-                 && soloCambia(['estado', 'motoUid', 'paraMoto', 'paraMotoNombre', 'cancelaciones', 'recogido']))));
+                 && soloCambia(['estado', 'motoUid', 'paraMoto', 'paraMotoNombre', 'cancelaciones', 'recogido', 'llegoEn']))));
     }
 
     // Chat de la carrera: solo el cliente y el motorizado asignado (el admin puede leer).
@@ -91,6 +92,16 @@ service cloud.firestore {
         && request.resource.data.de == request.auth.uid
         && request.resource.data.texto is string
         && request.resource.data.texto.size() > 0 && request.resource.data.texto.size() <= 500;
+    }
+
+    // El motorizado califica al cliente al terminar (solo el admin las ve).
+    match /calificacionesClientes/{id} {
+      allow create: if esMoto()
+        && request.resource.data.motoUid == request.auth.uid
+        && get(/databases/$(database)/documents/carreras/$(request.resource.data.carreraId)).data.motoUid == request.auth.uid
+        && request.resource.data.estrellas is int
+        && request.resource.data.estrellas >= 1 && request.resource.data.estrellas <= 5;
+      allow read: if esAdmin();
     }
 
     match /resenas/{id} {

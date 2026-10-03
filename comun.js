@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=28";
-import { icono, pintarIconos } from "./iconos.js?v=28";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=31";
+import { icono, pintarIconos } from "./iconos.js?v=31";
 
 export { icono };
 pintarIconos();
@@ -319,8 +319,15 @@ export function progreso(c, u, memoria = {}, tercero = "") {
   const titulo = tercero
     ? (recogido ? (taxi ? `${tercero} va en camino a su destino` : "El pedido va en camino") : `${quien} va a buscar ${taxi ? `a ${tercero}` : "el pedido"}`)
     : (recogido ? (taxi ? "En camino a tu destino" : "Tu pedido va en camino") : `${quien} va a buscar${taxi ? "te" : " el pedido"}`);
+  // El motorizado avisó que llegó al punto A y está esperando.
+  if (c.llegoEn && !recogido) {
+    return { recogido, llego: true, titulo: tercero ? `${quien} llegó a buscar ${taxi ? `a ${tercero}` : "el pedido"}` : `¡${quien} llegó!`,
+      detalle: tercero ? "Está esperando en el punto A" : "Está afuera esperándote en el punto A", pct: 50, min: 0, km: 0 };
+  }
   if (!u) return { recogido, titulo, detalle: "Esperando la ubicación del motorizado…", pct: recogido ? 50 : 0, min: null, km: null };
-  const km = lineaRecta(u, meta) * 1.3;
+  // Distancia por la ruta de calles si ya se calculó hace poco (ver afinarEta); si no, línea recta × 1,3.
+  const real = memoria.real && memoria.real.meta === `${meta.lat},${meta.lng}` && Date.now() - memoria.real.t < 120000 ? memoria.real : null;
+  const km = real ? Math.max(0, real.km - lineaRecta(real.desde, u)) : lineaRecta(u, meta) * 1.3;
   const min = Math.max(1, Math.round((km / VELOCIDAD) * 60));
   let pct;
   if (!recogido) {
@@ -338,6 +345,21 @@ export function progreso(c, u, memoria = {}, tercero = "") {
     ? (recogido ? "Llegando al destino" : "Está llegando al punto A")
     : `Faltan ${min} min · ${textoKm}${viejo}`;
   return { recogido, titulo, detalle, pct, min: llegando ? 0 : min, km };
+}
+
+// Pide a OSRM la distancia por calles desde el motorizado hasta su meta (como máximo cada 45 s
+// o si se movió más de 150 m) y la guarda en memoria.real; luego llama a listo() para redibujar.
+export async function afinarEta(c, u, memoria, listo) {
+  if (!u || (c.llegoEn && !c.recogido)) return;
+  const meta = c.recogido ? c.destino : c.origen;
+  const r = memoria.real;
+  const clave = `${meta.lat},${meta.lng}`;
+  if (memoria.pidiendo || (r && r.meta === clave && Date.now() - r.t < 45000 && lineaRecta(r.desde, u) < 0.15)) return;
+  memoria.pidiendo = true;
+  try {
+    const x = await fetch(`https://router.project-osrm.org/route/v1/driving/${u.lng},${u.lat};${meta.lng},${meta.lat}?overview=false`).then((y) => y.json());
+    if (x.code === "Ok") { memoria.real = { km: x.routes[0].distance / 1000, t: Date.now(), desde: { lat: u.lat, lng: u.lng }, meta: clave }; listo && listo(); }
+  } catch {} finally { memoria.pidiendo = false; }
 }
 
 // Comparte el enlace de seguimiento de una carrera (WhatsApp, etc.).
@@ -594,3 +616,19 @@ export function abrirChat(carreraId, yoUid, yoNombre, conQuien) {
   fondo.addEventListener("click", (e) => { if (e.target === fondo) cerrar(); });
   return cerrar;
 }
+
+// ---------- Aviso de "sin conexión" ----------
+(function avisoConexion() {
+  const barra = document.createElement("div");
+  barra.className = "sin-conexion";
+  barra.setAttribute("role", "status");
+  barra.innerHTML = `${icono("alerta")} Sin conexión a internet. Reintentando…`;
+  const pintar = () => {
+    if (!document.body) return;
+    if (!barra.isConnected) document.body.append(barra);
+    barra.classList.toggle("ver", !navigator.onLine);
+  };
+  addEventListener("offline", pintar);
+  addEventListener("online", () => { pintar(); aviso("Conexión restablecida"); });
+  if (document.readyState === "loading") addEventListener("DOMContentLoaded", pintar); else pintar();
+})();

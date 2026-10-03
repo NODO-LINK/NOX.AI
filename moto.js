@@ -2,12 +2,12 @@
 
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  doc, onSnapshot, updateDoc, collection, query, where, runTransaction, serverTimestamp, arrayUnion,
+  doc, addDoc, onSnapshot, updateDoc, collection, query, where, runTransaction, serverTimestamp, arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar,
-} from "./comun.js?v=28";
+} from "./comun.js?v=31";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -32,6 +32,7 @@ function iniciar() {
       const firmaAntes = firma(perfil);
       perfil = { id: s.id, ...s.data() };
       if (antes !== habilitado(perfil) || turnoAntes !== (perfil.deTurno !== false) || !subsCarreras.length) escucharCarreras();
+      gpsSegunEstado();
       // Los cambios de ubicación (cada pocos segundos) no redibujan la pantalla.
       if (firma(perfil) !== firmaAntes) pintar();
     }));
@@ -66,7 +67,7 @@ function iniciar() {
     // Su carrera aceptada (aunque lo hayan desactivado, debe poder terminarla).
     subsCarreras.push(onSnapshot(query(collection(db, "carreras"), where("motoUid", "==", yo.uid), where("estado", "==", "aceptada")), (s) => {
       miCarrera = s.docs.length ? { id: s.docs[0].id, ...s.docs[0].data() } : null;
-      if (miCarrera) iniciarGps(); else pararGps();
+      gpsSegunEstado();
       // Avisa a los clientes si está ocupado: sale activo pero con la etiqueta "Carrera en curso".
       // Se sincroniza siempre con la carrera real (aunque la cancele el cliente o el admin).
       if (perfil && !!perfil.enCarrera !== !!miCarrera) {
@@ -158,11 +159,16 @@ function iniciar() {
   }
 
   // ---------- Ubicación en vivo ----------
+  // Con carrera: cada 8 s (el cliente lo sigue). De turno sin carrera: cada 30 s (para "a X min de ti").
+  function gpsSegunEstado() {
+    const deTurno = perfil && habilitado(perfil) && perfil.deTurno !== false;
+    if (miCarrera || deTurno) iniciarGps(); else pararGps();
+  }
   function iniciarGps() {
     if (vigilaGps !== null || !navigator.geolocation) return;
     let ultima = 0;
     vigilaGps = navigator.geolocation.watchPosition((p) => {
-      if (Date.now() - ultima < 8000) return; // como máximo cada 8 segundos
+      if (Date.now() - ultima < (miCarrera ? 8000 : 30000)) return;
       ultima = Date.now();
       updateDoc(doc(db, "motorizados", yo.uid), { ubicacion: { lat: p.coords.latitude, lng: p.coords.longitude, t: new Date() } }).catch(() => {});
     }, () => aviso("Activa la ubicación para que el cliente te vea llegar"), { enableHighAccuracy: true });
@@ -192,7 +198,7 @@ function iniciar() {
     else if (ok) {
       html += `
         <div class="turno ${deTurno ? "on" : ""}">
-          <div><b>${deTurno ? "Estás de turno" : "Estás descansando"}</b><small>${deTurno ? "Los clientes te ven y recibes carreras" : "No sales en la app ni recibes carreras"}</small></div>
+          <div><b>${deTurno ? "Estás de turno" : "Estás descansando"}</b><small>${deTurno ? "Los clientes te ven, recibes carreras y ven qué tan cerca estás" : "No sales en la app ni recibes carreras"}</small></div>
           <button class="interruptor-grande ${deTurno ? "on" : ""}" id="turno" aria-label="Cambiar turno"><span></span></button>
         </div>
         ${deTurno ? `<div class="botones">
@@ -287,11 +293,37 @@ function iniciar() {
         <a class="boton" href="tel:${esc(c.clienteTel)}">${icono("telefono")} Llamar</a>
         <button class="boton" id="chat">${icono("chat")} Chat<b class="contador" id="chat-sin-leer" ${chat.sinLeer ? "" : "hidden"}>${chat.sinLeer || ""}</b></button>
       </div>
+      ${!c.recogido && !c.llegoEn ? `<button class="boton" id="llegue">${icono("campana")} Llegué al punto A (avisar al cliente)</button>` : ""}
+      ${!c.recogido && c.llegoEn ? `<p class="pildora ok" style="margin-top:12px">${icono("check")} Le avisaste al cliente que llegaste</p>` : ""}
       ${c.recogido
         ? `<button class="boton verde" id="termine">${icono("listo")} Terminé: ya llegamos a B</button>`
         : `<button class="boton verde" id="recogi">${icono("check")} Ya ${c.tipo === "mototaxi" ? "lo recogí" : "busqué el pedido"} (salgo hacia B)</button>`}
       <button class="boton peligro" id="cancelar">Cancelar carrera</button>
       <p class="nota">Mientras tengas una carrera, tu ubicación se comparte con el cliente.</p>`;
+  }
+
+  // Al terminar, el motorizado califica al cliente (solo lo ve el administrador).
+  function calificarCliente(c) {
+    let puntos = 5;
+    const fondo = document.createElement("div");
+    fondo.className = "modal";
+    fondo.innerHTML = `<div class="ventana"><h2>¿Cómo fue ${esc(c.clienteNombre.split(" ")[0])} como cliente?</h2>
+      <div class="estrellas" id="estrellas-cliente">${[1, 2, 3, 4, 5].map((n) => `<button data-n="${n}" aria-label="${n} estrellas">${icono("estrella")}</button>`).join("")}</div>
+      <textarea id="nota-cliente" placeholder="Comentario para el administrador (opcional)"></textarea>
+      <button class="boton" data-ok>Enviar</button><button class="boton secundario" data-no>Ahora no</button></div>`;
+    document.body.append(fondo);
+    const pintarE = () => fondo.querySelectorAll("[data-n]").forEach((b) => b.classList.toggle("on", Number(b.dataset.n) <= puntos));
+    fondo.querySelectorAll("[data-n]").forEach((b) => (b.onclick = () => { puntos = Number(b.dataset.n); pintarE(); }));
+    pintarE();
+    fondo.querySelector("[data-no]").onclick = () => fondo.remove();
+    fondo.querySelector("[data-ok]").onclick = async () => {
+      await addDoc(collection(db, "calificacionesClientes"), {
+        carreraId: c.id, motoUid: yo.uid, motoNombre: perfil.nombre, clienteUid: c.clienteUid, clienteNombre: c.clienteNombre,
+        estrellas: puntos, comentario: fondo.querySelector("#nota-cliente").value.trim().slice(0, 300), fecha: serverTimestamp(),
+      }).catch(() => aviso("No se pudo guardar la calificación"));
+      fondo.remove();
+      aviso("¡Gracias!");
+    };
   }
 
   function activarMiCarrera(c) {
@@ -300,6 +332,12 @@ function iniciar() {
     mapa.fitBounds(marcarRecorrido(mapa, c).pad(0.3), { animate: false });
     // Lugares de El Moján (escuelas, mercados, playas…) para ubicarse mejor.
     mostrarLugares(mapa).listo.catch(() => {});
+    const llegue = $("#llegue");
+    if (llegue) llegue.onclick = async () => {
+      llegue.disabled = true;
+      await updateDoc(doc(db, "carreras", c.id), { llegoEn: serverTimestamp() }).catch(() => { llegue.disabled = false; aviso("No se pudo avisar"); });
+      aviso("Le avisamos al cliente que llegaste");
+    };
     const recogi = $("#recogi");
     if (recogi) recogi.onclick = async () => {
       recogi.disabled = true;
@@ -311,13 +349,14 @@ function iniciar() {
       if (!confirm("¿Entregaste y cobraste la carrera?")) return;
       await updateDoc(doc(db, "carreras", c.id), { estado: "terminada", terminada: serverTimestamp() });
       aviso("¡Carrera terminada!");
+      calificarCliente(c);
     };
     $("#cancelar").onclick = async () => {
       const motivo = await elegirMotivo("¿Por qué cancelas?", MOTIVOS_MOTO);
       if (!motivo) return;
       // La carrera vuelve a quedar disponible para los demás motorizados.
       await updateDoc(doc(db, "carreras", c.id), {
-        estado: "esperando", motoUid: null, paraMoto: null, paraMotoNombre: null, recogido: false,
+        estado: "esperando", motoUid: null, paraMoto: null, paraMotoNombre: null, recogido: false, llegoEn: null,
         cancelaciones: arrayUnion({ por: "motorizado", motoUid: yo.uid, motoNombre: perfil.nombre, motivo, fecha: new Date() }),
       });
       aviso("Cancelaste la carrera");

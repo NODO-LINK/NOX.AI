@@ -17,6 +17,9 @@ Las estrellas cuentan solo cuando el admin aprueba la reseña.
 - **Cliente:** lugares favoritos (Casa, Trabajo…) guardados en el teléfono; chat con el motorizado durante la carrera.
 - **Motorizado:** interruptor *De turno / Descansando*, sus ganancias (hoy, 7 días, quincena), avisos de carrera nueva y de mensajes en la barra de notificaciones cuando la app está en segundo plano, chat con el cliente y opción de mantener la pantalla encendida.
 - **Panel:** mapa en vivo de los motorizados, lista de clientes con bloqueo por cédula, recargo nocturno (por horario) y por lluvia (interruptor). Tarifas y números están en la pestaña **Más**.
+- **Durante la carrera:** el motorizado avisa "Llegué" (el cliente y su amigo lo ven al instante), el tiempo que falta se calcula por la ruta de calles y, al terminar, el motorizado califica al cliente (lo ves en **Clientes**).
+- **Lista de motorizados:** los disponibles primero y los más cerca del cliente ("a 3 min"), con aviso cuando todos están ocupados. El motorizado comparte su ubicación mientras está de turno.
+- **Historial:** en *Mi carrera* el cliente ve sus viajes pasados y puede repetir uno con un toque.
 - **Toda la app:** se puede instalar (ícono en la pantalla de inicio, abre aunque falle la señal) y tiene modo oscuro (botón de luna/sol, o según el teléfono).
 
 ## Conectar con Firebase (una sola vez)

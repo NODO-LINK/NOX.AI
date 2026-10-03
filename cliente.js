@@ -7,9 +7,9 @@ import {
   doc, getDoc, setDoc, addDoc, updateDoc, collection, query, where, onSnapshot, serverTimestamp, increment,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
-  ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
-} from "./comun.js?v=28";
+  auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
+  ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
+} from "./comun.js?v=31";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -162,6 +162,12 @@ function iniciar() {
       const ahora = carreraActual();
       $("#punto").hidden = !ahora;
       actualizarSeguimiento(antes);
+      if (ahora && antes && ahora.id === antes.id && ahora.llegoEn && !antes.llegoEn && !ahora.recogido) {
+        const quien = (ahora.motoNombre || "Tu motorizado").split(" ")[0];
+        aviso(`¡${quien} llegó! Está afuera esperándote`);
+        if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
+        notificarCarrera(`¡${quien} llegó!`, "Está afuera esperándote en el punto A", { sonar: true });
+      }
       if (ahora && antes && antes.estado !== ahora.estado) {
         if (ahora.estado === "aceptada") aviso(`¡${ahora.motoNombre} aceptó tu carrera!`);
         if (ahora.estado === "esperando" && antes.estado === "aceptada") aviso("El motorizado canceló. Buscando otro…");
@@ -491,21 +497,49 @@ function iniciar() {
 
   // ---------- Motorizados activos ----------
   const iniciales = (n) => String(n).trim().split(/\s+/).slice(0, 2).map((p) => p[0] || "").join("").toUpperCase();
+  // Ubicación del cliente para ordenar por cercanía (se pide al ver la lista, como mucho cada 2 min).
+  let miPos = null, pidiendoPos = false, ultimaPos = 0;
+  function actualizarMiPos() {
+    if (!navigator.geolocation || pidiendoPos || Date.now() - ultimaPos < 120000) return;
+    pidiendoPos = true;
+    navigator.geolocation.getCurrentPosition((p) => {
+      pidiendoPos = false; ultimaPos = Date.now();
+      miPos = { lat: p.coords.latitude, lng: p.coords.longitude };
+      if (rutaActual === "motorizados") vistaMotorizados();
+    }, () => { pidiendoPos = false; ultimaPos = Date.now(); }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 });
+  }
+  // Distancia del motorizado al cliente (solo si su ubicación es de los últimos 15 min).
+  function cercania(m) {
+    const u = m.ubicacion;
+    if (!miPos || !u || Date.now() - (fecha(u.t) || 0) > 15 * 60000) return null;
+    const km = lineaRecta(miPos, u) * 1.3;
+    return { km, min: Math.max(1, Math.round((km / 25) * 60)) };
+  }
+
   function vistaMotorizados() {
+    actualizarMiPos();
+    // Disponibles primero; luego por cercanía (si se sabe) y por calificación.
+    const lista = motos.map((m) => ({ m, cerca: cercania(m) })).sort((a, b) =>
+      !!a.m.enCarrera - !!b.m.enCarrera
+      || (a.cerca ? a.cerca.km : 1e9) - (b.cerca ? b.cerca.km : 1e9)
+      || promedio(b.m) - promedio(a.m));
+    const libres = motos.filter((m) => !m.enCarrera).length;
     $("#vista").innerHTML = `<h1 class="titulo">Motorizados activos</h1>
-      <p class="nota">Primero los disponibles, ordenados por calificación. Los que tienen <b>carrera en curso</b> reciben tu pedido al terminar.</p>
-      <div class="lista">${motos.length ? motos.map((m) => `
+      ${motos.length && !libres ? `<div class="banner-aviso">${icono("reloj")}<span><b>Todos están ocupados ahora mismo.</b> Puedes pedirle a uno y tu carrera le llega apenas termine la que tiene.</span></div>` : ""}
+      <p class="nota">${miPos ? "Primero los disponibles y los más cerca de ti." : "Primero los disponibles, por calificación. Activa tu ubicación para ver quién está más cerca."}</p>
+      <div class="lista">${motos.length ? lista.map(({ m, cerca }) => `
         <article class="tarjeta">
           <div class="avatar">${esc(iniciales(m.nombre))}</div>
           <div class="info"><h3>${esc(m.nombre)}</h3>
             <p>${icono("moto")} ${esc(m.moto || "")}${m.placa ? ` · Placa ${esc(m.placa)}` : ""}</p>
             <div class="etiquetas">${m.enCarrera ? `<span class="pildora ocupado">${icono("ruta")} Carrera en curso</span>` : `<span class="pildora ok">Disponible</span>`}
+            ${cerca ? `<span class="pildora cerca">${icono("pin")} a ${cerca.min} min</span>` : ""}
             <span class="rating">${estrellas(m)}</span></div></div>
           <div class="acciones">
             <a class="boton secundario" href="tel:${esc(m.telefono)}" data-llamar="${m.id}">${icono("telefono")} Llamar</a>
             <button class="boton ${m.enCarrera ? "secundario" : ""}" data-pedir="${m.id}">${m.enCarrera ? "Pedir (al terminar)" : "Pedir a este"}</button>
           </div>
-        </article>`).join("") : `<div class="vacio">${icono("moto")}No hay motorizados activos ahora.<br>Intenta en un rato.</div>`}
+        </article>`).join("") : `<div class="vacio">${icono("moto")}<b>No hay motorizados de turno ahora.</b><br>Intenta en un rato; esta lista se actualiza sola.</div>`}
       </div>`;
     $$("[data-llamar]").forEach((a) => a.addEventListener("click", () => {
       setDoc(doc(db, "llamadas", a.dataset.llamar), { n: increment(1) }, { merge: true }).catch(() => {});
@@ -523,8 +557,17 @@ function iniciar() {
     if (mapa) { mapa.remove(); mapa = null; }
     seguimiento.alMover = null;
     if (!c) {
-      $("#vista").innerHTML = `<div class="vacio">${icono("ruta")}No tienes carreras en curso.<br><button class="boton" id="ir-pedir">Ver motorizados</button></div>`;
+      const pasadas = carreras.filter((x) => x.estado === "terminada" || x.estado === "cancelada").sort((a, b) => tiempo(b) - tiempo(a)).slice(0, 15);
+      $("#vista").innerHTML = `<div class="vacio">${icono("ruta")}No tienes carreras en curso.<br><button class="boton" id="ir-pedir">Ver motorizados</button></div>
+        ${pasadas.length ? `<h1 class="titulo">${icono("reloj")} Tus viajes</h1><div class="lista">${pasadas.map((x) => `
+          <article class="tarjeta"><div class="info">
+            <h3>${esc(x.origen.dir)} ${icono("flecha")} ${esc(x.destino.dir)}</h3>
+            <p>${fechaTexto(x.creada)} · ${x.km} km · ${usd(x.precio)}${x.paradas?.length ? ` · ${x.paradas.length} parada${x.paradas.length > 1 ? "s" : ""}` : ""}${x.retorno ? " · ida y vuelta" : ""}</p>
+            <p>${x.estado === "terminada" ? `<span class="pildora ok">Terminada</span> con ${esc(x.motoNombre || "")}` : `<span class="pildora mal">Cancelada</span>`}</p></div>
+            <div class="acciones"><button class="boton secundario" data-repetir="${x.id}">${icono("deshacer")} Repetir este viaje</button></div>
+          </article>`).join("")}</div>` : ""}`;
       $("#ir-pedir").onclick = () => ir("motorizados");
+      $$("[data-repetir]").forEach((b) => (b.onclick = () => repetir(carreras.find((x) => x.id === b.dataset.repetir))));
       return;
     }
     if (c.estado === "terminada") return vistaCalificar(c);
@@ -594,11 +637,25 @@ function iniciar() {
     };
   }
 
+  // Carga los mismos puntos de un viaje anterior. Si su motorizado está disponible, se le pide a él.
+  function repetir(x) {
+    const pts = [x.origen, ...(x.paradas || []), x.destino];
+    Object.assign(pedido, {
+      puntos: pts.map((p) => L.latLng(p.lat, p.lng)), refs: pts.map((p) => p.dir || ""),
+      retorno: !!x.retorno, agregando: false, km: null, linea: null, nota: x.nota || "",
+    });
+    const m = motos.find((y) => y.id === x.motoUid);
+    pedido.para = m ? { id: m.id, nombre: m.nombre } : null;
+    recalcular().then(() => { if (rutaActual === "pedir") vistaPedir(); });
+    if (m) ir("pedir");
+    else { aviso("Elige un motorizado: tu viaje ya está cargado"); ir("motorizados"); }
+  }
+
   // Tarjeta grande con los minutos que faltan y la barra A → B con la moto avanzando.
   const tarjetaVivo = (info) => `
     <div class="vivo-cabeza"><span class="vivo-punto"></span>En vivo</div>
     <h2>${esc(info.titulo)}</h2>
-    <div class="vivo-tiempo">${info.min == null ? `${icono("reloj")}` : info.min === 0 ? "¡Ya llega!" : `${info.min}<small> min</small>`}</div>
+    <div class="vivo-tiempo">${info.llego ? "¡Está afuera!" : info.min == null ? `${icono("reloj")}` : info.min === 0 ? "¡Ya llega!" : `${info.min}<small> min</small>`}</div>
     <p class="nota">${esc(info.detalle)}</p>
     <div class="pista"><i class="letra-a">A</i><div class="carril"><b style="width:${info.pct}%"></b><span class="moto-pista" style="left:${info.pct}%">${icono("moto")}</span></div><i class="letra-b">B</i></div>`;
 
@@ -645,6 +702,7 @@ function iniciar() {
     try { await Notification.requestPermission(); } catch {}
   }
 
+  const notificarCarrera = (...a) => notificar(...a);
   async function notificar(titulo, cuerpo, { sonar = false } = {}) {
     if (!avisosPosibles() || Notification.permission !== "granted") return;
     const reg = (await registroSw) || (await navigator.serviceWorker.ready.catch(() => null));
@@ -709,6 +767,7 @@ function iniciar() {
       // Si el motorizado ya recogió, la memoria del tramo A se reinicia para el tramo B.
       if (seguimiento.memoria.recogido !== !!c.recogido) seguimiento.memoria = { recogido: !!c.recogido };
       seguimiento.info = progreso(c, seguimiento.ubic, seguimiento.memoria);
+      afinarEta(c, seguimiento.ubic, seguimiento.memoria, refrescarVivo);
     }
     const info = c.estado === "aceptada" ? seguimiento.info : { titulo: c.paraMoto ? `Esperando a ${c.paraMotoNombre}` : "Buscando motorizado…", detalle: "Te avisamos apenas acepten", pct: null, min: null };
     const visible = rutaActual !== "carrera";

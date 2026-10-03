@@ -3,7 +3,7 @@
 
 import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { auth, db, NOMBRE, $, esc, icono, ICONOS, nuevoMapa, marcarRecorrido, filasRecorrido, progreso, transicion, avisoSinConfigurar } from "./comun.js?v=28";
+import { auth, db, NOMBRE, $, esc, icono, ICONOS, nuevoMapa, marcarRecorrido, filasRecorrido, progreso, afinarEta, transicion, avisoSinConfigurar } from "./comun.js?v=31";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -62,6 +62,7 @@ function iniciar() {
     // En curso: se dibuja una vez y luego solo se actualizan la tarjeta y la moto en el mapa.
     if (memoria.recogido !== !!c.recogido) memoria = { recogido: !!c.recogido };
     const info = progreso(c, ubic, memoria, quien);
+    afinarEta(c, ubic, memoria, () => carrera && pintar());
     const vista = `${c.id}-${c.motoUid}-${!!c.recogido}`;
     if (vista !== ultimaVista) {
       ultimaVista = vista;
@@ -86,7 +87,7 @@ function iniciar() {
     $("#vivo").innerHTML = `
       <div class="vivo-cabeza"><span class="vivo-punto"></span>En vivo</div>
       <h2>${esc(info.titulo)}</h2>
-      <div class="vivo-tiempo">${info.min == null ? icono("reloj") : info.min === 0 ? "¡Ya llega!" : `${info.min}<small> min</small>`}</div>
+      <div class="vivo-tiempo">${info.llego ? "¡Está afuera!" : info.min == null ? icono("reloj") : info.min === 0 ? "¡Ya llega!" : `${info.min}<small> min</small>`}</div>
       <p class="nota">${esc(info.detalle)}</p>
       <div class="pista"><i class="letra-a">A</i><div class="carril"><b style="width:${info.pct}%"></b><span class="moto-pista" style="left:${info.pct}%">${icono("moto")}</span></div><i class="letra-b">B</i></div>`;
     if (ubic && mapa) {

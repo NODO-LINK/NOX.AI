@@ -10,13 +10,13 @@ import {
 import {
   auth, authSecundaria, db, NOMBRE, botonTema, botonInstalar, nuevoMapa, ICONOS, recargos, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
   leerTarifas, aviso, avisoSinConfigurar,
-} from "./comun.js?v=28";
+} from "./comun.js?v=31";
 
 if (!avisoSinConfigurar()) iniciar();
 
 function iniciar() {
   let subs = [], ruta = "motos", tarifas = null;
-  let motos = [], carreras = [], resenas = [], pagos = [], llamadas = {}, visitas = {}, cedulas = {}, clientes = [], bloqueados = {};
+  let motos = [], carreras = [], resenas = [], pagos = [], llamadas = {}, visitas = {}, cedulas = {}, clientes = [], bloqueados = {}, notasClientes = {};
   let mapaVivo = null, marcasVivo = {}, filtroClientes = "";
   const DIA = 864e5;
 
@@ -69,6 +69,14 @@ function iniciar() {
     escuchar(collection(db, "clientes"), (s) => {
       clientes = s.docs.map((d) => ({ id: d.id, ...d.data() }));
       cedulas = Object.fromEntries(clientes.map((c) => [c.id, c.cedula]));
+    });
+    escuchar(collection(db, "calificacionesClientes"), (s) => {
+      notasClientes = {};
+      s.docs.map((d) => d.data()).sort((a, b) => (fecha(b.fecha) || 0) - (fecha(a.fecha) || 0)).forEach((n) => {
+        const x = (notasClientes[n.clienteUid] ??= { suma: 0, cant: 0, ultimo: null });
+        x.suma += n.estrellas; x.cant++;
+        if (!x.ultimo && n.comentario) x.ultimo = n;
+      });
     });
     escuchar(collection(db, "bloqueados"), (s) => { bloqueados = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); });
     escuchar(doc(db, "stats", "visitas"), (s) => { visitas = s.exists() ? s.data() : {}; });
@@ -331,7 +339,8 @@ function iniciar() {
         return `<article class="tarjeta"><div class="info">
           <h3>${esc(c.nombre)} ${b ? `<span class="pildora mal">${icono("bloquear")} Bloqueado</span>` : ""}</h3>
           <p>C.I. ${esc(c.cedula || "—")} · ${icono("telefono")} ${esc(c.telefono || "—")}</p>
-          <p>Desde ${fechaTexto(c.creado)} · ${cuenta(c.id)} carrera${cuenta(c.id) === 1 ? "" : "s"} recientes</p></div>
+          <p>Desde ${fechaTexto(c.creado)} · ${cuenta(c.id)} carrera${cuenta(c.id) === 1 ? "" : "s"} recientes</p>
+          ${notasClientes[c.id] ? `<p><span class="rating">${icono("estrella")} ${(notasClientes[c.id].suma / notasClientes[c.id].cant).toFixed(1)} (${notasClientes[c.id].cant})</span> según los motorizados${notasClientes[c.id].ultimo ? ` · “${esc(notasClientes[c.id].ultimo.comentario)}” — ${esc(notasClientes[c.id].ultimo.motoNombre)}` : ""}</p>` : `<p>Sin calificaciones de motorizados</p>`}</div>
           <div class="acciones">
             <a class="boton secundario" href="tel:${esc(c.telefono)}">${icono("telefono")} Llamar</a>
             <button class="boton ${b ? "verde" : "peligro"}" data-bloquear="${esc(c.cedula)}" data-nombre="${esc(c.nombre)}">${b ? "Desbloquear" : "Bloquear"}</button></div>

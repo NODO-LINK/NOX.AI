@@ -628,3 +628,19 @@ body.con-selector { overflow: hidden; }
 .chat-escribir .boton { padding: 12px 14px; }
 .chat-rapidos { display: flex; gap: 6px; overflow-x: auto; padding-top: 8px; scrollbar-width: none; }
 .chat-rapidos .pildora { border: 0; cursor: pointer; flex: 0 0 auto; }
+
+/* ---------- Sin conexión, avisos y cercanía ---------- */
+.sin-conexion {
+  position: fixed; left: 50%; top: calc(10px + env(safe-area-inset-top)); z-index: 1200;
+  display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: var(--pildora);
+  background: var(--rojo); color: #fff; font-weight: 800; font-size: .85rem; box-shadow: var(--sombra-3);
+  transform: translate(-50%, -150%); transition: transform .45s var(--resorte); pointer-events: none; width: max-content; max-width: calc(100% - 24px);
+}
+.sin-conexion.ver { transform: translate(-50%, 0); }
+.sin-conexion .ico { width: 18px; height: 18px; }
+.banner-aviso { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; padding: 12px 14px; border-radius: var(--radio-chico); background: var(--suave-amarillo); color: var(--naranja-texto); font-size: .86rem; box-shadow: var(--sombra-1); animation: entrar .4s var(--suave) both; }
+.banner-aviso .ico { width: 22px; height: 22px; flex: 0 0 auto; margin-top: 1px; }
+.banner-aviso b { color: var(--texto); }
+.pildora.cerca { background: var(--marca-suave); color: var(--marca); }
+[data-tema="oscuro"] .pildora.cerca { color: var(--marca-clara); }
+.pildora.cerca .ico { width: 13px; height: 13px; }
