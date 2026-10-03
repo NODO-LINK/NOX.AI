@@ -2,9 +2,11 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, connectFirestoreEmulator, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=25";
-import { icono, pintarIconos } from "./iconos.js?v=25";
+import {
+  getFirestore, connectFirestoreEmulator, doc, getDoc, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=28";
+import { icono, pintarIconos } from "./iconos.js?v=28";
 
 export { icono };
 pintarIconos();
@@ -69,14 +71,36 @@ export const TARIFAS_BASE = {
   mototaxi: { base: 1, porKm: 0.4 },
   cuota: 1,
   diasCuota: 15,
+  // Recargos: el nocturno se aplica solo en su horario; el de lluvia, mientras el admin lo tenga encendido.
+  nocturna: { activa: false, desde: "20:00", hasta: "05:00", extra: 0.5 },
+  lluvia: { activa: false, extra: 0.5 },
 };
+const conBase = (d) => ({ ...TARIFAS_BASE, ...d, nocturna: { ...TARIFAS_BASE.nocturna, ...(d.nocturna || {}) }, lluvia: { ...TARIFAS_BASE.lluvia, ...(d.lluvia || {}) } });
 export async function leerTarifas() {
   try {
     const s = await getDoc(doc(db, "config", "general"));
-    return { ...TARIFAS_BASE, ...(s.exists() ? s.data() : {}) };
-  } catch { return TARIFAS_BASE; }
+    return conBase(s.exists() ? s.data() : {});
+  } catch { return conBase({}); }
 }
-export const precio = (t, tipo, km) => Math.round((t[tipo].base + t[tipo].porKm * km) * 100) / 100;
+// Tarifas en vivo (para que el recargo de lluvia se vea apenas el admin lo encienda).
+export const escucharTarifas = (cb) => onSnapshot(doc(db, "config", "general"), (s) => cb(conBase(s.exists() ? s.data() : {})), () => {});
+
+const minutosDe = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number); return h * 60 + (m || 0); };
+export function esDeNoche(t, cuando = new Date()) {
+  const n = t.nocturna;
+  if (!n || !n.activa) return false;
+  const ahora = cuando.getHours() * 60 + cuando.getMinutes(), a = minutosDe(n.desde), b = minutosDe(n.hasta);
+  return a <= b ? ahora >= a && ahora < b : ahora >= a || ahora < b;
+}
+// Recargos que aplican ahora: [{ nombre, monto }]
+export function recargos(t, cuando = new Date()) {
+  const r = [];
+  if (esDeNoche(t, cuando)) r.push({ nombre: "Recargo nocturno", monto: Number(t.nocturna.extra) || 0 });
+  if (t.lluvia && t.lluvia.activa) r.push({ nombre: "Recargo por lluvia", monto: Number(t.lluvia.extra) || 0 });
+  return r.filter((x) => x.monto > 0);
+}
+export const precio = (t, tipo, km, cuando = new Date()) =>
+  Math.round((t[tipo].base + t[tipo].porKm * km + recargos(t, cuando).reduce((s, x) => s + x.monto, 0)) * 100) / 100;
 
 // Distancia por calle (OSRM, gratis). Si falla, línea recta × 1,3.
 export function lineaRecta(a, b) {
@@ -360,6 +384,7 @@ const TIPOS_LUGAR = {
   gasolina: { icono: "gasolina", color: "#b91c1c", nombre: "Gasolina" },
   transporte: { icono: "moto", color: "#4f46e5", nombre: "Transporte" },
   otro: { icono: "pin", color: "#6b7280", nombre: "Lugar" },
+  favorito: { icono: "casa", color: "#7c3aed", nombre: "Tus lugares" },
 };
 export const tipoLugar = (t) => TIPOS_LUGAR[t] || TIPOS_LUGAR.otro;
 
@@ -451,4 +476,121 @@ export function mostrarLugares(m, alTocar) {
   m.on("moveend", pintar);
   const listo = cargarLugares().then((l) => { lista = l; pintar(); return l; });
   return { capa, listo };
+}
+
+// ---------- Modo oscuro ----------
+// Sigue al teléfono, y el botón de la luna/sol lo cambia y lo recuerda.
+const CLAVE_TEMA = "whereapp.tema";
+export function aplicarTema() {
+  let t = null;
+  try { t = localStorage.getItem(CLAVE_TEMA); } catch {}
+  if (!t) t = matchMedia("(prefers-color-scheme: dark)").matches ? "oscuro" : "claro";
+  document.documentElement.dataset.tema = t;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = t === "oscuro" ? "#141021" : "#ffffff";
+  return t;
+}
+aplicarTema();
+export function botonTema() {
+  const b = document.createElement("button");
+  b.className = "boton secundario chico redondo-chico";
+  b.setAttribute("aria-label", "Cambiar entre modo claro y oscuro");
+  const pintar = () => { b.innerHTML = icono(document.documentElement.dataset.tema === "oscuro" ? "sol" : "luna"); };
+  b.onclick = () => {
+    const nuevo = document.documentElement.dataset.tema === "oscuro" ? "claro" : "oscuro";
+    try { localStorage.setItem(CLAVE_TEMA, nuevo); } catch {}
+    aplicarTema(); pintar();
+  };
+  pintar();
+  return b;
+}
+
+// ---------- Instalar como app y funcionar con poca señal ----------
+export const registroSw = "serviceWorker" in navigator
+  ? navigator.serviceWorker.register("sw.js").catch(() => null)
+  : Promise.resolve(null);
+let pedidoInstalar = null;
+addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  pedidoInstalar = e;
+  document.querySelectorAll("[data-instalar]").forEach((b) => (b.hidden = false));
+});
+export function botonInstalar() {
+  const b = document.createElement("button");
+  b.className = "boton secundario chico";
+  b.dataset.instalar = "";
+  b.hidden = !pedidoInstalar;
+  b.innerHTML = `${icono("descargar")} Instalar`;
+  b.onclick = async () => {
+    if (!pedidoInstalar) return;
+    pedidoInstalar.prompt();
+    await pedidoInstalar.userChoice.catch(() => {});
+    pedidoInstalar = null;
+    document.querySelectorAll("[data-instalar]").forEach((x) => (x.hidden = true));
+  };
+  return b;
+}
+
+// ---------- Avisos en la barra de notificaciones (sin servidor) ----------
+export const avisosPosibles = () => "Notification" in window && "serviceWorker" in navigator;
+export async function pedirPermisoAvisos() {
+  if (!avisosPosibles() || Notification.permission !== "default") return;
+  try { await Notification.requestPermission(); } catch {}
+}
+export async function notificar(titulo, cuerpo, { tag = "whereapp", sonar = true, url = location.href.split("#")[0] } = {}) {
+  if (!avisosPosibles() || Notification.permission !== "granted") return;
+  const reg = (await registroSw) || (await navigator.serviceWorker.ready.catch(() => null));
+  if (!reg) return;
+  reg.showNotification(titulo, {
+    body: cuerpo, tag, renotify: sonar, silent: !sonar, icon: "icono-192.png", badge: "icono-192.png",
+    data: { url }, vibrate: sonar ? [200, 100, 200] : undefined,
+  }).catch(() => {});
+}
+
+// ---------- Chat de la carrera (cliente ↔ motorizado) ----------
+const vistoChat = {
+  leer(id) { try { return Number(localStorage.getItem("whereapp.chat." + id)) || 0; } catch { return 0; } },
+  guardar(id, n) { try { localStorage.setItem("whereapp.chat." + id, String(n)); } catch {} },
+};
+// Escucha los mensajes de una carrera. alCambiar(mensajes, sinLeer) se llama con cada mensaje nuevo.
+export function escucharChat(carreraId, yoUid, alCambiar) {
+  return onSnapshot(query(collection(db, "carreras", carreraId, "mensajes"), orderBy("fecha"), limit(200)), (s) => {
+    const msgs = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const ajenos = msgs.filter((m) => m.de !== yoUid).length;
+    alCambiar(msgs, Math.max(0, ajenos - vistoChat.leer(carreraId)), ajenos);
+  }, () => {});
+}
+export const marcarChatLeido = (carreraId, ajenos) => vistoChat.guardar(carreraId, ajenos);
+
+// Ventana de chat (hoja que sube). Devuelve una función para cerrarla.
+export function abrirChat(carreraId, yoUid, yoNombre, conQuien) {
+  const fondo = document.createElement("div");
+  fondo.className = "modal";
+  fondo.innerHTML = `<div class="ventana chat">
+    <div class="chat-cabeza"><h2>${icono("chat")} Chat con ${esc(conQuien)}</h2><button class="quitar" data-cerrar aria-label="Cerrar">${icono("cerrar")}</button></div>
+    <div class="chat-mensajes" id="chat-mensajes"><p class="nota">Cargando…</p></div>
+    <form class="chat-escribir" id="chat-form"><input id="chat-texto" maxlength="500" placeholder="Escribe un mensaje…" autocomplete="off">
+      <button class="boton chico" aria-label="Enviar">${icono("enviar")}</button></form>
+    <div class="chat-rapidos">${["Ya voy", "Estoy afuera", "¿Dónde estás?", "Gracias"].map((t) => `<button type="button" class="pildora" data-rapido="${esc(t)}">${esc(t)}</button>`).join("")}</div>
+  </div>`;
+  document.body.append(fondo);
+  const lista = fondo.querySelector("#chat-mensajes");
+  const quitar = escucharChat(carreraId, yoUid, (msgs, _sin, ajenos) => {
+    marcarChatLeido(carreraId, ajenos);
+    lista.innerHTML = msgs.length ? msgs.map((m) => `<div class="burbuja ${m.de === yoUid ? "mia" : ""}"><span>${esc(m.texto)}</span><small>${esc(m.de === yoUid ? "Tú" : m.nombre || conQuien)} · ${fecha(m.fecha) ? fecha(m.fecha).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) : "…"}</small></div>`).join("")
+      : `<p class="nota" style="text-align:center">Todavía no hay mensajes. Escribe el primero.</p>`;
+    lista.scrollTop = lista.scrollHeight;
+  });
+  const enviar = async (texto) => {
+    texto = texto.trim();
+    if (!texto) return;
+    try { await addDoc(collection(db, "carreras", carreraId, "mensajes"), { de: yoUid, nombre: yoNombre, texto: texto.slice(0, 500), fecha: serverTimestamp() }); }
+    catch { aviso("No se pudo enviar el mensaje"); }
+  };
+  fondo.querySelector("#chat-form").onsubmit = (e) => { e.preventDefault(); const i = fondo.querySelector("#chat-texto"); enviar(i.value); i.value = ""; };
+  fondo.querySelectorAll("[data-rapido]").forEach((b) => (b.onclick = () => enviar(b.dataset.rapido)));
+  const cerrar = () => { quitar(); fondo.remove(); };
+  fondo.querySelector("[data-cerrar]").onclick = cerrar;
+  fondo.addEventListener("click", (e) => { if (e.target === fondo) cerrar(); });
+  return cerrar;
 }

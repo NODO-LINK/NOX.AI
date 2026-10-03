@@ -12,6 +12,13 @@ App de mototaxi para El Moján (el delivery está apagado por ahora: se vuelve a
 Un motorizado **solo sale en la app** si el admin lo activó **y** tiene la quincena pagada.
 Las estrellas cuentan solo cuando el admin aprueba la reseña.
 
+## Extras
+
+- **Cliente:** lugares favoritos (Casa, Trabajo…) guardados en el teléfono; chat con el motorizado durante la carrera.
+- **Motorizado:** interruptor *De turno / Descansando*, sus ganancias (hoy, 7 días, quincena), avisos de carrera nueva y de mensajes en la barra de notificaciones cuando la app está en segundo plano, chat con el cliente y opción de mantener la pantalla encendida.
+- **Panel:** mapa en vivo de los motorizados, lista de clientes con bloqueo por cédula, recargo nocturno (por horario) y por lluvia (interruptor). Tarifas y números están en la pestaña **Más**.
+- **Toda la app:** se puede instalar (ícono en la pantalla de inicio, abre aunque falle la señal) y tiene modo oscuro (botón de luna/sol, o según el teléfono).
+
 ## Conectar con Firebase (una sola vez)
 
 1. Entra a [console.firebase.google.com](https://console.firebase.google.com) y abre tu proyecto.

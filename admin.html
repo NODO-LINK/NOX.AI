@@ -6,11 +6,14 @@
   <meta name="theme-color" content="#ffffff" />
   <title>Whereapp — Administración</title>
   <meta name="robots" content="noindex" />
+  <link rel="manifest" href="manifest-admin.json" />
   <link rel="icon" href="icono.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="estilos.css?v=25" />
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+  <link rel="stylesheet" href="estilos.css?v=28" />
+  <script src="vendor/leaflet/leaflet.js"></script>
 </head>
 <body>
   <header class="cabecera" id="cabecera" hidden></header>
@@ -19,10 +22,10 @@
     <button data-ruta="motos"><span data-icono="moto"></span>Motos</button>
     <button data-ruta="pagos"><span data-icono="tarjeta"></span>Pagos<b id="punto-pagos" hidden></b></button>
     <button data-ruta="carreras"><span data-icono="ruta"></span>Carreras</button>
+    <button data-ruta="clientes"><span data-icono="usuario"></span>Clientes</button>
     <button data-ruta="resenas"><span data-icono="estrella"></span>Reseñas<b id="punto-resenas" hidden></b></button>
-    <button data-ruta="tarifas"><span data-icono="dolar"></span>Tarifas</button>
-    <button data-ruta="stats"><span data-icono="grafica"></span>Números</button>
+    <button data-ruta="mas"><span data-icono="grafica"></span>Más</button>
   </nav>
-  <script type="module" src="admin.js?v=25"></script>
+  <script type="module" src="admin.js?v=28"></script>
 </body>
 </html>

@@ -7,15 +7,15 @@ import {
   doc, getDoc, setDoc, addDoc, updateDoc, collection, query, where, onSnapshot, serverTimestamp, increment,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fechaTexto, estrellas, promedio, habilitado, leerTarifas, precio, ruta,
+  auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
-} from "./comun.js?v=25";
+} from "./comun.js?v=28";
 
 if (!avisoSinConfigurar()) iniciar();
 
 function iniciar() {
   const L = window.L;
-  let usuario = null, cliente = null, tarifas = null;
+  let usuario = null, cliente = null, tarifas = null, bloqueado = false;
   let rutaActual = "motorizados", mapa = null;
   let motos = [], carreras = [], cancelarSubs = [];
   // Estado del formulario de pedido (se conserva al cambiar de pestaña).
@@ -139,14 +139,19 @@ function iniciar() {
     $("#cabecera").innerHTML = `<div class="dentro"><div><div class="logo">${NOMBRE}</div><div class="logo-sub">Hola, ${esc(cliente.nombre)}</div></div>
       <div class="derecha"><button class="boton secundario chico" id="salir">Salir</button></div></div>`;
     $("#salir").onclick = () => { if (confirm("¿Salir de Whereapp?")) signOut(auth); };
+    $("#cabecera .derecha").prepend(botonInstalar(), botonTema());
     $$("#barra button").forEach((b) => (b.onclick = () => ir(b.dataset.ruta)));
     $("#widget").onclick = () => ir("carrera");
     tarifas = await leerTarifas();
+    // Tarifas en vivo: el recargo de lluvia aparece apenas el admin lo enciende.
+    cancelarSubs.push(escucharTarifas((t) => { tarifas = t; if (rutaActual === "pedir" && !$(".selector")) vistaPedir(); }));
+    // Cédula bloqueada por el administrador: no puede pedir.
+    bloqueado = await getDoc(doc(db, "bloqueados", cliente.cedula || "-")).then((x) => x.exists()).catch(() => false);
 
     cancelarSubs.push(onSnapshot(query(collection(db, "motorizados"), where("activo", "==", true)), (s) => {
       const antes = JSON.stringify(motos.map(sinUbicacion));
       // Primero los libres, luego los que tienen una carrera en curso; dentro de cada grupo, por calificación.
-      motos = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter(habilitado)
+      motos = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((m) => habilitado(m) && m.deTurno !== false)
         .sort((a, b) => !!a.enCarrera - !!b.enCarrera || promedio(b) - promedio(a) || (b.ratingCount || 0) - (a.ratingCount || 0));
       // La ubicación de los motorizados cambia seguido; solo se redibuja si cambió otra cosa.
       if (rutaActual === "motorizados" && JSON.stringify(motos.map(sinUbicacion)) !== antes) vistaMotorizados();
@@ -227,9 +232,12 @@ function iniciar() {
     encuadrar(mapa);
 
     const t = tarifas[pedido.tipo];
-    $("#precio").innerHTML = pedido.km != null && n >= 2
+    const extras = recargos(tarifas);
+    $("#precio").innerHTML = (pedido.km != null && n >= 2
       ? `<span>${resumenRecorrido()}</span><b>${usd(precio(tarifas, pedido.tipo, pedido.km))}</b>`
-      : `<span>${usd(t.base)} + ${usd(t.porKm)} por km</span><span class="nota">Marca A y B</span>`;
+      : `<span>${usd(t.base)} + ${usd(t.porKm)} por km</span><span class="nota">Marca A y B</span>`)
+      + (extras.length ? `<small class="recargo">${icono(extras.some((x) => /lluvia/i.test(x.nombre)) ? "lluvia" : "luna")} Incluye ${extras.map((x) => `${x.nombre.toLowerCase()} (+${usd(x.monto)})`).join(" y ")}</small>` : "");
+    if (bloqueado) $("#pedir").outerHTML = `<p class="pildora mal" style="margin-top:14px">Tu cédula está bloqueada. Comunícate con el administrador.</p>`;
     $$("#tipo button").forEach((b) => b.classList.toggle("activo", b.dataset.t === pedido.tipo));
     if ($("#tipo")) $("#tipo").dataset.activo = pedido.tipo;
     $("#caja-nota").hidden = pedido.tipo === "mototaxi";
@@ -244,9 +252,9 @@ function iniciar() {
     $("#volver").onclick = () => ir("motorizados");
     const quitar = $("#quitar-para");
     if (quitar) quitar.onclick = () => { pedido.para = null; ir("motorizados"); };
-    $("#pedir").onclick = enviarPedido;
+    if ($("#pedir")) $("#pedir").onclick = enviarPedido;
     // Si todavía no hay puntos, el mapa se abre solo.
-    if (n === 0 && !activa) abrirSelector();
+    if (n === 0 && !activa && !bloqueado) abrirSelector();
   }
 
   const resumenRecorrido = () => {
@@ -280,6 +288,27 @@ function iniciar() {
     pedido.km = r.km; pedido.linea = r.linea;
   }
 
+  // Lugares favoritos del cliente (Casa, Trabajo…), guardados en este teléfono.
+  const favoritos = {
+    leer() { try { return JSON.parse(localStorage.getItem("whereapp.favoritos")) || []; } catch { return []; } },
+    guardar(l) { try { localStorage.setItem("whereapp.favoritos", JSON.stringify(l.slice(0, 10))); } catch {} },
+  };
+  const esFavorito = (p) => favoritos.leer().some((f) => Math.abs(f.lat - p.lat) < 1e-5 && Math.abs(f.lng - p.lng) < 1e-5);
+  function alternarFavorito(i) {
+    const p = pedido.puntos[i];
+    let lista = favoritos.leer();
+    if (esFavorito(p)) {
+      lista = lista.filter((f) => !(Math.abs(f.lat - p.lat) < 1e-5 && Math.abs(f.lng - p.lng) < 1e-5));
+      aviso("Quitado de tus lugares");
+    } else {
+      const nombre = prompt("¿Cómo quieres llamar este lugar? (Casa, Trabajo, Casa de mamá…)", pedido.refs[i] || "");
+      if (!nombre || !nombre.trim()) return;
+      lista.unshift({ n: nombre.trim().slice(0, 40), lat: p.lat, lng: p.lng });
+      aviso("Guardado en tus lugares");
+    }
+    favoritos.guardar(lista);
+  }
+
   // Lista de puntos con su referencia escrita (se puede quitar cada uno menos A).
   function pintarListaPuntos(alCambiar) {
     const n = pedido.puntos.length;
@@ -287,9 +316,11 @@ function iniciar() {
       <div class="parada-fila">
         <i class="${clasePunto(i, n)}">${letraPunto(i, n)}</i>
         <input data-ref="${i}" placeholder="${i === 0 ? "¿Dónde te buscan? Casa, calle, referencia…" : i === n - 1 ? "¿A dónde vas? Referencia…" : "Referencia de la parada…"}" value="${esc(pedido.refs[i] || "")}">
+        <button class="estrella-fav ${esFavorito(pedido.puntos[i]) ? "on" : ""}" data-fav="${i}" aria-label="Guardar en mis lugares">${icono("favorito")}</button>
         ${i > 0 ? `<button class="quitar" data-quitar="${i}" aria-label="Quitar punto">${icono("cerrar")}</button>` : ""}
       </div>`).join("");
     $$("[data-ref]").forEach((el) => el.addEventListener("input", () => { pedido.refs[Number(el.dataset.ref)] = el.value; }));
+    $$("[data-fav]").forEach((b) => (b.onclick = () => { alternarFavorito(Number(b.dataset.fav)); b.classList.toggle("on", esFavorito(pedido.puntos[Number(b.dataset.fav)])); }));
     $$("[data-quitar]").forEach((b) => (b.onclick = async () => {
       const i = Number(b.dataset.quitar);
       pedido.puntos.splice(i, 1); pedido.refs.splice(i, 1);
@@ -313,6 +344,7 @@ function iniciar() {
       </div>
       <div class="mapa-sel" id="mapa-sel"></div>
       <div class="selector-abajo">
+        <div class="chips favoritos" id="favoritos"></div>
         <div class="chips" id="chips"></div>
         <div class="botones">
           <button class="boton secundario" id="sel-ubicacion">${icono("ubicarme")} Mi ubicación (A)</button>
@@ -339,6 +371,9 @@ function iniciar() {
         : `${icono("check")}<span>¡Listo! Arrastra los puntos para ajustar</span>`;
       $("#chips", caja).innerHTML = pedido.puntos.map((_, i) => `<span class="chip-punto"><i class="${clasePunto(i, n)}">${letraPunto(i, n)}</i>${esc(pedido.refs[i] || "Punto marcado")}</span>`).join("")
         || `<span class="nota">Puedes buscar un lugar arriba o tocar el mapa.</span>`;
+      const favs = favoritos.leer();
+      $("#favoritos", caja).innerHTML = favs.length ? favs.map((f, i) => `<button class="chip-fav" data-favi="${i}">${icono("casa")} ${esc(f.n)}</button>`).join("") : "";
+      $$("[data-favi]", caja).forEach((b) => (b.onclick = () => { const f = favs[Number(b.dataset.favi)]; m.setView([f.lat, f.lng], 16, { animate: false }); poner(L.latLng(f.lat, f.lng), f.n); }));
       const agregarBtn = $("#sel-agregar", caja);
       agregarBtn.disabled = n < 2 || n >= MAX_PUNTOS;
       agregarBtn.classList.toggle("activo", pedido.agregando);
@@ -366,8 +401,12 @@ function iniciar() {
     const buscar = $("#buscar", caja), res = $("#resultados", caja);
     buscar.addEventListener("input", () => {
       const q = normalizar(buscar.value.trim());
-      if (q.length < 2 || !lugares) { res.hidden = true; return; }
-      const hallados = lugares.filter((l) => normalizar(l.n).includes(q) || normalizar(tipoLugar(l.t).nombre).includes(q)).slice(0, 8);
+      if (q.length < 2) { res.hidden = true; return; }
+      lugares = lugares || [];
+      const hallados = [
+        ...favoritos.leer().filter((f) => normalizar(f.n).includes(q)).map((f) => ({ ...f, t: "favorito" })),
+        ...lugares.filter((l) => normalizar(l.n).includes(q) || normalizar(tipoLugar(l.t).nombre).includes(q)),
+      ].slice(0, 8);
       res.hidden = false;
       res.innerHTML = hallados.length ? hallados.map((l, i) => `<button data-i="${i}"><span class="lugar" style="background:${tipoLugar(l.t).color}">${icono(tipoLugar(l.t).icono)}</span><span><b>${esc(l.n)}</b><small>${esc(tipoLugar(l.t).nombre)}</small></span></button>`).join("")
         : `<p class="nota">No encontramos «${esc(buscar.value)}». Toca el mapa en su lugar.</p>`;
@@ -410,6 +449,7 @@ function iniciar() {
   }
 
   async function enviarPedido() {
+    if (bloqueado) return aviso("Tu cédula está bloqueada. Comunícate con el administrador.");
     if (carreraActual()) return aviso("Ya tienes una carrera en curso");
     const n = pedido.puntos.length;
     if (n < 2 || pedido.km == null) return aviso("Marca el punto A y el punto B en el mapa");
@@ -431,6 +471,7 @@ function iniciar() {
         nota: pedido.tipo === "delivery" ? pedido.nota.trim() : "",
         km: Math.round(pedido.km * 10) / 10,
         precio: precio(tarifas, pedido.tipo, pedido.km),
+        recargos: recargos(tarifas),
         estado: "esperando",
         paraMoto: pedido.para ? pedido.para.id : null,
         paraMotoNombre: pedido.para ? pedido.para.nombre : null,
@@ -499,6 +540,7 @@ function iniciar() {
       </div>`;
     const botonesExtra = `
       <div class="botones">
+        ${c.estado === "aceptada" ? `<button class="boton" id="chat">${icono("chat")} Chat con ${esc(c.motoNombre.split(" ")[0])}<b class="contador" id="chat-sin-leer" ${seguimiento.sinLeer ? "" : "hidden"}>${seguimiento.sinLeer || ""}</b></button>` : ""}
         <button class="boton secundario" id="compartir">${icono("compartir")} Compartir con un amigo</button>
         ${avisosPosibles() && Notification.permission !== "granted" ? `<button class="boton secundario" id="activar-avisos">${icono("campana")} Ver en notificaciones</button>` : ""}
       </div>`;
@@ -541,6 +583,7 @@ function iniciar() {
       seguimiento.alMover(seguimiento.info || progreso(c, null), seguimiento.ubic);
     }
     $("#compartir").onclick = () => compartirCarrera(c, cliente.nombre);
+    if ($("#chat")) $("#chat").onclick = () => abrirChat(c.id, usuario.uid, cliente.nombre, c.motoNombre.split(" ")[0]);
     const av = $("#activar-avisos");
     if (av) av.onclick = async () => { await pedirPermisoAvisos(); vistaCarrera(); };
     $("#cancelar").onclick = async () => {
@@ -594,9 +637,7 @@ function iniciar() {
   }
 
   // ---------- Seguimiento en vivo: widget flotante y aviso en la barra de notificaciones ----------
-  const seguimiento = { id: null, motoUid: null, quitar: null, ubic: null, info: null, memoria: {}, alMover: null, ultimoAviso: "" };
-  let registroSw = null;
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").then((r) => (registroSw = r)).catch(() => {});
+  const seguimiento = { id: null, motoUid: null, quitar: null, quitarChat: null, sinLeer: 0, ubic: null, info: null, memoria: {}, alMover: null, ultimoAviso: "" };
   const avisosPosibles = () => "Notification" in window && "serviceWorker" in navigator;
 
   async function pedirPermisoAvisos() {
@@ -606,19 +647,19 @@ function iniciar() {
 
   async function notificar(titulo, cuerpo, { sonar = false } = {}) {
     if (!avisosPosibles() || Notification.permission !== "granted") return;
-    const reg = registroSw || (await navigator.serviceWorker.ready.catch(() => null));
+    const reg = (await registroSw) || (await navigator.serviceWorker.ready.catch(() => null));
     if (!reg) return;
     const clave = titulo + cuerpo;
     if (clave === seguimiento.ultimoAviso && !sonar) return;
     seguimiento.ultimoAviso = clave;
     reg.showNotification(titulo, {
       body: cuerpo, tag: "whereapp-carrera", renotify: sonar, silent: !sonar,
-      icon: "icono.svg", badge: "icono.svg", data: { url: location.href.split("#")[0] },
+      icon: "icono-192.png", badge: "icono-192.png", data: { url: location.href.split("#")[0] },
       vibrate: sonar ? [200, 100, 200] : undefined,
     }).catch(() => {});
   }
   async function cerrarNotificacion() {
-    const reg = registroSw || (await navigator.serviceWorker?.getRegistration?.().catch(() => null));
+    const reg = await registroSw;
     if (!reg) return;
     (await reg.getNotifications({ tag: "whereapp-carrera" }).catch(() => [])).forEach((n) => n.close());
   }
@@ -629,13 +670,26 @@ function iniciar() {
     const enCurso = c && c.estado === "aceptada";
     if (!enCurso || seguimiento.id !== c.id || seguimiento.motoUid !== c.motoUid) {
       if (seguimiento.quitar) seguimiento.quitar();
-      Object.assign(seguimiento, { id: null, motoUid: null, quitar: null, ubic: null, info: null, memoria: {} });
+      if (seguimiento.quitarChat) seguimiento.quitarChat();
+      Object.assign(seguimiento, { id: null, motoUid: null, quitar: null, quitarChat: null, sinLeer: 0, ubic: null, info: null, memoria: {} });
     }
     if (enCurso && !seguimiento.id) {
       Object.assign(seguimiento, { id: c.id, motoUid: c.motoUid });
       seguimiento.quitar = onSnapshot(doc(db, "motorizados", c.motoUid), (s) => {
         seguimiento.ubic = (s.data() && s.data().ubicacion) || null;
         refrescarVivo();
+      });
+      // Chat: contador de mensajes sin leer y aviso si la app está en segundo plano.
+      seguimiento.quitarChat = escucharChat(c.id, usuario.uid, (msgs, sinLeer) => {
+        const nuevo = sinLeer > seguimiento.sinLeer;
+        seguimiento.sinLeer = sinLeer;
+        const b = $("#chat-sin-leer");
+        if (b) { b.hidden = !sinLeer; b.textContent = sinLeer; }
+        const ult = msgs[msgs.length - 1];
+        if (nuevo && ult && ult.de !== usuario.uid) {
+          if (document.hidden) notificar(`Mensaje de ${c.motoNombre.split(" ")[0]}`, ult.texto, { sonar: true });
+          else if (!$(".chat")) aviso(`${c.motoNombre.split(" ")[0]}: ${ult.texto}`);
+        }
       });
       notificar(`¡${c.motoNombre.split(" ")[0]} aceptó tu carrera!`, `${c.motoMoto || "Moto"}${c.motoPlaca ? ` · Placa ${c.motoPlaca}` : ""}`, { sonar: true });
     }

@@ -8,15 +8,16 @@ import {
   serverTimestamp, increment, writeBatch, Timestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  auth, authSecundaria, db, NOMBRE, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
+  auth, authSecundaria, db, NOMBRE, botonTema, botonInstalar, nuevoMapa, ICONOS, recargos, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
   leerTarifas, aviso, avisoSinConfigurar,
-} from "./comun.js?v=25";
+} from "./comun.js?v=28";
 
 if (!avisoSinConfigurar()) iniciar();
 
 function iniciar() {
   let subs = [], ruta = "motos", tarifas = null;
-  let motos = [], carreras = [], resenas = [], pagos = [], llamadas = {}, visitas = {}, cedulas = {};
+  let motos = [], carreras = [], resenas = [], pagos = [], llamadas = {}, visitas = {}, cedulas = {}, clientes = [], bloqueados = {};
+  let mapaVivo = null, marcasVivo = {}, filtroClientes = "";
   const DIA = 864e5;
 
   onAuthStateChanged(auth, async (u) => {
@@ -47,6 +48,7 @@ function iniciar() {
     $("#cabecera").innerHTML = `<div class="dentro"><div><div class="logo">${NOMBRE}</div><div class="logo-sub">Administración</div></div>
       <div class="derecha"><button class="boton secundario chico" id="salir">Salir</button></div></div>`;
     $("#salir").onclick = () => signOut(auth);
+    $("#cabecera .derecha").prepend(botonInstalar(), botonTema());
     $$("#barra button").forEach((b) => (b.onclick = () => ir(b.dataset.ruta)));
     tarifas = await leerTarifas();
 
@@ -57,13 +59,18 @@ function iniciar() {
     escuchar(collection(db, "motorizados"), (s) => {
       const antes = sinUbicacion(motos);
       motos = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.nombre.localeCompare(b.nombre));
+      moverMapaVivo();
       return sinUbicacion(motos) !== antes;
     });
     escuchar(query(collection(db, "carreras"), orderBy("creada", "desc"), limit(100)), (s) => { carreras = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
     escuchar(query(collection(db, "resenas"), orderBy("fecha", "desc"), limit(100)), (s) => { resenas = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
     escuchar(query(collection(db, "pagos"), orderBy("fecha", "desc"), limit(500)), (s) => { pagos = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
     escuchar(collection(db, "llamadas"), (s) => { llamadas = Object.fromEntries(s.docs.map((d) => [d.id, d.data().n || 0])); });
-    escuchar(collection(db, "clientes"), (s) => { cedulas = Object.fromEntries(s.docs.map((d) => [d.id, d.data().cedula])); });
+    escuchar(collection(db, "clientes"), (s) => {
+      clientes = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+      cedulas = Object.fromEntries(clientes.map((c) => [c.id, c.cedula]));
+    });
+    escuchar(collection(db, "bloqueados"), (s) => { bloqueados = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); });
     escuchar(doc(db, "stats", "visitas"), (s) => { visitas = s.exists() ? s.data() : {}; });
     ir("motos");
   }
@@ -81,7 +88,8 @@ function iniciar() {
     ruta = r;
     activarBarra(r);
     const y = window.scrollY;
-    ({ motos: vistaMotos, pagos: vistaPagos, carreras: vistaCarreras, resenas: vistaResenas, tarifas: vistaTarifas, stats: vistaStats })[r]();
+    if (mapaVivo && r !== "motos") { mapaVivo.remove(); mapaVivo = null; marcasVivo = {}; }
+    ({ motos: vistaMotos, pagos: vistaPagos, carreras: vistaCarreras, clientes: vistaClientes, resenas: vistaResenas, mas: vistaMas })[r]();
     if (!quieto) transicion();
     window.scrollTo(0, quieto ? y : 0);
   }
@@ -104,14 +112,36 @@ function iniciar() {
     return `<span class="pildora ok">Pagado</span>`;
   };
 
+  // ---------- Mapa en vivo de los motorizados ----------
+  const colorMoto = (m) => (!habilitado(m) ? "#9ca3af" : m.enCarrera ? "#f59e0b" : m.deTurno === false ? "#6b7280" : "#16a34a");
+  const estadoMoto = (m) => (!habilitado(m) ? "No sale en la app" : m.enCarrera ? "Carrera en curso" : m.deTurno === false ? "Descansando" : "Disponible");
+  function moverMapaVivo() {
+    if (!mapaVivo) return;
+    const L = window.L;
+    for (const m of motos) {
+      const u = m.ubicacion;
+      if (!u) continue;
+      const icono = L.divIcon({ className: "", html: `<div class="pin" style="background:${colorMoto(m)}"><span>${esc(m.nombre.slice(0, 1).toUpperCase())}</span></div>`, iconSize: [30, 30], iconAnchor: [15, 30] });
+      const texto = `<b>${esc(m.nombre)}</b><br>${estadoMoto(m)}<br><small>${fechaTexto(u.t)}</small>`;
+      if (!marcasVivo[m.id]) marcasVivo[m.id] = L.marker([u.lat, u.lng], { icon: icono }).bindPopup(texto).addTo(mapaVivo);
+      else marcasVivo[m.id].setLatLng([u.lat, u.lng]).setIcon(icono).setPopupContent(texto);
+    }
+  }
+
   function vistaMotos() {
+    if (mapaVivo) { mapaVivo.remove(); mapaVivo = null; marcasVivo = {}; }
+    const conUbic = motos.filter((m) => m.ubicacion).length;
     $("#vista").innerHTML = `
+      <h1 class="titulo">${icono("pin")} Mapa en vivo</h1>
+      <div class="mapa" id="mapa-vivo"></div>
+      <div class="leyenda"><span><i style="background:#16a34a"></i>Disponible</span><span><i style="background:#f59e0b"></i>En carrera</span><span><i style="background:#6b7280"></i>Descansando</span><span><i style="background:#9ca3af"></i>No sale</span></div>
+      <p class="nota">${conUbic ? `Se ve la última ubicación de ${conUbic} motorizado${conUbic === 1 ? "" : "s"} (se actualiza mientras tienen carrera o la app abierta).` : "Todavía ningún motorizado ha compartido su ubicación."}</p>
       <h1 class="titulo">Motorizados (${motos.length}) · ${motos.filter(habilitado).length} saliendo en la app</h1>
       <button class="boton" id="nuevo">+ Agregar motorizado</button>
       ${motos.some((x) => x.usuario === "prueba") ? "" : `<button class="boton secundario" id="prueba">${icono("moto")} Crear motorizado de prueba</button>`}
       <div class="lista" style="margin-top:12px">${motos.map((m) => `
         <article class="tarjeta"><div class="info">
-          <h3>${esc(m.nombre)} ${habilitado(m) ? `<span class="pildora ok">En la app</span>` : `<span class="pildora mal">No sale</span>`}${m.enCarrera ? ` <span class="pildora ocupado">Carrera en curso</span>` : ""}</h3>
+          <h3>${esc(m.nombre)} ${habilitado(m) ? `<span class="pildora ok">En la app</span>` : `<span class="pildora mal">No sale</span>`}${m.enCarrera ? ` <span class="pildora ocupado">Carrera en curso</span>` : m.deTurno === false ? ` <span class="pildora">Descansando</span>` : ""}</h3>
           <p>Usuario: <b>${esc(m.usuario)}</b> · ${icono("telefono")} ${esc(m.telefono)}</p>
           <p>${icono("moto")} ${esc(m.moto)} · Placa ${esc(m.placa)} · <span class="rating">${estrellas(m)}</span></p>
           <p>${estadoPago(m)} · ${llamadas[m.id] || 0} llamadas</p></div>
@@ -119,6 +149,11 @@ function iniciar() {
             <button class="boton ${m.activo ? "peligro" : "verde"}" data-activo="${m.id}">${m.activo ? "Desactivar" : "Activar"}</button>
             <button class="boton secundario" data-editar="${m.id}">Editar</button></div>
         </article>`).join("") || `<div class="vacio">${icono("moto")}Aún no hay motorizados.</div>`}</div>`;
+    mapaVivo = nuevoMapa("mapa-vivo");
+    moverMapaVivo();
+    const puntos = motos.filter((m) => m.ubicacion).map((m) => [m.ubicacion.lat, m.ubicacion.lng]);
+    if (puntos.length > 1) mapaVivo.fitBounds(window.L.latLngBounds(puntos).pad(0.3), { animate: false });
+    else if (puntos.length === 1) mapaVivo.setView(puntos[0], 15, { animate: false });
     $("#nuevo").onclick = () => formularioMoto();
     if ($("#prueba")) $("#prueba").onclick = () => crearMotoPrueba($("#prueba"));
     $$("[data-activo]").forEach((b) => (b.onclick = () => {
@@ -281,6 +316,38 @@ function iniciar() {
     }));
   }
 
+  // ---------- Clientes ----------
+  function vistaClientes() {
+    const q = filtroClientes.toLowerCase();
+    const cuenta = (uid) => carreras.filter((c) => c.clienteUid === uid).length;
+    const lista = clientes
+      .filter((c) => !q || [c.nombre, c.cedula, c.telefono].join(" ").toLowerCase().includes(q))
+      .sort((a, b) => (fecha(b.creado) || 0) - (fecha(a.creado) || 0));
+    $("#vista").innerHTML = `
+      <h1 class="titulo">Clientes (${clientes.length})</h1>
+      <input id="filtro-clientes" type="search" placeholder="Buscar por nombre, cédula o teléfono" value="${esc(filtroClientes)}">
+      <div class="lista" style="margin-top:12px">${lista.map((c) => {
+        const b = !!bloqueados[c.cedula];
+        return `<article class="tarjeta"><div class="info">
+          <h3>${esc(c.nombre)} ${b ? `<span class="pildora mal">${icono("bloquear")} Bloqueado</span>` : ""}</h3>
+          <p>C.I. ${esc(c.cedula || "—")} · ${icono("telefono")} ${esc(c.telefono || "—")}</p>
+          <p>Desde ${fechaTexto(c.creado)} · ${cuenta(c.id)} carrera${cuenta(c.id) === 1 ? "" : "s"} recientes</p></div>
+          <div class="acciones">
+            <a class="boton secundario" href="tel:${esc(c.telefono)}">${icono("telefono")} Llamar</a>
+            <button class="boton ${b ? "verde" : "peligro"}" data-bloquear="${esc(c.cedula)}" data-nombre="${esc(c.nombre)}">${b ? "Desbloquear" : "Bloquear"}</button></div>
+        </article>`;
+      }).join("") || `<div class="vacio">${icono("usuario")}${q ? "Nadie coincide con la búsqueda." : "Aún no hay clientes."}</div>`}</div>
+      <p class="nota">Bloquear usa la cédula: aunque el cliente vuelva a registrarse con la misma cédula, no podrá pedir carreras.</p>`;
+    const f = $("#filtro-clientes");
+    f.oninput = () => { filtroClientes = f.value; const pos = f.selectionStart; vistaClientes(); const n = $("#filtro-clientes"); n.focus(); n.setSelectionRange(pos, pos); };
+    $$("[data-bloquear]").forEach((b) => (b.onclick = async () => {
+      const ced = b.dataset.bloquear;
+      if (!ced) return;
+      if (bloqueados[ced]) await deleteDoc(doc(db, "bloqueados", ced));
+      else if (confirm(`¿Bloquear a ${b.dataset.nombre} (C.I. ${ced})? No podrá pedir carreras.`)) await setDoc(doc(db, "bloqueados", ced), { nombre: b.dataset.nombre, fecha: serverTimestamp() });
+    }));
+  }
+
   // ---------- Reseñas ----------
   function vistaResenas() {
     const pendientes = resenas.filter((r) => !r.aprobada), aprobadas = resenas.filter((r) => r.aprobada);
@@ -323,15 +390,47 @@ function iniciar() {
       <div class="caja"><h2>${icono("tarjeta")} Cuota de motorizados</h2><div class="dos">
         <div><label>Monto ($)</label><input name="cuota" type="number" step="0.01" min="0" value="${t.cuota}"></div>
         <div><label>Cada cuántos días</label><input name="dias" type="number" step="1" min="1" value="${t.diasCuota}"></div></div></div>
+      <div class="caja"><h2>${icono("luna")} Recargo nocturno</h2>
+        <label class="opcion"><input type="checkbox" name="nocheActiva" ${t.nocturna.activa ? "checked" : ""}><span>Cobrar recargo de noche</span></label>
+        <div class="dos"><div><label>Desde</label><input name="nocheDesde" type="time" value="${esc(t.nocturna.desde)}"></div>
+        <div><label>Hasta</label><input name="nocheHasta" type="time" value="${esc(t.nocturna.hasta)}"></div></div>
+        <label>Monto extra ($)</label><input name="nocheExtra" type="number" step="0.01" min="0" value="${t.nocturna.extra}"></div>
+      <div class="caja"><h2>${icono("lluvia")} Recargo por lluvia</h2>
+        <label class="opcion"><input type="checkbox" name="lluviaActiva" ${t.lluvia.activa ? "checked" : ""}><span>Está lloviendo: cobrar recargo ahora</span></label>
+        <label>Monto extra ($)</label><input name="lluviaExtra" type="number" step="0.01" min="0" value="${t.lluvia.extra}">
+        <p class="nota">Apágalo cuando pare de llover. Los clientes lo ven al instante en el precio.</p></div>
+      ${recargos(t).length ? `<p class="pildora alerta">Ahora se está cobrando: ${recargos(t).map((x) => `${x.nombre} +${usd(x.monto)}`).join(" y ")}</p>` : ""}
       <button class="boton">Guardar tarifas</button></form>`;
     $("#tarifas").onsubmit = async (e) => {
       e.preventDefault();
-      const v = Object.fromEntries([...new FormData(e.target)].map(([k, x]) => [k, Number(x)]));
-      tarifas = { delivery: { base: v.db, porKm: v.dk }, mototaxi: { base: v.mb, porKm: v.mk }, cuota: v.cuota, diasCuota: v.dias };
+      const fd = new FormData(e.target);
+      const num = (k) => Number(fd.get(k)) || 0;
+      tarifas = {
+        delivery: { base: num("db"), porKm: num("dk") }, mototaxi: { base: num("mb"), porKm: num("mk") }, cuota: num("cuota"), diasCuota: num("dias") || 15,
+        nocturna: { activa: fd.get("nocheActiva") === "on", desde: fd.get("nocheDesde") || "20:00", hasta: fd.get("nocheHasta") || "05:00", extra: num("nocheExtra") },
+        lluvia: { activa: fd.get("lluviaActiva") === "on", extra: num("lluviaExtra") },
+      };
       await setDoc(doc(db, "config", "general"), tarifas);
       document.activeElement?.blur();
       aviso("Tarifas guardadas");
+      ir(ruta, true);
     };
+  }
+
+  // Pestaña "Más": tarifas y números.
+  let subMas = "tarifas";
+  function vistaMas() {
+    $("#vista").innerHTML = `<div class="segmento" id="sub-mas" data-activo="${subMas === "tarifas" ? "delivery" : "mototaxi"}">
+      <button data-s="tarifas" class="${subMas === "tarifas" ? "activo" : ""}">${icono("dolar")} Tarifas</button>
+      <button data-s="stats" class="${subMas === "stats" ? "activo" : ""}">${icono("grafica")} Números</button></div><div id="sub-vista"></div>`;
+    const vista = $("#vista");
+    // Las vistas escriben en #vista: se les presta un contenedor y luego se pone debajo del selector.
+    const real = vista.id;
+    const cont = $("#sub-vista");
+    vista.id = ""; cont.id = "vista";
+    (subMas === "tarifas" ? vistaTarifas : vistaStats)();
+    cont.id = "sub-vista"; vista.id = real;
+    $$("#sub-mas button").forEach((b) => (b.onclick = () => { subMas = b.dataset.s; vistaMas(); }));
   }
 
   // ---------- Números ----------

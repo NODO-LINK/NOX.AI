@@ -5,9 +5,9 @@ import {
   doc, onSnapshot, updateDoc, collection, query, where, runTransaction, serverTimestamp, arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
+  auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar,
-} from "./comun.js?v=25";
+} from "./comun.js?v=28";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -16,6 +16,9 @@ function iniciar() {
   let yo = null, perfil = null, subs = [], subsCarreras = [];
   let disponibles = [], miCarrera = null, conocidas = new Set(), primeraCarga = true;
   let mapa = null, vigilaGps = null, sonido = null, ultimoModo = null;
+  let terminadas = [], chat = { id: null, quitar: null, sinLeer: 0 }, bloqueoPantalla = null;
+  // Mantener la pantalla encendida (se recuerda en este teléfono).
+  let pantallaFija = (() => { try { return localStorage.getItem("whereapp.pantalla") === "1"; } catch { return false; } })();
 
   onAuthStateChanged(auth, (u) => {
     subs.forEach((f) => f()); subs = [];
@@ -25,9 +28,10 @@ function iniciar() {
     subs.push(onSnapshot(doc(db, "motorizados", u.uid), (s) => {
       if (!s.exists()) { aviso("Esta cuenta no es de un motorizado"); signOut(auth); return; }
       const antes = perfil && habilitado(perfil);
+      const turnoAntes = perfil ? perfil.deTurno !== false : null;
       const firmaAntes = firma(perfil);
       perfil = { id: s.id, ...s.data() };
-      if (antes !== habilitado(perfil) || !subsCarreras.length) escucharCarreras();
+      if (antes !== habilitado(perfil) || turnoAntes !== (perfil.deTurno !== false) || !subsCarreras.length) escucharCarreras();
       // Los cambios de ubicación (cada pocos segundos) no redibujan la pantalla.
       if (firma(perfil) !== firmaAntes) pintar();
     }));
@@ -68,9 +72,16 @@ function iniciar() {
       if (perfil && !!perfil.enCarrera !== !!miCarrera) {
         updateDoc(doc(db, "motorizados", yo.uid), { enCarrera: !!miCarrera }).catch(() => {});
       }
+      seguirChat();
       pintar();
     }, () => {}));
-    if (!habilitado(perfil)) { disponibles = []; return; }
+    // Carreras terminadas: para calcular sus ganancias.
+    subsCarreras.push(onSnapshot(query(collection(db, "carreras"), where("motoUid", "==", yo.uid), where("estado", "==", "terminada")), (s) => {
+      terminadas = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (!miCarrera) pintar();
+    }, () => {}));
+    // Descansando: no recibe carreras nuevas (las que ya tiene sí las termina).
+    if (!habilitado(perfil) || perfil.deTurno === false) { disponibles = []; return; }
     primeraCarga = true;
     subsCarreras.push(onSnapshot(query(collection(db, "carreras"), where("estado", "==", "esperando")), (s) => {
       disponibles = s.docs.map((d) => ({ id: d.id, ...d.data() }))
@@ -78,11 +89,60 @@ function iniciar() {
         .sort((a, b) => (fecha(a.creada) || 0) - (fecha(b.creada) || 0));
       const nuevas = disponibles.filter((c) => !conocidas.has(c.id));
       nuevas.forEach((c) => conocidas.add(c.id));
-      if (nuevas.length && !primeraCarga) { sonar(); aviso("¡Carrera nueva!"); }
+      if (nuevas.length && !primeraCarga) {
+        sonar(); aviso("¡Carrera nueva!");
+        // Si la app está en segundo plano, aviso en la barra de notificaciones.
+        const c = nuevas[0];
+        if (document.hidden) notificar("¡Carrera nueva!", `${usd(c.precio)} · ${c.km} km · ${c.origen.dir}`, { tag: "whereapp-moto" });
+      }
       primeraCarga = false;
       pintar();
     }, () => {}));
   }
+
+  // ---------- Chat con el cliente ----------
+  function seguirChat() {
+    if (chat.id === (miCarrera && miCarrera.id)) return;
+    if (chat.quitar) chat.quitar();
+    chat = { id: null, quitar: null, sinLeer: 0 };
+    if (!miCarrera) return;
+    const c = miCarrera;
+    chat.id = c.id;
+    chat.quitar = escucharChat(c.id, yo.uid, (msgs, sinLeer) => {
+      const nuevo = sinLeer > chat.sinLeer;
+      chat.sinLeer = sinLeer;
+      const b = $("#chat-sin-leer");
+      if (b) { b.hidden = !sinLeer; b.textContent = sinLeer; }
+      const ult = msgs[msgs.length - 1];
+      if (nuevo && ult && ult.de !== yo.uid) {
+        sonar();
+        if (document.hidden) notificar(`Mensaje de ${c.clienteNombre.split(" ")[0]}`, ult.texto, { tag: "whereapp-chat" });
+        else if (!$(".chat")) aviso(`${c.clienteNombre.split(" ")[0]}: ${ult.texto}`);
+      }
+    });
+  }
+
+  // ---------- Ganancias: hoy, últimos 7 días y quincena actual ----------
+  function ganancias() {
+    const ahora = new Date();
+    const hoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+    const semana = new Date(hoy.getTime() - 6 * 864e5);
+    const quincena = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() <= 15 ? 1 : 16);
+    const suma = (desde) => terminadas.filter((c) => (fecha(c.terminada) || fecha(c.creada) || 0) >= desde);
+    const total = (l) => l.reduce((s, c) => s + (c.precio || 0), 0);
+    return [["Hoy", suma(hoy)], ["7 días", suma(semana)], ["Quincena", suma(quincena)]].map(([n, l]) => ({ n, monto: total(l), cant: l.length }));
+  }
+
+  // ---------- Pantalla encendida (para no perder carreras) ----------
+  async function aplicarPantalla() {
+    try {
+      if (pantallaFija && "wakeLock" in navigator && !bloqueoPantalla && document.visibilityState === "visible") {
+        bloqueoPantalla = await navigator.wakeLock.request("screen");
+        bloqueoPantalla.addEventListener("release", () => (bloqueoPantalla = null));
+      } else if (!pantallaFija && bloqueoPantalla) { await bloqueoPantalla.release(); bloqueoPantalla = null; }
+    } catch {}
+  }
+  document.addEventListener("visibilitychange", aplicarPantalla);
 
   // ---------- Sonido ----------
   function sonar() {
@@ -120,17 +180,33 @@ function iniciar() {
       <div class="derecha"><span class="pildora ${ok ? "ok" : "mal"}">${ok ? "Activo" : "Inactivo"}</span>
       <button class="boton secundario chico" id="salir">Salir</button></div></div>`;
     $("#salir").onclick = () => signOut(auth);
+    $("#cabecera .derecha").prepend(botonInstalar(), botonTema());
 
     let html = "";
     if (!perfil.activo) html += `<div class="caja"><h2>Estás inactivo</h2><p class="nota">El administrador debe activarte para que recibas carreras y salgas en la app.</p></div>`;
     else if (!ok) html += `<div class="caja"><h2>Quincena vencida</h2><p class="nota">Tu pago venció el ${fechaTexto(vence)}. Paga la cuota al administrador para volver a salir en la app.</p></div>`;
     else if (vence && vence - new Date() < 3 * 864e5) html += `<p class="pildora alerta" style="display:inline-block;margin-top:12px">Tu quincena vence el ${fechaTexto(vence)}</p>`;
 
+    const deTurno = perfil.deTurno !== false;
     if (miCarrera) html += vistaMiCarrera(miCarrera);
     else if (ok) {
-      html += `${sonido ? "" : `<button class="boton secundario" id="activar-sonido">${icono("campana")} Activar sonido de carreras nuevas</button>`}
+      html += `
+        <div class="turno ${deTurno ? "on" : ""}">
+          <div><b>${deTurno ? "Estás de turno" : "Estás descansando"}</b><small>${deTurno ? "Los clientes te ven y recibes carreras" : "No sales en la app ni recibes carreras"}</small></div>
+          <button class="interruptor-grande ${deTurno ? "on" : ""}" id="turno" aria-label="Cambiar turno"><span></span></button>
+        </div>
+        ${deTurno ? `<div class="botones">
+          ${sonido ? "" : `<button class="boton secundario" id="activar-sonido">${icono("campana")} Activar sonido y avisos</button>`}
+          <button class="boton secundario ${pantallaFija ? "activo-suave" : ""}" id="pantalla">${icono("pantalla")} ${pantallaFija ? "Pantalla siempre encendida" : "Mantener pantalla encendida"}</button>
+        </div>
         <h1 class="titulo">Carreras disponibles (${disponibles.length})</h1>
-        <div class="lista">${disponibles.length ? disponibles.map(tarjetaCarrera).join("") : `<div class="vacio">${icono("ruta")}No hay carreras por ahora.<br>Deja esta pantalla abierta: te avisamos con un sonido.</div>`}</div>`;
+        <div class="lista">${disponibles.length ? disponibles.map(tarjetaCarrera).join("") : `<div class="vacio">${icono("ruta")}No hay carreras por ahora.<br>Deja esta pantalla abierta: te avisamos con un sonido.</div>`}</div>` : ""}`;
+    }
+    if (!miCarrera) {
+      const g = ganancias();
+      html += `<h1 class="titulo">${icono("dinero")} Tus ganancias</h1>
+        <div class="cifras">${g.map((x) => `<div class="cifra"><b>${usd(x.monto)}</b><span>${x.n} · ${x.cant} carrera${x.cant === 1 ? "" : "s"}</span></div>`).join("")}</div>
+        <p class="nota">Suma de lo que cobraste en las carreras terminadas.</p>`;
     }
     $("#vista").innerHTML = html;
     // Animar la entrada solo cuando cambia lo que se muestra (lista, carrera o aviso de inactivo).
@@ -138,7 +214,20 @@ function iniciar() {
     if (modo !== ultimoModo) { ultimoModo = modo; transicion(); }
 
     const s = $("#activar-sonido");
-    if (s) s.onclick = () => { sonido = new (window.AudioContext || window.webkitAudioContext)(); sonar(); pintar(); };
+    if (s) s.onclick = () => { sonido = new (window.AudioContext || window.webkitAudioContext)(); sonar(); pedirPermisoAvisos(); pintar(); };
+    const t = $("#turno");
+    if (t) t.onclick = async () => {
+      t.disabled = true;
+      await updateDoc(doc(db, "motorizados", yo.uid), { deTurno: !deTurno }).catch(() => aviso("No se pudo cambiar el turno"));
+    };
+    const pf = $("#pantalla");
+    if (pf) pf.onclick = () => {
+      pantallaFija = !pantallaFija;
+      try { localStorage.setItem("whereapp.pantalla", pantallaFija ? "1" : "0"); } catch {}
+      if (pantallaFija && !("wakeLock" in navigator)) aviso("Tu teléfono no permite dejar la pantalla encendida desde la app");
+      aplicarPantalla(); pintar();
+    };
+    aplicarPantalla();
     $$("[data-aceptar]").forEach((b) => (b.onclick = () => aceptar(b.dataset.aceptar)));
     if (miCarrera) activarMiCarrera(miCarrera);
   }
@@ -194,7 +283,10 @@ function iniciar() {
           <a class="boton secundario" href="${mapsLink(c.destino)}" target="_blank" rel="noopener">Ir a B</a>
         </div>
       </div>
-      <a class="boton" href="tel:${esc(c.clienteTel)}">${icono("telefono")} Llamar a ${esc(c.clienteNombre)}</a>
+      <div class="botones">
+        <a class="boton" href="tel:${esc(c.clienteTel)}">${icono("telefono")} Llamar</a>
+        <button class="boton" id="chat">${icono("chat")} Chat<b class="contador" id="chat-sin-leer" ${chat.sinLeer ? "" : "hidden"}>${chat.sinLeer || ""}</b></button>
+      </div>
       ${c.recogido
         ? `<button class="boton verde" id="termine">${icono("listo")} Terminé: ya llegamos a B</button>`
         : `<button class="boton verde" id="recogi">${icono("check")} Ya ${c.tipo === "mototaxi" ? "lo recogí" : "busqué el pedido"} (salgo hacia B)</button>`}
@@ -203,6 +295,7 @@ function iniciar() {
   }
 
   function activarMiCarrera(c) {
+    $("#chat").onclick = () => abrirChat(c.id, yo.uid, perfil.nombre, c.clienteNombre.split(" ")[0]);
     mapa = nuevoMapa("mapa");
     mapa.fitBounds(marcarRecorrido(mapa, c).pad(0.3), { animate: false });
     // Lugares de El Moján (escuelas, mercados, playas…) para ubicarse mejor.

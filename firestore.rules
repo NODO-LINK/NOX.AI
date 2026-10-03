@@ -24,7 +24,7 @@ service cloud.firestore {
     match /motorizados/{uid} {
       allow read: if dentro();
       allow create, delete: if esAdmin();
-      allow update: if esAdmin() || (dentro() && request.auth.uid == uid && soloCambia(['ubicacion', 'enCarrera']));
+      allow update: if esAdmin() || (dentro() && request.auth.uid == uid && soloCambia(['ubicacion', 'enCarrera', 'deTurno']));
     }
 
     match /clientes/{uid} {
@@ -33,7 +33,13 @@ service cloud.firestore {
         && request.resource.data.nombre is string && request.resource.data.nombre.size() >= 5
         && request.resource.data.cedula is string && request.resource.data.cedula.matches('^[VE]-[0-9]{6,9}$')
         && request.resource.data.telefono is string && request.resource.data.telefono.matches('^[+]58[0-9]{10}$');
-      allow read: if esAdmin();
+      allow read, update: if esAdmin();
+    }
+
+    // Cédulas bloqueadas por el administrador: esos clientes no pueden pedir carreras.
+    match /bloqueados/{cedula} {
+      allow get: if dentro();
+      allow list, write: if esAdmin();
     }
 
     match /carreras/{id} {
@@ -47,6 +53,7 @@ service cloud.firestore {
 
       allow create: if dentro()
         && request.resource.data.clienteUid == request.auth.uid
+        && !exists(/databases/$(database)/documents/bloqueados/$(get(/databases/$(database)/documents/clientes/$(request.auth.uid)).data.cedula))
         && request.resource.data.estado == 'esperando'
         && request.resource.data.motoUid == null;
 
@@ -75,9 +82,21 @@ service cloud.firestore {
                  && soloCambia(['estado', 'motoUid', 'paraMoto', 'paraMotoNombre', 'cancelaciones', 'recogido']))));
     }
 
+    // Chat de la carrera: solo el cliente y el motorizado asignado (el admin puede leer).
+    match /carreras/{cid}/mensajes/{mid} {
+      function carrera() { return get(/databases/$(database)/documents/carreras/$(cid)).data; }
+      function participa() { return dentro() && (carrera().clienteUid == request.auth.uid || carrera().motoUid == request.auth.uid); }
+      allow read: if participa() || esAdmin();
+      allow create: if participa()
+        && request.resource.data.de == request.auth.uid
+        && request.resource.data.texto is string
+        && request.resource.data.texto.size() > 0 && request.resource.data.texto.size() <= 500;
+    }
+
     match /resenas/{id} {
       allow create: if dentro()
         && request.resource.data.clienteUid == request.auth.uid
+        && !exists(/databases/$(database)/documents/bloqueados/$(get(/databases/$(database)/documents/clientes/$(request.auth.uid)).data.cedula))
         && request.resource.data.aprobada == false
         && request.resource.data.estrellas is int
         && request.resource.data.estrellas >= 1 && request.resource.data.estrellas <= 5;
