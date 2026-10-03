@@ -8,8 +8,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fechaTexto, estrellas, promedio, habilitado, leerTarifas, precio, ruta,
-  ICONOS, icono, nuevoMapa, cargarLugares, iconoLugar, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
-} from "./comun.js?v=24";
+  ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
+} from "./comun.js?v=25";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -324,7 +324,6 @@ function iniciar() {
     document.body.classList.add("con-selector");
     const m = nuevoMapa("mapa-sel", "libre");
     const capa = L.layerGroup().addTo(m);
-    const capaLugares = L.layerGroup().addTo(m);
     encuadrar(m);
     setTimeout(() => m.invalidateSize(), 50);
 
@@ -359,20 +358,8 @@ function iniciar() {
     m.on("click", (e) => poner(e.latlng));
 
     // Lugares de El Moján: se ven al acercarse; tocar uno lo usa como punto con su nombre.
-    const pintarLugares = () => {
-      capaLugares.eachLayer((x) => x.unbindTooltip());
-      capaLugares.clearLayers();
-      if (!lugares || m.getZoom() < 15) return;
-      const vista = m.getBounds().pad(0.2);
-      lugares.filter((l) => vista.contains([l.lat, l.lng])).forEach((l) => {
-        const mk = L.marker([l.lat, l.lng], { icon: iconoLugar(l) }).addTo(capaLugares);
-        mk.bindTooltip(esc(l.n), { permanent: true, direction: "top", offset: [0, -12], className: "nombre-lugar" });
-        mk.on("click", () => poner(L.latLng(l.lat, l.lng), l.n));
-      });
-      caja.classList.toggle("sin-nombres", m.getZoom() < 17);
-    };
-    m.on("moveend", pintarLugares);
-    (lugares ? Promise.resolve(lugares) : cargarLugares()).then((l) => { lugares = l; pintarLugares(); })
+    mostrarLugares(m, (l) => poner(L.latLng(l.lat, l.lng), l.n)).listo
+      .then((l) => { lugares = l; })
       .catch(() => aviso("No se pudieron cargar los lugares. Puedes tocar el mapa igual."));
 
     // Buscador de lugares por nombre o tipo.

@@ -5,9 +5,9 @@ import {
   doc, onSnapshot, updateDoc, collection, query, where, runTransaction, serverTimestamp, arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, nuevoMapa, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
+  auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar,
-} from "./comun.js?v=24";
+} from "./comun.js?v=25";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -185,6 +185,7 @@ function iniciar() {
         ${c.nota ? `<div class="fila"><span>Llevar</span><span>${esc(c.nota)}</span></div>` : ""}
       </div>
       <div class="mapa" id="mapa"></div>
+      <p class="nota">Acerca el mapa (+) para ver escuelas, mercados, playas y otros lugares.</p>
       <div class="caja">
         ${filasRecorrido(c)}
         <a class="boton" href="${mapsRuta(c)}" target="_blank" rel="noopener">${icono("ruta")} Abrir la ruta completa en Google Maps</a>
@@ -204,6 +205,8 @@ function iniciar() {
   function activarMiCarrera(c) {
     mapa = nuevoMapa("mapa");
     mapa.fitBounds(marcarRecorrido(mapa, c).pad(0.3), { animate: false });
+    // Lugares de El Moján (escuelas, mercados, playas…) para ubicarse mejor.
+    mostrarLugares(mapa).listo.catch(() => {});
     const recogi = $("#recogi");
     if (recogi) recogi.onclick = async () => {
       recogi.disabled = true;

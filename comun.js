@@ -3,8 +3,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, connectFirestoreEmulator, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=24";
-import { icono, pintarIconos } from "./iconos.js?v=24";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=25";
+import { icono, pintarIconos } from "./iconos.js?v=25";
 
 export { icono };
 pintarIconos();
@@ -381,7 +381,12 @@ function clasificar(tag) {
 }
 
 // Se descargan una vez y se guardan 7 días en el teléfono (Overpass, gratis).
-export async function cargarLugares() {
+let lugaresEnCamino = null;
+export function cargarLugares() {
+  if (!lugaresEnCamino) lugaresEnCamino = descargarLugares().catch((e) => { lugaresEnCamino = null; throw e; });
+  return lugaresEnCamino;
+}
+async function descargarLugares() {
   const CLAVE = "whereapp.lugares.v1";
   try { const g = JSON.parse(localStorage.getItem(CLAVE)); if (g && Date.now() - g.t < 7 * 864e5 && g.l.length) return g.l; } catch {}
   const [s, w, n, e] = [CENTRO[0] - 0.09, CENTRO[1] - 0.09, CENTRO[0] + 0.09, CENTRO[1] + 0.09].map((x) => x.toFixed(4));
@@ -423,4 +428,27 @@ export function iconoLugar(l) {
     html: `<div class="lugar" style="background:${t.color}">${icono(t.icono)}</div>`,
     iconSize: [26, 26], iconAnchor: [13, 13],
   });
+}
+
+// Muestra los lugares en un mapa: aparecen al acercarse (zoom 15+) y con nombre desde zoom 17.
+// alTocar(lugar) es opcional (en el cliente sirve para usar el lugar como punto).
+export function mostrarLugares(m, alTocar) {
+  const L = window.L;
+  const capa = L.layerGroup().addTo(m);
+  let lista = null;
+  const pintar = () => {
+    capa.eachLayer((x) => x.unbindTooltip());
+    capa.clearLayers();
+    m.getContainer().classList.toggle("sin-nombres", m.getZoom() < 17);
+    if (!lista || m.getZoom() < 15) return;
+    const vista = m.getBounds().pad(0.2);
+    lista.filter((l) => vista.contains([l.lat, l.lng])).forEach((l) => {
+      const mk = L.marker([l.lat, l.lng], { icon: iconoLugar(l) }).addTo(capa);
+      mk.bindTooltip(esc(l.n), { permanent: true, direction: "top", offset: [0, -12], className: "nombre-lugar" });
+      if (alTocar) mk.on("click", () => alTocar(l));
+    });
+  };
+  m.on("moveend", pintar);
+  const listo = cargarLugares().then((l) => { lista = l; pintar(); return l; });
+  return { capa, listo };
 }

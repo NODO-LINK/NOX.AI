@@ -533,4 +533,4 @@ body.con-selector { overflow: hidden; }
 .resultados .lugar .ico { width: 18px; height: 18px; }
 .leaflet-tooltip.nombre-lugar { background: rgba(255, 255, 255, .92); border: 0; border-radius: 10px; box-shadow: var(--sombra-1); color: var(--texto); font: 700 11px "Nunito", system-ui, sans-serif; padding: 2px 7px; }
 .leaflet-tooltip.nombre-lugar::before { display: none; }
-.selector.sin-nombres .nombre-lugar { display: none; }
+.sin-nombres .nombre-lugar { display: none; }
