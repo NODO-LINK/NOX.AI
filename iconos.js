@@ -19,6 +19,9 @@ const T = {
   usuario: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
   tarjeta: '<rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/>',
   ubicarme: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
+  deshacer: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  compartir: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/>',
+  reloj: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   flecha: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
 };
 

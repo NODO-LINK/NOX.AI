@@ -16,7 +16,7 @@ if (!avisoSinConfigurar()) iniciar();
 
 function iniciar() {
   let subs = [], ruta = "motos", tarifas = null;
-  let motos = [], carreras = [], resenas = [], pagos = [], llamadas = {}, visitas = {};
+  let motos = [], carreras = [], resenas = [], pagos = [], llamadas = {}, visitas = {}, cedulas = {};
   const DIA = 864e5;
 
   onAuthStateChanged(auth, async (u) => {
@@ -56,6 +56,7 @@ function iniciar() {
     escuchar(query(collection(db, "resenas"), orderBy("fecha", "desc"), limit(100)), (s) => { resenas = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
     escuchar(query(collection(db, "pagos"), orderBy("fecha", "desc"), limit(500)), (s) => { pagos = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
     escuchar(collection(db, "llamadas"), (s) => { llamadas = Object.fromEntries(s.docs.map((d) => [d.id, d.data().n || 0])); });
+    escuchar(collection(db, "clientes"), (s) => { cedulas = Object.fromEntries(s.docs.map((d) => [d.id, d.data().cedula])); });
     escuchar(doc(db, "stats", "visitas"), (s) => { visitas = s.exists() ? s.data() : {}; });
     ir("motos");
   }
@@ -220,7 +221,7 @@ function iniciar() {
           c.cancelacion ? `${c.cancelacion.por === "admin" ? `${icono("escudo")} Admin` : `${icono("usuario")} Cliente`} canceló: ${esc(c.cancelacion.motivo)}` : ""].filter(Boolean);
         return `<article class="tarjeta"><div class="info">
           <h3>${c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`} · ${usd(c.precio)} · ${c.km} km <span class="pildora ${cl}">${tx}</span></h3>
-          <p>${icono("usuario")} ${esc(c.clienteNombre)}${c.clienteCedula ? ` · C.I. ${esc(c.clienteCedula)}` : ""} · ${esc(c.clienteTel)}</p>
+          <p>${icono("usuario")} ${esc(c.clienteNombre)}${cedulas[c.clienteUid] ? ` · C.I. ${esc(cedulas[c.clienteUid])}` : ""} · ${esc(c.clienteTel)}</p>
           <p>${icono("moto")} ${c.motoNombre && c.motoUid ? esc(c.motoNombre) : c.paraMotoNombre ? `Pedida a ${esc(c.paraMotoNombre)}` : "—"}</p>
           <p>A: ${esc(c.origen?.dir)} ${icono("flecha")} B: ${esc(c.destino?.dir)}</p>
           <p>${fechaTexto(c.creada)}</p>

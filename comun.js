@@ -102,7 +102,8 @@ export const ICONOS = {
   get moto() { return pin("#111827", icono("moto")); },
 };
 export function nuevoMapa(id) {
-  const m = window.L.map(id, { zoomControl: true }).setView(CENTRO, 14);
+  const m = window.L.map(id, { zoomControl: false }).setView(CENTRO, 14);
+  window.L.control.zoom({ position: "bottomleft" }).addTo(m);
   window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(m);
   return m;
 }
@@ -196,4 +197,52 @@ export function activarBarra(ruta) {
   $$("button", barra).forEach((b) => b.classList.toggle("activo", b.dataset.ruta === ruta));
   mover();
   if (!barra.dataset.escucha) { barra.dataset.escucha = "1"; addEventListener("resize", mover); }
+}
+
+// ---------- Seguimiento en vivo: cuánto le falta al motorizado ----------
+
+const VELOCIDAD = 25; // km/h promedio de una moto en El Moján
+
+// Calcula en qué va la carrera a partir de la última ubicación del motorizado.
+// "memoria" guarda la distancia inicial hasta A para poder llenar la barra de progreso.
+// Con "tercero" (el nombre del cliente) los textos se escriben para el amigo que sigue la carrera.
+export function progreso(c, u, memoria = {}, tercero = "") {
+  const recogido = !!c.recogido;
+  const meta = recogido ? c.destino : c.origen;
+  const quien = String(c.motoNombre || "El motorizado").split(" ")[0];
+  const taxi = c.tipo === "mototaxi";
+  const titulo = tercero
+    ? (recogido ? (taxi ? `${tercero} va en camino a su destino` : "El pedido va en camino") : `${quien} va a buscar ${taxi ? `a ${tercero}` : "el pedido"}`)
+    : (recogido ? (taxi ? "En camino a tu destino" : "Tu pedido va en camino") : `${quien} va a buscar${taxi ? "te" : " el pedido"}`);
+  if (!u) return { recogido, titulo, detalle: "Esperando la ubicación del motorizado…", pct: recogido ? 50 : 0, min: null, km: null };
+  const km = lineaRecta(u, meta) * 1.3;
+  const min = Math.max(1, Math.round((km / VELOCIDAD) * 60));
+  let pct;
+  if (!recogido) {
+    memoria.inicial = Math.max(memoria.inicial || 0, km, 0.05);
+    pct = 50 * (1 - km / memoria.inicial);
+  } else {
+    pct = 50 + 50 * (1 - km / Math.max(c.km || km, 0.1));
+  }
+  pct = Math.min(100, Math.max(0, pct));
+  const llegando = km < 0.1;
+  const textoKm = km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
+  const edad = Date.now() - (fecha(u.t) || new Date()).getTime();
+  const viejo = edad > 120000 ? ` · ubicación de hace ${Math.round(edad / 60000)} min` : "";
+  const detalle = llegando
+    ? (recogido ? "Llegando al destino" : "Está llegando al punto A")
+    : `Faltan ${min} min · ${textoKm}${viejo}`;
+  return { recogido, titulo, detalle, pct, min: llegando ? 0 : min, km };
+}
+
+// Comparte el enlace de seguimiento de una carrera (WhatsApp, etc.).
+export async function compartirCarrera(c, nombreCliente) {
+  const url = new URL(`seguir.html?c=${encodeURIComponent(c.id)}`, location.href).href;
+  const texto = `Sigue mi ${c.tipo === "mototaxi" ? "viaje" : "pedido"} en ${NOMBRE} y mira cuánto falta para llegar:`;
+  if (navigator.share) {
+    try { await navigator.share({ title: `${NOMBRE} — ${nombreCliente || ""}`.trim(), text: texto, url }); return; }
+    catch (e) { if (e.name === "AbortError") return; }
+  }
+  try { await navigator.clipboard.writeText(url); aviso("Enlace copiado. Pégalo en WhatsApp"); }
+  catch { window.open(`https://wa.me/?text=${encodeURIComponent(`${texto} ${url}`)}`, "_blank"); }
 }

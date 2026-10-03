@@ -129,7 +129,7 @@ function iniciar() {
     }
     $("#vista").innerHTML = html;
     // Animar la entrada solo cuando cambia lo que se muestra (lista, carrera o aviso de inactivo).
-    const modo = `${ok}-${miCarrera ? miCarrera.id : "lista"}`;
+    const modo = `${ok}-${miCarrera ? miCarrera.id : "lista"}-${miCarrera ? !!miCarrera.recogido : ""}`;
     if (modo !== ultimoModo) { ultimoModo = modo; transicion(); }
 
     const s = $("#activar-sonido");
@@ -184,7 +184,9 @@ function iniciar() {
         <a class="boton secundario" href="${mapsLink(c.destino)}" target="_blank" rel="noopener">Ir al punto B con Google Maps</a>
       </div>
       <a class="boton" href="tel:${esc(c.clienteTel)}">${icono("telefono")} Llamar a ${esc(c.clienteNombre)}</a>
-      <button class="boton verde" id="termine">${icono("listo")} Terminé</button>
+      ${c.recogido
+        ? `<button class="boton verde" id="termine">${icono("listo")} Terminé: ya llegamos a B</button>`
+        : `<button class="boton verde" id="recogi">${icono("check")} Ya ${c.tipo === "mototaxi" ? "lo recogí" : "busqué el pedido"} (salgo hacia B)</button>`}
       <button class="boton peligro" id="cancelar">Cancelar carrera</button>
       <p class="nota">Mientras tengas una carrera, tu ubicación se comparte con el cliente.</p>`;
   }
@@ -194,7 +196,14 @@ function iniciar() {
     L.marker(c.origen, { icon: ICONOS.origen }).addTo(mapa);
     L.marker(c.destino, { icon: ICONOS.destino }).addTo(mapa);
     mapa.fitBounds(L.latLngBounds([c.origen, c.destino]).pad(0.3), { animate: false });
-    $("#termine").onclick = async () => {
+    const recogi = $("#recogi");
+    if (recogi) recogi.onclick = async () => {
+      recogi.disabled = true;
+      await updateDoc(doc(db, "carreras", c.id), { recogido: true, recogidoEn: serverTimestamp() });
+      aviso("¡Vamos hacia el punto B!");
+    };
+    const termine = $("#termine");
+    if (termine) termine.onclick = async () => {
       if (!confirm("¿Entregaste y cobraste la carrera?")) return;
       await updateDoc(doc(db, "carreras", c.id), { estado: "terminada", terminada: serverTimestamp() });
       aviso("¡Carrera terminada!");
@@ -204,7 +213,7 @@ function iniciar() {
       if (!motivo) return;
       // La carrera vuelve a quedar disponible para los demás motorizados.
       await updateDoc(doc(db, "carreras", c.id), {
-        estado: "esperando", motoUid: null, paraMoto: null, paraMotoNombre: null,
+        estado: "esperando", motoUid: null, paraMoto: null, paraMotoNombre: null, recogido: false,
         cancelaciones: arrayUnion({ por: "motorizado", motoUid: yo.uid, motoNombre: perfil.nombre, motivo, fecha: new Date() }),
       });
       aviso("Cancelaste la carrera");

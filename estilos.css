@@ -370,3 +370,79 @@ body.sin-barra .aviso { bottom: calc(24px + env(safe-area-inset-bottom)); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* ---------- Mapa para pedir: A y B en el mismo mapa ---------- */
+.mapa-pedir { position: relative; margin-top: 14px; }
+.mapa-pedir .mapa { margin-top: 0; }
+.mapa.alto { height: min(58vh, 460px); }
+.guia {
+  position: absolute; top: 12px; left: 12px; right: 12px; z-index: 500;
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: var(--pildora);
+  background: rgba(255, 255, 255, .88); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--sombra-2); font-weight: 700; font-size: .9rem; pointer-events: none;
+}
+.guia .ico { color: var(--verde); width: 20px; height: 20px; }
+.guia .letra-a, .guia .letra-b { margin-right: 0; }
+.guia.cambia { animation: guia .5s var(--resorte); }
+@keyframes guia { from { transform: translateY(-10px) scale(.96); opacity: 0; } }
+.mapa-botones { position: absolute; right: 12px; bottom: 16px; z-index: 500; display: grid; gap: 10px; }
+.redondo {
+  width: 48px; height: 48px; border-radius: 50%; border: 0; background: #fff; color: var(--marca); cursor: pointer;
+  display: grid; place-items: center; box-shadow: var(--sombra-2); transition: transform .35s var(--resorte);
+}
+.redondo:active { transform: scale(.9); }
+.redondo .ico { width: 22px; height: 22px; }
+label .letra-a, label .letra-b { width: 18px; height: 18px; font-size: .62rem; vertical-align: -3px; }
+
+/* ---------- Tarjeta "en vivo" de la carrera ---------- */
+.vivo {
+  margin-top: 14px; padding: 18px; border-radius: var(--radio); color: #fff; position: relative; overflow: hidden;
+  background: var(--degradado); box-shadow: var(--brillo), var(--sombra-2);
+}
+.vivo::before { /* brillo que se mueve dentro de la tarjeta */
+  content: ""; position: absolute; width: 220px; height: 220px; right: -60px; top: -80px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, .28), transparent 70%); animation: flotar 6s ease-in-out infinite;
+}
+.vivo h2 { font-size: 1.05rem; font-weight: 800; position: relative; }
+.vivo .nota { color: rgba(255, 255, 255, .85); margin: 2px 0 14px; position: relative; }
+.vivo-cabeza { display: inline-flex; align-items: center; gap: 6px; font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; opacity: .9; margin-bottom: 6px; }
+.vivo-punto { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; animation: pulso-punto 1.6s ease-out infinite; }
+.vivo-tiempo { font-size: 2.6rem; font-weight: 800; line-height: 1.1; margin-top: 6px; position: relative; }
+.vivo-tiempo small { font-size: 1rem; font-weight: 700; opacity: .85; }
+.vivo-tiempo .ico { width: 34px; height: 34px; }
+.pista { display: flex; align-items: center; gap: 8px; position: relative; }
+.pista .letra-a, .pista .letra-b { margin: 0; box-shadow: 0 0 0 3px rgba(255, 255, 255, .35); }
+.carril { position: relative; flex: 1; height: 8px; border-radius: 9px; background: rgba(255, 255, 255, .25); }
+.carril b { position: absolute; inset: 0 auto 0 0; border-radius: 9px; background: #fff; transition: width 1s var(--suave); }
+.moto-pista {
+  position: absolute; top: 50%; width: 34px; height: 34px; margin-left: -17px; margin-top: -17px; border-radius: 50%;
+  background: #fff; color: var(--marca); display: grid; place-items: center; box-shadow: 0 4px 12px rgba(46, 16, 101, .35);
+  transition: left 1s var(--suave);
+}
+.moto-pista .ico { width: 20px; height: 20px; animation: rodar 1.6s ease-in-out infinite; }
+
+/* ---------- Widget flotante de la carrera (en todas las pestañas) ---------- */
+.widget {
+  position: fixed; left: 12px; right: 12px; bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 499;
+  max-width: 520px; margin: 0 auto; display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 10px;
+  border: 1px solid rgba(255, 255, 255, .7); border-radius: 24px; cursor: pointer; text-align: left; color: var(--texto);
+  background: var(--vidrio); backdrop-filter: blur(18px) saturate(1.6); -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  box-shadow: var(--sombra-3); animation: subir .55s var(--resorte) both; font: inherit;
+}
+.widget:active { transform: scale(.98); }
+.widget-icono { position: relative; width: 44px; height: 44px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: var(--degradado); box-shadow: var(--brillo); }
+.widget-icono .ico { width: 22px; height: 22px; }
+.widget-texto { flex: 1; min-width: 0; }
+.widget-texto b { display: block; font-size: .9rem; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.widget-texto small { display: block; font-size: .76rem; color: var(--texto-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.widget-min { font-size: 1.5rem; font-weight: 800; color: var(--marca); text-align: center; line-height: 1; }
+.widget-min small { display: block; font-size: .65rem; color: var(--texto-2); }
+.barra-progreso { height: 6px; border-radius: 9px; background: var(--marca-suave); overflow: hidden; margin-top: 6px; }
+.barra-progreso i { display: block; height: 100%; border-radius: 9px; background: var(--degradado); transition: width 1s var(--suave); }
+.barra-progreso.buscando i { animation: buscando 1.4s ease-in-out infinite; }
+@keyframes buscando { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+body.con-widget { padding-bottom: calc(180px + env(safe-area-inset-bottom)); }
+body.con-widget .aviso { bottom: calc(176px + env(safe-area-inset-bottom)); }
+
+/* ---------- Página pública de seguimiento ---------- */
+.seguir-pie { text-align: center; margin: 22px 0 8px; }

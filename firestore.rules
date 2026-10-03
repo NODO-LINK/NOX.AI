@@ -37,7 +37,10 @@ service cloud.firestore {
     }
 
     match /carreras/{id} {
-      allow read: if esAdmin()
+      // Una carrera sola se puede abrir con su id (enlace de seguimiento que el cliente comparte).
+      allow get: if dentro();
+      // Las listas solo las ve quien participa.
+      allow list: if esAdmin()
         || (dentro() && resource.data.clienteUid == request.auth.uid)
         || (esMoto() && resource.data.motoUid == request.auth.uid)
         || (esMoto() && resource.data.estado == 'esperando' && motoHabilitado());
@@ -64,11 +67,12 @@ service cloud.firestore {
             && request.resource.data.estado == 'aceptada'
             && request.resource.data.motoUid == request.auth.uid
             && soloCambia(['estado', 'motoUid', 'motoNombre', 'motoTel', 'motoMoto', 'motoPlaca', 'aceptada']))
-        // El motorizado termina o cancela su carrera (al cancelar vuelve a quedar disponible).
+        // El motorizado avisa que ya recogió, termina o cancela su carrera (al cancelar vuelve a quedar disponible).
         || (esMoto() && resource.data.motoUid == request.auth.uid && resource.data.estado == 'aceptada'
-            && ((request.resource.data.estado == 'terminada' && soloCambia(['estado', 'terminada']))
+            && ((request.resource.data.estado == 'aceptada' && request.resource.data.recogido == true && soloCambia(['recogido', 'recogidoEn']))
+             || (request.resource.data.estado == 'terminada' && soloCambia(['estado', 'terminada']))
              || (request.resource.data.estado == 'esperando' && request.resource.data.motoUid == null
-                 && soloCambia(['estado', 'motoUid', 'paraMoto', 'paraMotoNombre', 'cancelaciones']))));
+                 && soloCambia(['estado', 'motoUid', 'paraMoto', 'paraMotoNombre', 'cancelaciones', 'recogido']))));
     }
 
     match /resenas/{id} {

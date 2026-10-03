@@ -4,8 +4,9 @@ App de delivery y mototaxi para El Moján. Tiene tres partes:
 
 | Página | Para quién | Qué hace |
 |---|---|---|
-| `index.html` | Clientes | Entran con su nombre completo, cédula y teléfono (sin código por SMS), marcan el punto A y el B en el mapa, ven el precio por km (Delivery o Mototaxi) y piden a todos o a un motorizado. Ven quién viene, su moto y placa, su ubicación en vivo, pueden llamarlo, cancelar con motivo y calificar al terminar. |
-| `moto.html` | Motorizados | Entran con usuario y clave. Ven las carreras nuevas (con sonido), las aceptan, ven A y B y los abren en Google Maps, llaman al cliente, marcan "Terminé" o cancelan con motivo. Mientras tienen una carrera comparten su ubicación. |
+| `index.html` | Clientes | Entran con su nombre completo, cédula y teléfono (sin SMS; la app los recuerda). En un solo mapa tocan A y luego B, ven el precio por km (Delivery o Mototaxi) y piden a todos o a un motorizado. Ven en vivo cuánto falta (en la app, en un widget flotante y en la barra de notificaciones), pueden llamar al motorizado, compartir el seguimiento con amigos, cancelar con motivo y calificar al terminar. |
+| `seguir.html?c=…` | Amigos del cliente | Enlace que comparte el cliente: muestra en vivo dónde va la moto y cuánto falta, sin registrarse. |
+| `moto.html` | Motorizados | Entran con usuario y clave. Ven las carreras nuevas (con sonido), las aceptan, ven A y B y los abren en Google Maps, llaman al cliente, marcan "Ya lo recogí" y luego "Terminé", o cancelan con motivo. Mientras tienen una carrera comparten su ubicación. |
 | `admin.html` | Administrador | Crea motorizados, los activa o desactiva, registra la cuota quincenal y ve los avisos 3 días antes del vencimiento (con botón de WhatsApp). También ve las carreras y las cancelaciones, aprueba las reseñas, cambia las tarifas y ve los números (visitas, llamadas por motorizado y pagos por quincena). |
 
 Un motorizado **solo sale en la app** si el admin lo activó **y** tiene la quincena pagada.
