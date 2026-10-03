@@ -35,31 +35,59 @@ function iniciar() {
     const s = await getDoc(doc(db, "clientes", u.uid)).catch(() => null);
     cliente = s && s.exists() ? s.data() : null;
     if (!cliente || !cliente.nombre) return pantallaEntrada();
+    if (cliente.cedula) recordados.guardar({ nombre: cliente.nombre, cedula: cliente.cedula, telefono: cliente.telefono });
     arrancar();
   });
 
   // ---------- Entrada: nombre, cédula y teléfono (sin verificación por SMS) ----------
-  function pantallaEntrada() {
+  // Los datos del cliente se recuerdan en este teléfono para entrar con un solo toque la próxima vez.
+  const recordados = {
+    leer() { try { return JSON.parse(localStorage.getItem("whereapp.datos")) || null; } catch { return null; } },
+    guardar(d) { try { localStorage.setItem("whereapp.datos", JSON.stringify(d)); } catch {} },
+    borrar() { try { localStorage.removeItem("whereapp.datos"); } catch {} },
+  };
+  const telBonito = (t) => String(t || "").replace(/^\+58(\d{3})(\d{7})$/, "0$1-$2");
+
+  function pantallaEntrada(forzarFormulario = false) {
     $("#cabecera").hidden = true; $("#barra").hidden = true; document.body.classList.add("sin-barra");
-    $("#vista").innerHTML = `<div class="entrada">
-      <div class="logo">${NOMBRE}</div><div class="logo-sub">Delivery y mototaxi en El Moján</div>
+    const guardados = forzarFormulario ? null : recordados.leer();
+    const pie = `<p class="nota" style="text-align:center;margin-top:18px">¿Eres motorizado? <a href="moto.html" style="color:var(--marca);font-weight:700">Entra aquí</a></p>`;
+    const cabeza = `<div class="logo">${NOMBRE}</div><div class="logo-sub">Delivery y mototaxi en El Moján</div>`;
+
+    if (guardados) {
+      const iniciales = guardados.nombre.split(" ").slice(0, 2).map((p) => p[0]).join("").toUpperCase();
+      $("#vista").innerHTML = `<div class="entrada">${cabeza}
+        <div class="caja" style="text-align:center">
+          <div class="avatar" style="margin:4px auto 12px;width:64px;height:64px;font-size:1.3rem">${esc(iniciales)}</div>
+          <h2>¡Hola de nuevo, ${esc(guardados.nombre.split(" ")[0])}!</h2>
+          <p class="nota">${esc(guardados.nombre)} · C.I. ${esc(guardados.cedula)} · ${esc(telBonito(guardados.telefono))}</p>
+          <button class="boton" id="continuar">Entrar como ${esc(guardados.nombre.split(" ")[0])}</button>
+          <button class="boton secundario" id="otros">No soy yo / cambiar datos</button>
+        </div>${pie}</div>`;
+      transicion();
+      $("#continuar").onclick = () => entrar(guardados, $("#continuar"));
+      $("#otros").onclick = () => pantallaEntrada(true);
+      return;
+    }
+
+    const previos = recordados.leer() || {};
+    const [nac, num] = String(previos.cedula || "V-").split("-");
+    $("#vista").innerHTML = `<div class="entrada">${cabeza}
       <form class="caja" id="registro"><h2>Entra con tus datos</h2>
         <label for="nombre">Nombre completo</label>
-        <input id="nombre" autocomplete="name" placeholder="Ej.: María José Pérez González" required>
+        <input id="nombre" autocomplete="name" placeholder="Ej.: María José Pérez González" value="${esc(previos.nombre)}" required>
         <label for="cedula">Cédula</label>
         <div class="cedula">
-          <select id="nacionalidad" aria-label="Nacionalidad"><option>V</option><option>E</option></select>
-          <input id="cedula" inputmode="numeric" placeholder="12345678" required>
+          <select id="nacionalidad" aria-label="Nacionalidad"><option ${nac === "V" ? "selected" : ""}>V</option><option ${nac === "E" ? "selected" : ""}>E</option></select>
+          <input id="cedula" inputmode="numeric" placeholder="12345678" value="${esc(num)}" required>
         </div>
         <label for="tel">Teléfono</label>
-        <input id="tel" type="tel" inputmode="tel" placeholder="0414-1234567" autocomplete="tel" required>
+        <input id="tel" type="tel" inputmode="tel" placeholder="0414-1234567" autocomplete="tel" value="${esc(telBonito(previos.telefono))}" required>
         <button class="boton">Entrar</button>
-        <p class="nota">El motorizado verá tu nombre y tu teléfono para poder llamarte.</p>
-      </form>
-      <p class="nota" style="text-align:center;margin-top:18px">¿Eres motorizado? <a href="moto.html" style="color:var(--marca);font-weight:700">Entra aquí</a></p>
-    </div>`;
+        <p class="nota">Tus datos quedan guardados en este teléfono para que la próxima vez entres con un toque.</p>
+      </form>${pie}</div>`;
     transicion();
-    $("#registro").onsubmit = async (e) => {
+    $("#registro").onsubmit = (e) => {
       e.preventDefault();
       const nombre = $("#nombre").value.trim().replace(/\s+/g, " ");
       const numero = $("#cedula").value.replace(/\D/g, "");
@@ -67,27 +95,31 @@ function iniciar() {
       if (nombre.split(" ").length < 2) return aviso("Escribe tu nombre y apellido");
       if (numero.length < 6 || numero.length > 9) return aviso("Escribe una cédula válida");
       if (!telefono) return aviso("Escribe un teléfono válido, ej. 0414-1234567");
-      const boton = $("#registro button");
-      boton.disabled = true;
-      registrando = true;
-      try {
-        const cred = usuario ? { user: usuario } : await signInAnonymously(auth);
-        usuario = cred.user;
-        cliente = { nombre, cedula: `${$("#nacionalidad").value}-${numero}`, telefono, creado: serverTimestamp() };
-        await setDoc(doc(db, "clientes", usuario.uid), cliente);
-        registrando = false;
-        arrancar();
-      } catch (err) {
-        console.error(err);
-        registrando = false;
-        boton.disabled = false;
-        aviso(err.code === "auth/operation-not-allowed" || err.code === "auth/admin-restricted-operation"
-          ? "Falta activar la entrada Anónima en Firebase (Authentication → Método de acceso → Anónimo)."
-          : err.code === "permission-denied"
-          ? "Firebase no dejó guardar tus datos: faltan publicar las reglas de Whereapp (Firestore → Reglas)."
-          : `No se pudo entrar. Revisa tu internet e intenta de nuevo. (${err.code || "error"})`);
-      }
+      entrar({ nombre, cedula: `${$("#nacionalidad").value}-${numero}`, telefono }, $("#registro button"));
     };
+  }
+
+  async function entrar(datos, boton) {
+    boton.disabled = true;
+    registrando = true;
+    try {
+      const cred = usuario ? { user: usuario } : await signInAnonymously(auth);
+      usuario = cred.user;
+      cliente = { ...datos, creado: serverTimestamp() };
+      await setDoc(doc(db, "clientes", usuario.uid), cliente);
+      recordados.guardar(datos);
+      registrando = false;
+      arrancar();
+    } catch (err) {
+      console.error(err);
+      registrando = false;
+      boton.disabled = false;
+      aviso(err.code === "auth/operation-not-allowed" || err.code === "auth/admin-restricted-operation"
+        ? "Falta activar la entrada Anónima en Firebase (Authentication → Método de acceso → Anónimo)."
+        : err.code === "permission-denied"
+        ? "Firebase no dejó guardar tus datos: faltan publicar las reglas de Whereapp (Firestore → Reglas)."
+        : `No se pudo entrar. Revisa tu internet e intenta de nuevo. (${err.code || "error"})`);
+    }
   }
 
   function normalizarTel(v) {
@@ -103,7 +135,7 @@ function iniciar() {
     $("#cabecera").hidden = false; $("#barra").hidden = false;
     $("#cabecera").innerHTML = `<div class="dentro"><div><div class="logo">${NOMBRE}</div><div class="logo-sub">Hola, ${esc(cliente.nombre)}</div></div>
       <div class="derecha"><button class="boton secundario chico" id="salir">Salir</button></div></div>`;
-    $("#salir").onclick = () => { if (confirm("¿Salir? Tendrás que escribir tus datos otra vez.")) signOut(auth); };
+    $("#salir").onclick = () => { if (confirm("¿Salir de Whereapp?")) signOut(auth); };
     $$("#barra button").forEach((b) => (b.onclick = () => ir(b.dataset.ruta)));
     tarifas = await leerTarifas();
 
