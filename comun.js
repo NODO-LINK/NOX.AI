@@ -10,6 +10,8 @@ export { icono };
 pintarIconos();
 
 export const NOMBRE = "Whereapp";
+// Servicios que se ofrecen. Para volver a ofrecer delivery, agrega "delivery" a la lista.
+export const SERVICIOS = ["mototaxi"];
 // En la computadora (localhost) la app usa el simulador de Firebase, para hacer pruebas sin tocar los datos reales.
 const simulador = location.hostname === "localhost";
 export const firebaseConfig = simulador ? { ...configReal, apiKey: "demo", projectId: "demo-whereapp" } : configReal;

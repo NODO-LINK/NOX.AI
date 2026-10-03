@@ -1,6 +1,6 @@
 # Whereapp — motorizados en El Moján
 
-App de delivery y mototaxi para El Moján. Tiene tres partes:
+App de mototaxi para El Moján (el delivery está apagado por ahora: se vuelve a activar en `SERVICIOS`, dentro de `comun.js`). Tiene tres partes:
 
 | Página | Para quién | Qué hace |
 |---|---|---|

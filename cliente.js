@@ -7,7 +7,7 @@ import {
   doc, getDoc, setDoc, addDoc, updateDoc, collection, query, where, onSnapshot, serverTimestamp, increment,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  auth, db, NOMBRE, $, $$, esc, usd, fechaTexto, estrellas, promedio, habilitado, leerTarifas, precio, ruta,
+  auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fechaTexto, estrellas, promedio, habilitado, leerTarifas, precio, ruta,
   ICONOS, icono, nuevoMapa, transicion, activarBarra, progreso, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
 } from "./comun.js";
 
@@ -19,7 +19,7 @@ function iniciar() {
   let rutaActual = "pedir", mapa = null;
   let motos = [], carreras = [], cancelarSubs = [];
   // Estado del formulario de pedido (se conserva al cambiar de pestaña).
-  const pedido = { tipo: "delivery", origen: null, destino: null, dirOrigen: "", dirDestino: "", nota: "", para: null, km: null, linea: null };
+  const pedido = { tipo: SERVICIOS[0], origen: null, destino: null, dirOrigen: "", dirDestino: "", nota: "", para: null, km: null, linea: null };
 
   contarVisita();
 
@@ -53,7 +53,7 @@ function iniciar() {
     document.body.classList.remove("con-widget");
     const guardados = forzarFormulario ? null : recordados.leer();
     const pie = `<p class="nota" style="text-align:center;margin-top:18px">¿Eres motorizado? <a href="moto.html" style="color:var(--marca);font-weight:700">Entra aquí</a></p>`;
-    const cabeza = `<div class="logo">${NOMBRE}</div><div class="logo-sub">Delivery y mototaxi en El Moján</div>`;
+    const cabeza = `<div class="logo">${NOMBRE}</div><div class="logo-sub">${SERVICIOS.length > 1 ? "Delivery y mototaxi" : "Mototaxi"} en El Moján</div>`;
 
     if (guardados) {
       const iniciales = guardados.nombre.split(" ").slice(0, 2).map((p) => p[0]).join("").toUpperCase();
@@ -188,9 +188,9 @@ function iniciar() {
     const activa = carreraActual();
     $("#vista").innerHTML = `
       <h1 class="titulo">¿A dónde vamos?</h1>
-      <div class="segmento" id="tipo">
+      ${SERVICIOS.length > 1 ? `<div class="segmento" id="tipo">
         <button data-t="delivery">${icono("paquete")} Delivery</button><button data-t="mototaxi">${icono("moto")} Mototaxi</button>
-      </div>
+      </div>` : ""}
       ${pedido.para ? `<div class="para pildora">Para: ${esc(pedido.para.nombre)} <button id="quitar-para" aria-label="Quitar">${icono("cerrar")}</button></div>` : ""}
       <div class="mapa-pedir">
         <div class="mapa alto" id="mapa"></div>
@@ -227,7 +227,7 @@ function iniciar() {
         : `${icono("check")}<span>¡Listo! Arrastra A o B si quieres ajustar</span>`;
       $("#guia").classList.remove("cambia"); void $("#guia").offsetWidth; $("#guia").classList.add("cambia");
       $$("#tipo button").forEach((b) => b.classList.toggle("activo", b.dataset.t === pedido.tipo));
-      $("#tipo").dataset.activo = pedido.tipo;
+      if ($("#tipo")) $("#tipo").dataset.activo = pedido.tipo;
       $("#caja-nota").hidden = taxi;
       const t = tarifas[pedido.tipo];
       $("#precio").innerHTML = pedido.km != null

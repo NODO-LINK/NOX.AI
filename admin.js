@@ -8,7 +8,7 @@ import {
   serverTimestamp, increment, writeBatch, Timestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  auth, authSecundaria, db, NOMBRE, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
+  auth, authSecundaria, db, NOMBRE, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
   leerTarifas, aviso, avisoSinConfigurar,
 } from "./comun.js";
 
@@ -269,7 +269,7 @@ function iniciar() {
     $("#vista").innerHTML = `<form id="tarifas">
       <h1 class="titulo">Tarifas por kilómetro</h1>
       <p class="nota">Precio = base + (precio por km × kilómetros). El cliente lo ve calculado en el mapa.</p>
-      <div class="caja"><h2>${icono("paquete")} Delivery</h2><div class="dos">
+      <div class="caja" ${SERVICIOS.includes("delivery") ? "" : "hidden"}><h2>${icono("paquete")} Delivery</h2><div class="dos">
         <div><label>Base ($)</label><input name="db" type="number" step="0.01" min="0" value="${t.delivery.base}"></div>
         <div><label>Por km ($)</label><input name="dk" type="number" step="0.01" min="0" value="${t.delivery.porKm}"></div></div></div>
       <div class="caja"><h2>${icono("moto")} Mototaxi</h2><div class="dos">
