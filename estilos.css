@@ -446,3 +446,5 @@ body.con-widget .aviso { bottom: calc(176px + env(safe-area-inset-bottom)); }
 
 /* ---------- Página pública de seguimiento ---------- */
 .seguir-pie { text-align: center; margin: 22px 0 8px; }
+
+.ico.girada { transform: rotate(180deg); }

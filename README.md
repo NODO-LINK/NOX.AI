@@ -4,7 +4,7 @@ App de mototaxi para El Moján (el delivery está apagado por ahora: se vuelve a
 
 | Página | Para quién | Qué hace |
 |---|---|---|
-| `index.html` | Clientes | Entran con su nombre completo, cédula y teléfono (sin SMS; la app los recuerda). En un solo mapa tocan A y luego B, ven el precio por km (Delivery o Mototaxi) y piden a todos o a un motorizado. Ven en vivo cuánto falta (en la app, en un widget flotante y en la barra de notificaciones), pueden llamar al motorizado, compartir el seguimiento con amigos, cancelar con motivo y calificar al terminar. |
+| `index.html` | Clientes | Entran con su nombre completo, cédula y teléfono (sin SMS; la app los recuerda). La app abre en la lista de motorizados; al tocar "Pedir a este" marcan en un solo mapa A y luego B, ven el precio por km (Delivery o Mototaxi) y piden a todos o a un motorizado. Ven en vivo cuánto falta (en la app, en un widget flotante y en la barra de notificaciones), pueden llamar al motorizado, compartir el seguimiento con amigos, cancelar con motivo y calificar al terminar. |
 | `seguir.html?c=…` | Amigos del cliente | Enlace que comparte el cliente: muestra en vivo dónde va la moto y cuánto falta, sin registrarse. |
 | `moto.html` | Motorizados | Entran con usuario y clave. Ven las carreras nuevas (con sonido), las aceptan, ven A y B y los abren en Google Maps, llaman al cliente, marcan "Ya lo recogí" y luego "Terminé", o cancelan con motivo. Mientras tienen una carrera comparten su ubicación. |
 | `admin.html` | Administrador | Crea motorizados, los activa o desactiva, registra la cuota quincenal y ve los avisos 3 días antes del vencimiento (con botón de WhatsApp). También ve las carreras y las cancelaciones, aprueba las reseñas, cambia las tarifas y ve los números (visitas, llamadas por motorizado y pagos por quincena). |
@@ -26,6 +26,7 @@ Las estrellas cuentan solo cuando el admin aprueba la reseña.
    - Copia el **UID** que aparece en la lista.
    - En **Firestore → Iniciar colección**, crea la colección `admins` con un documento cuyo ID sea ese UID (sin campos, o con `nombre`).
    - Entra a `admin.html` con usuario `admin` y tu clave.
+7. Para probar, en el panel toca **Crear motorizado de prueba** (usuario `prueba`, clave `prueba123`) y entra con él en `moto.html`.
 
 A los motorizados los creas desde el panel: les pones usuario y clave, y entran por `moto.html`.
 

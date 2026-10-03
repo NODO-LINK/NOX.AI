@@ -106,6 +106,7 @@ function iniciar() {
         </article>`).join("")}</div>` : ""}
       <h1 class="titulo">Motorizados (${motos.length}) · ${motos.filter(habilitado).length} saliendo en la app</h1>
       <button class="boton" id="nuevo">+ Agregar motorizado</button>
+      ${motos.some((x) => x.usuario === "prueba") ? "" : `<button class="boton secundario" id="prueba">${icono("moto")} Crear motorizado de prueba</button>`}
       <div class="lista" style="margin-top:12px">${motos.map((m) => `
         <article class="tarjeta"><div class="info">
           <h3>${esc(m.nombre)} ${habilitado(m) ? `<span class="pildora ok">En la app</span>` : `<span class="pildora mal">No sale</span>`}</h3>
@@ -118,6 +119,7 @@ function iniciar() {
             <button class="boton secundario" data-editar="${m.id}">Editar</button></div>
         </article>`).join("") || `<div class="vacio">${icono("moto")}Aún no hay motorizados.</div>`}</div>`;
     $("#nuevo").onclick = () => formularioMoto();
+    if ($("#prueba")) $("#prueba").onclick = () => crearMotoPrueba($("#prueba"));
     $$("[data-activo]").forEach((b) => (b.onclick = () => {
       const m = motos.find((x) => x.id === b.dataset.activo);
       updateDoc(doc(db, "motorizados", m.id), { activo: !m.activo });
@@ -142,6 +144,35 @@ function iniciar() {
     if (d.startsWith("58")) d = d.slice(2);
     if (d.startsWith("0")) d = d.slice(1);
     return d.length === 10 ? "+58" + d : null;
+  }
+
+  // Crea la cuenta del motorizado (usuario y clave) y su ficha.
+  async function crearMoto(datos, usuario, clave, { pagado = false, activo = false, dias = tarifas.diasCuota, cobrar = true } = {}) {
+    usuario = String(usuario).trim().toLowerCase();
+    if (motos.some((x) => x.usuario === usuario)) throw new Error("Ese usuario ya existe");
+    // Se usa una segunda conexión para crear la cuenta sin cerrar la sesión del admin.
+    const authSeg = authSecundaria();
+    const cred = await createUserWithEmailAndPassword(authSeg, correoDe(usuario), clave);
+    await signOut(authSeg);
+    await setDoc(doc(db, "motorizados", cred.user.uid), {
+      ...datos, usuario, activo, ratingSum: 0, ratingCount: 0, creado: serverTimestamp(),
+      pagadoHasta: Timestamp.fromDate(new Date(Date.now() + (pagado ? dias * DIA : 0))),
+    });
+    if (pagado && cobrar) await addDoc(collection(db, "pagos"), { motoUid: cred.user.uid, nombre: datos.nombre, monto: tarifas.cuota, fecha: serverTimestamp() });
+  }
+
+  async function crearMotoPrueba(boton) {
+    boton.disabled = true;
+    try {
+      await crearMoto(
+        { nombre: "Motorizado de Prueba", telefono: "+584140000000", moto: "Moto de prueba", placa: "PRUEBA1" },
+        "prueba", "prueba123", { pagado: true, activo: true, dias: 30, cobrar: false });
+      aviso("Listo: usuario «prueba», clave «prueba123». Ya sale en la app.");
+    } catch (err) {
+      console.error(err);
+      aviso(err.code === "auth/email-already-in-use" ? "El usuario «prueba» ya existe" : err.message || "No se pudo crear");
+      boton.disabled = false;
+    }
   }
 
   function formularioMoto(m) {
@@ -180,18 +211,7 @@ function iniciar() {
         if (m) {
           await updateDoc(doc(db, "motorizados", m.id), datos);
         } else {
-          const usuario = v.usuario.trim().toLowerCase();
-          if (motos.some((x) => x.usuario === usuario)) throw new Error("Ese usuario ya existe");
-          // Se usa una segunda conexión para crear la cuenta sin cerrar la sesión del admin.
-          const authSeg = authSecundaria();
-          const cred = await createUserWithEmailAndPassword(authSeg, correoDe(usuario), v.clave);
-          await signOut(authSeg);
-          const pagado = v.pagado === "on";
-          await setDoc(doc(db, "motorizados", cred.user.uid), {
-            ...datos, usuario, activo: false, ratingSum: 0, ratingCount: 0, creado: serverTimestamp(),
-            pagadoHasta: Timestamp.fromDate(new Date(Date.now() + (pagado ? tarifas.diasCuota * DIA : 0))),
-          });
-          if (pagado) await addDoc(collection(db, "pagos"), { motoUid: cred.user.uid, nombre: datos.nombre, monto: tarifas.cuota, fecha: serverTimestamp() });
+          await crearMoto(datos, v.usuario, v.clave, { pagado: v.pagado === "on" });
           aviso("Motorizado creado. Actívalo cuando esté de turno.");
         }
         cerrar();

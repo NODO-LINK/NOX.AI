@@ -16,7 +16,7 @@ if (!avisoSinConfigurar()) iniciar();
 function iniciar() {
   const L = window.L;
   let usuario = null, cliente = null, tarifas = null;
-  let rutaActual = "pedir", mapa = null;
+  let rutaActual = "motorizados", mapa = null;
   let motos = [], carreras = [], cancelarSubs = [];
   // Estado del formulario de pedido (se conserva al cambiar de pestaña).
   const pedido = { tipo: SERVICIOS[0], origen: null, destino: null, dirOrigen: "", dirDestino: "", nota: "", para: null, km: null, linea: null };
@@ -161,7 +161,7 @@ function iniciar() {
       }
       if (rutaActual === "carrera") vistaCarrera();
     }));
-    ir(carreraActual() ? "carrera" : "pedir");
+    ir(carreraActual() ? "carrera" : "motorizados");
   }
 
   const sinUbicacion = ({ ubicacion, ...resto }) => resto;
@@ -173,8 +173,10 @@ function iniciar() {
   }
 
   function ir(r) {
+    // "Pedir" ya no es pestaña: se llega desde "Pedir a este" y se marca Motorizados.
+    if (r === "pedir" && !pedido.para) r = "motorizados";
     rutaActual = r;
-    activarBarra(r);
+    activarBarra(r === "pedir" ? "motorizados" : r);
     if (mapa) { mapa.remove(); mapa = null; }
     seguimiento.alMover = null;
     ({ pedir: vistaPedir, motorizados: vistaMotorizados, carrera: vistaCarrera })[r]();
@@ -187,6 +189,7 @@ function iniciar() {
   function vistaPedir() {
     const activa = carreraActual();
     $("#vista").innerHTML = `
+      <button class="boton secundario chico" id="volver" style="margin-top:16px">${icono("flecha", "girada")} Motorizados</button>
       <h1 class="titulo">¿A dónde vamos?</h1>
       ${SERVICIOS.length > 1 ? `<div class="segmento" id="tipo">
         <button data-t="delivery">${icono("paquete")} Delivery</button><button data-t="mototaxi">${icono("moto")} Mototaxi</button>
@@ -277,8 +280,9 @@ function iniciar() {
     ["dir-origen", "dir-destino", "nota"].forEach((id) => $("#" + id).addEventListener("input", (e) => {
       pedido[{ "dir-origen": "dirOrigen", "dir-destino": "dirDestino", nota: "nota" }[id]] = e.target.value;
     }));
+    $("#volver").onclick = () => ir("motorizados");
     const quitar = $("#quitar-para");
-    if (quitar) quitar.onclick = () => { pedido.para = null; ir("pedir"); };
+    if (quitar) quitar.onclick = () => { pedido.para = null; ir("motorizados"); };
     if (pedido.origen && pedido.destino) mapa.fitBounds(L.latLngBounds([pedido.origen, pedido.destino]).pad(0.35), { animate: false });
     pintar();
     $("#pedir").onclick = enviarPedido;
@@ -352,8 +356,8 @@ function iniciar() {
     if (mapa) { mapa.remove(); mapa = null; }
     seguimiento.alMover = null;
     if (!c) {
-      $("#vista").innerHTML = `<div class="vacio">${icono("ruta")}No tienes carreras en curso.<br><button class="boton" id="ir-pedir">Pedir una carrera</button></div>`;
-      $("#ir-pedir").onclick = () => ir("pedir");
+      $("#vista").innerHTML = `<div class="vacio">${icono("ruta")}No tienes carreras en curso.<br><button class="boton" id="ir-pedir">Ver motorizados</button></div>`;
+      $("#ir-pedir").onclick = () => ir("motorizados");
       return;
     }
     if (c.estado === "terminada") return vistaCalificar(c);
@@ -460,9 +464,9 @@ function iniciar() {
       });
       await updateDoc(doc(db, "carreras", c.id), { calificada: true });
       aviso("¡Gracias por calificar!");
-      ir("pedir");
+      ir("motorizados");
     };
-    $("#omitir").onclick = async () => { await updateDoc(doc(db, "carreras", c.id), { calificada: true }); ir("pedir"); };
+    $("#omitir").onclick = async () => { await updateDoc(doc(db, "carreras", c.id), { calificada: true }); ir("motorizados"); };
   }
 
   // ---------- Seguimiento en vivo: widget flotante y aviso en la barra de notificaciones ----------

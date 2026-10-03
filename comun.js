@@ -190,12 +190,12 @@ export function activarBarra(ruta) {
   let ind = $(".indicador", barra);
   if (!ind) { ind = document.createElement("i"); ind.className = "indicador"; barra.prepend(ind); }
   const mover = () => {
-    const b = $(`button[data-ruta="${barra.dataset.ruta}"]`, barra);
+    const b = $(`button[data-ruta="${barra.dataset.activa}"]`, barra);
     if (!b) return;
     ind.style.width = b.offsetWidth + "px";
     ind.style.transform = `translateX(${b.offsetLeft}px)`;
   };
-  barra.dataset.ruta = ruta;
+  barra.dataset.activa = ruta;
   $$("button", barra).forEach((b) => b.classList.toggle("activo", b.dataset.ruta === ruta));
   mover();
   if (!barra.dataset.escucha) { barra.dataset.escucha = "1"; addEventListener("resize", mover); }
