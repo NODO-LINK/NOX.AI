@@ -1,0 +1,12 @@
+{
+  "name": "MojánYa — Delivery en El Moján",
+  "short_name": "MojánYa",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ff4d2e",
+  "lang": "es",
+  "icons": [
+    { "src": "icono.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

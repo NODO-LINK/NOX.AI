@@ -1,183 +1,133 @@
-// ================================================================
-//  SPOT — DATOS DEL CATÁLOGO (es el único archivo que hay que editar)
-// ================================================================
-//  Los textos con { es: "…", en: "…" } se muestran según el idioma.
-//  Las fotos y el video van en la carpeta "imagenes/".
-//  Lo que está vacío ("") se muestra como relleno gris.
-// ================================================================
+// Moto Mandados — TODO el contenido de la app está aquí.
+// Cambia nombres, precios, teléfonos y comercios en este archivo. No hace falta tocar app.js.
 
-window.SPOT = {
+window.APP = {
   marca: {
-    nombre: "SPOT",
-    logo: "", // ej. "imagenes/logo.svg" — si está vacío se muestra el nombre
-    colorAcento: "#111111", // color de botones y detalles
-    whatsapp: "", // con código de país, solo dígitos. ej. "5215512345678"
-    instagram: "", // usuario sin @
-    tiktok: "", // usuario sin @
-    // Estadísticas gratis con GoatCounter (goatcounter.com): pon aquí tu código, ej. "spot"
-    estadisticas: "",
-    // Dirección pública del sitio cuando esté publicado (para el QR y compartir)
-    url: "https://nodo-link.github.io/NOX.AI/",
+    nombre: "MojánYa",
+    eslogan: "Delivery en moto en El Moján",
+    // Número de la central que recibe los pedidos por WhatsApp (con código de país, sin + ni espacios).
+    whatsapp: "584140000000",
+    instagram: "", // ej. "mojanya"
+    // Dirección pública de la app (la que te da GitHub Pages).
+    url: "",
   },
 
-  portada: {
-    video: "", // ej. "imagenes/portada.mp4" (corto, sin sonido, menos de 10 MB)
-    poster: "", // imagen que se ve mientras carga el video
-    titulo: { es: "Encuentra tu estilo", en: "Find your style" },
-    subtitulo: { es: "Nueva colección", en: "New collection" },
-  },
+  // Tasa del día (Bs por 1 USD). Cámbiala cada día; los precios se escriben en USD.
+  tasaBs: 40.0,
 
-  // Listas para los filtros
-  tipos: {
-    camisetas: { es: "Camisetas", en: "T-shirts" },
-    sudaderas: { es: "Sudaderas", en: "Hoodies" },
-    pantalones: { es: "Pantalones", en: "Pants" },
-    chaquetas: { es: "Chaquetas", en: "Jackets" },
-  },
-  colecciones: {
-    temporada: { es: "Temporada", en: "Season" },
-    basicos: { es: "Básicos", en: "Essentials" },
-  },
-  generos: {
-    hombre: { es: "Hombre", en: "Men" },
-    mujer: { es: "Mujer", en: "Women" },
-    unisex: { es: "Unisex", en: "Unisex" },
-  },
+  // Horario de la central (24 h). Fuera de horario la app avisa que no hay motorizados.
+  horario: { abre: "08:00", cierra: "22:00" },
 
-  // ---------------- PRENDAS ----------------
-  // etiqueta: "nuevo" | "agotado" | "limitada" | "proximamente" | ""
-  // colores: cada color tiene su foto; el primero es el que se ve al entrar.
-  prendas: [
+  // Zonas y costo del delivery en USD.
+  zonas: [
+    { id: "centro", nombre: "El Moján — casco central", costo: 1.0 },
+    { id: "moj-afueras", nombre: "El Moján — sectores alejados", costo: 1.5 },
+    { id: "santacruz", nombre: "Santa Cruz de Mara", costo: 2.5 },
+    { id: "carrasquero", nombre: "Carrasquero", costo: 4.0 },
+  ],
+
+  // Formas de pago que aceptas.
+  pagos: [
+    { id: "efectivo-usd", nombre: "Efectivo en dólares" },
+    { id: "efectivo-bs", nombre: "Efectivo en bolívares" },
+    { id: "pago-movil", nombre: "Pago móvil", detalle: "Banco 0000 · C.I. V-00.000.000 · 0414-0000000" },
+    { id: "zelle", nombre: "Zelle", detalle: "correo@ejemplo.com" },
+  ],
+
+  categorias: [
+    { id: "comida", nombre: "Comida", icono: "🍔" },
+    { id: "pizza", nombre: "Pizza", icono: "🍕" },
+    { id: "pollo", nombre: "Pollo", icono: "🍗" },
+    { id: "mercado", nombre: "Mercado", icono: "🛒" },
+    { id: "farmacia", nombre: "Farmacia", icono: "💊" },
+    { id: "bebidas", nombre: "Bebidas", icono: "🥤" },
+  ],
+
+  // Comercios. Los de abajo son EJEMPLOS: cámbialos por los reales.
+  // abierto: false lo muestra como "Cerrado". tiempo: minutos aproximados de entrega.
+  comercios: [
     {
-      id: "prenda-1",
-      nombre: { es: "Nombre de la prenda 1", en: "Garment name 1" },
-      tipo: "camisetas",
-      coleccion: "temporada",
-      genero: "unisex",
-      etiqueta: "nuevo",
-      estilo: [
-        { valor: { es: "Casual", en: "Casual" }, etiqueta: { es: "Estilo", en: "Style" } },
-        { valor: { es: "Diario", en: "Everyday" }, etiqueta: { es: "Ocasión", en: "Occasion" } },
-        { valor: { es: "Verano", en: "Summer" }, etiqueta: { es: "Temporada", en: "Season" } },
-      ],
-      colores: [
-        { nombre: { es: "Negro", en: "Black" }, hex: "#1a1a1a", imagen: "" },
-        { nombre: { es: "Blanco", en: "White" }, hex: "#f4f4f2", imagen: "" },
-        { nombre: { es: "Beige", en: "Beige" }, hex: "#d8c8b0", imagen: "" },
-      ],
-      descripcion: { es: "Descripción breve de la prenda.", en: "Short description of the garment." },
-      detalles: [
-        { es: "Detalle 1", en: "Detail 1" },
-        { es: "Detalle 2", en: "Detail 2" },
-        { es: "Detalle 3", en: "Detail 3" },
-      ],
-      cuidado: [
-        { es: "Indicación de cuidado 1", en: "Care instruction 1" },
-        { es: "Indicación de cuidado 2", en: "Care instruction 2" },
+      id: "burger-moj",
+      nombre: "Burger del Malecón (ejemplo)",
+      categoria: "comida",
+      descripcion: "Hamburguesas y perros calientes",
+      tiempo: "25–35",
+      abierto: true,
+      imagen: "", // ej. "imagenes/burger.jpg"
+      productos: [
+        { id: "h1", nombre: "Hamburguesa clásica", detalle: "Carne, queso, tomate, lechuga y papas", precio: 4.5, seccion: "Hamburguesas" },
+        { id: "h2", nombre: "Hamburguesa doble", detalle: "Doble carne, doble queso, tocineta", precio: 6.5, seccion: "Hamburguesas" },
+        { id: "p1", nombre: "Perro caliente", detalle: "Con todo", precio: 2.0, seccion: "Perros" },
+        { id: "b1", nombre: "Refresco 1,5 L", detalle: "", precio: 2.0, seccion: "Bebidas" },
       ],
     },
     {
-      id: "prenda-2",
-      nombre: { es: "Nombre de la prenda 2", en: "Garment name 2" },
-      tipo: "sudaderas",
-      coleccion: "temporada",
-      genero: "unisex",
-      etiqueta: "limitada",
-      estilo: [
-        { valor: { es: "Urbano", en: "Urban" }, etiqueta: { es: "Estilo", en: "Style" } },
-        { valor: { es: "Salir", en: "Going out" }, etiqueta: { es: "Ocasión", en: "Occasion" } },
-        { valor: { es: "Invierno", en: "Winter" }, etiqueta: { es: "Temporada", en: "Season" } },
+      id: "pizzeria-mara",
+      nombre: "Pizzería Mara (ejemplo)",
+      categoria: "pizza",
+      descripcion: "Pizzas artesanales al horno",
+      tiempo: "35–45",
+      abierto: true,
+      imagen: "",
+      productos: [
+        { id: "z1", nombre: "Pizza margarita mediana", detalle: "Salsa de tomate, mozzarella y albahaca", precio: 7.0, seccion: "Pizzas" },
+        { id: "z2", nombre: "Pizza pepperoni mediana", detalle: "", precio: 8.5, seccion: "Pizzas" },
+        { id: "z3", nombre: "Pizza familiar mixta", detalle: "Jamón, maíz, pepperoni y champiñones", precio: 13.0, seccion: "Pizzas" },
       ],
-      colores: [
-        { nombre: { es: "Gris", en: "Grey" }, hex: "#9a9a96", imagen: "" },
-        { nombre: { es: "Negro", en: "Black" }, hex: "#1a1a1a", imagen: "" },
-      ],
-      descripcion: { es: "Descripción breve de la prenda.", en: "Short description of the garment." },
-      detalles: [{ es: "Detalle 1", en: "Detail 1" }, { es: "Detalle 2", en: "Detail 2" }],
-      cuidado: [{ es: "Indicación de cuidado 1", en: "Care instruction 1" }],
     },
     {
-      id: "prenda-3",
-      nombre: { es: "Nombre de la prenda 3", en: "Garment name 3" },
-      tipo: "pantalones",
-      coleccion: "basicos",
-      genero: "hombre",
-      etiqueta: "",
-      estilo: [
-        { valor: { es: "Clásico", en: "Classic" }, etiqueta: { es: "Estilo", en: "Style" } },
-        { valor: { es: "Oficina", en: "Office" }, etiqueta: { es: "Ocasión", en: "Occasion" } },
+      id: "pollos-guajira",
+      nombre: "Pollos La Guajira (ejemplo)",
+      categoria: "pollo",
+      descripcion: "Pollo a la brasa y contornos",
+      tiempo: "30–40",
+      abierto: true,
+      imagen: "",
+      productos: [
+        { id: "c1", nombre: "Pollo entero", detalle: "Con yuca, ensalada y salsas", precio: 12.0, seccion: "Pollo" },
+        { id: "c2", nombre: "Medio pollo", detalle: "Con yuca y ensalada", precio: 6.5, seccion: "Pollo" },
+        { id: "c3", nombre: "Porción de tajadas", detalle: "", precio: 1.5, seccion: "Contornos" },
       ],
-      colores: [{ nombre: { es: "Azul marino", en: "Navy" }, hex: "#1f2a44", imagen: "" }],
-      descripcion: { es: "Descripción breve de la prenda.", en: "Short description of the garment." },
-      detalles: [{ es: "Detalle 1", en: "Detail 1" }],
-      cuidado: [{ es: "Indicación de cuidado 1", en: "Care instruction 1" }],
     },
     {
-      id: "prenda-4",
-      nombre: { es: "Nombre de la prenda 4", en: "Garment name 4" },
-      tipo: "chaquetas",
-      coleccion: "temporada",
-      genero: "mujer",
-      etiqueta: "nuevo",
-      estilo: [
-        { valor: { es: "Elegante", en: "Elegant" }, etiqueta: { es: "Estilo", en: "Style" } },
-        { valor: { es: "Noche", en: "Evening" }, etiqueta: { es: "Ocasión", en: "Occasion" } },
-        { valor: { es: "Otoño", en: "Fall" }, etiqueta: { es: "Temporada", en: "Season" } },
+      id: "farmacia-moj",
+      nombre: "Farmacia Central (ejemplo)",
+      categoria: "farmacia",
+      descripcion: "Medicinas y cuidado personal",
+      tiempo: "20–30",
+      abierto: false,
+      imagen: "",
+      productos: [
+        { id: "f1", nombre: "Acetaminofén 500 mg (10 tab.)", detalle: "", precio: 1.2, seccion: "Medicinas" },
+        { id: "f2", nombre: "Suero oral", detalle: "", precio: 1.8, seccion: "Medicinas" },
       ],
-      colores: [
-        { nombre: { es: "Camel", en: "Camel" }, hex: "#b08a5a", imagen: "" },
-        { nombre: { es: "Negro", en: "Black" }, hex: "#1a1a1a", imagen: "" },
-      ],
-      descripcion: { es: "Descripción breve de la prenda.", en: "Short description of the garment." },
-      detalles: [{ es: "Detalle 1", en: "Detail 1" }, { es: "Detalle 2", en: "Detail 2" }],
-      cuidado: [{ es: "Indicación de cuidado 1", en: "Care instruction 1" }],
     },
     {
-      id: "prenda-5",
-      nombre: { es: "Nombre de la prenda 5", en: "Garment name 5" },
-      tipo: "camisetas",
-      coleccion: "basicos",
-      genero: "mujer",
-      etiqueta: "agotado",
-      estilo: [{ valor: { es: "Básico", en: "Basic" }, etiqueta: { es: "Estilo", en: "Style" } }],
-      colores: [{ nombre: { es: "Blanco", en: "White" }, hex: "#f4f4f2", imagen: "" }],
-      descripcion: { es: "Descripción breve de la prenda.", en: "Short description of the garment." },
-      detalles: [{ es: "Detalle 1", en: "Detail 1" }],
-      cuidado: [{ es: "Indicación de cuidado 1", en: "Care instruction 1" }],
-    },
-    {
-      id: "prenda-6",
-      nombre: { es: "Nombre de la prenda 6", en: "Garment name 6" },
-      tipo: "sudaderas",
-      coleccion: "temporada",
-      genero: "hombre",
-      etiqueta: "proximamente",
-      estilo: [{ valor: { es: "Deportivo", en: "Sporty" }, etiqueta: { es: "Estilo", en: "Style" } }],
-      colores: [{ nombre: { es: "Verde oliva", en: "Olive" }, hex: "#5b6142", imagen: "" }],
-      descripcion: { es: "Descripción breve de la prenda.", en: "Short description of the garment." },
-      detalles: [{ es: "Detalle 1", en: "Detail 1" }],
-      cuidado: [{ es: "Indicación de cuidado 1", en: "Care instruction 1" }],
+      id: "bodegon-moj",
+      nombre: "Bodegón El Puerto (ejemplo)",
+      categoria: "mercado",
+      descripcion: "Víveres, charcutería y licores",
+      tiempo: "25–40",
+      abierto: true,
+      imagen: "",
+      productos: [
+        { id: "m1", nombre: "Harina de maíz 1 kg", detalle: "", precio: 1.3, seccion: "Víveres" },
+        { id: "m2", nombre: "Arroz 1 kg", detalle: "", precio: 1.4, seccion: "Víveres" },
+        { id: "m3", nombre: "Hielo (bolsa)", detalle: "", precio: 1.0, seccion: "Bebidas" },
+        { id: "m4", nombre: "Agua mineral 5 L", detalle: "", precio: 2.0, seccion: "Bebidas" },
+      ],
     },
   ],
 
-  // ---------------- PÁGINAS EXTRA ----------------
-  paginas: {
-    nosotros: {
-      titulo: { es: "Sobre nosotros", en: "About us" },
-      imagen: "",
-      parrafos: [
-        { es: "Aquí va la historia de Spot: cómo empezó y qué la hace diferente.", en: "Spot's story goes here: how it started and what makes it different." },
-        { es: "Segundo párrafo sobre la idea y los valores de la marca.", en: "Second paragraph about the brand's idea and values." },
-      ],
-    },
-    envios: {
-      titulo: { es: "Envíos", en: "Shipping" },
-      imagen: "",
-      parrafos: [
-        { es: "Enviamos a todo el país.", en: "We ship nationwide." },
-        { es: "Tiempos y forma de envío: escribe aquí los detalles.", en: "Shipping times and methods: write the details here." },
-        { es: "¿Dudas? Escríbenos por WhatsApp.", en: "Questions? Message us on WhatsApp." },
-      ],
-    },
+  // Mandados: el cliente pide que un motorizado busque y lleve algo (encomiendas, compras, documentos).
+  mandados: {
+    titulo: "Mandados y encomiendas",
+    texto: "Un motorizado busca lo que necesites y te lo lleva. El costo depende de la zona de entrega.",
+  },
+
+  // Formulario para motorizados que quieran trabajar con ustedes.
+  motorizados: {
+    titulo: "¿Tienes moto? Trabaja con nosotros",
+    requisitos: ["Moto propia en buen estado", "Licencia y cédula vigentes", "Teléfono con WhatsApp", "Conocer El Moján y sus alrededores"],
   },
 };

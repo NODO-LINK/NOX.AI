@@ -1,321 +1,396 @@
-// Spot — arma todas las páginas a partir de datos.js.
+// MojánYa — arma toda la app a partir de datos.js.
 // Normalmente no hace falta tocar este archivo.
 
 (() => {
-  const D = window.SPOT;
+  const D = window.APP;
   const M = D.marca;
   const $ = (sel, raiz = document) => raiz.querySelector(sel);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const guardado = {
-    get(k) { try { return localStorage.getItem("spot." + k); } catch { return null; } },
-    set(k, v) { try { localStorage.setItem("spot." + k, v); } catch {} },
+    get(k, def) { try { const v = localStorage.getItem("mojanya." + k); return v ? JSON.parse(v) : def; } catch { return def; } },
+    set(k, v) { try { localStorage.setItem("mojanya." + k, JSON.stringify(v)); } catch {} },
   };
 
-  // ---------- Idioma ----------
-  // Al entrar se usa el idioma del móvil; el botón ES / EN lo cambia y se recuerda.
-  let idioma = guardado.get("idioma") || ((navigator.language || "es").toLowerCase().startsWith("en") ? "en" : "es");
-  const tx = (v) => (v && typeof v === "object" ? v[idioma] ?? v.es ?? "" : v ?? "");
+  const usd = (n) => "$" + Number(n).toFixed(2);
+  const bs = (n) => "Bs " + (Number(n) * D.tasaBs).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const comercio = (id) => D.comercios.find((c) => c.id === id);
+  const categoria = (id) => D.categorias.find((c) => c.id === id) || { icono: "🏪", nombre: "" };
+  const zona = (id) => D.zonas.find((z) => z.id === id);
+  const pago = (id) => D.pagos.find((p) => p.id === id);
 
-  const TEXTOS = {
-    catalogo: { es: "Catálogo", en: "Catalog" },
-    nosotros: { es: "Nosotros", en: "About" },
-    envios: { es: "Envíos", en: "Shipping" },
-    recienLlegado: { es: "Recién llegado", en: "New in" },
-    verCatalogo: { es: "Ver catálogo", en: "View catalog" },
-    todos: { es: "Todos", en: "All" },
-    tipo: { es: "Tipo", en: "Type" },
-    coleccion: { es: "Colección", en: "Collection" },
-    genero: { es: "Género", en: "Gender" },
-    sinResultados: { es: "No hay prendas con estos filtros.", en: "No items match these filters." },
-    color: { es: "Color", en: "Color" },
-    detalles: { es: "Detalles", en: "Details" },
-    cuidado: { es: "Cuidado de la prenda", en: "Garment care" },
-    enviosTitulo: { es: "Envíos a todo el país", en: "Nationwide shipping" },
-    enviosTexto: { es: "Consulta tiempos y formas de envío.", en: "Check shipping times and methods." },
-    masInfo: { es: "Más información", en: "Learn more" },
-    preguntar: { es: "Preguntar por WhatsApp", en: "Ask on WhatsApp" },
-    compartir: { es: "Compartir", en: "Share" },
-    enlaceCopiado: { es: "Enlace copiado", en: "Link copied" },
-    otrasPrendas: { es: "También te puede gustar", en: "You may also like" },
-    volver: { es: "← Volver al catálogo", en: "← Back to catalog" },
-    noEncontrada: { es: "Esta prenda no existe o ya no está disponible.", en: "This item doesn't exist or is no longer available." },
-    mensajeWa: {
-      es: "Hola Spot, me interesa la prenda «{p}». ¿Me das más información?",
-      en: "Hi Spot, I'm interested in «{p}». Could you give me more information?",
-    },
-    qrTitulo: { es: "Código QR", en: "QR code" },
-    qrTexto: { es: "Escanéalo para abrir el catálogo de Spot.", en: "Scan it to open the Spot catalog." },
-    qrDescargar: { es: "Descargar QR", en: "Download QR" },
-    qrSinUrl: {
-      es: "Aún no hay dirección pública. Cuando el sitio esté publicado, pon su dirección en «url» dentro de datos.js. Mientras tanto, el QR apunta a esta página.",
-      en: "There's no public address yet. Once the site is published, set its address in «url» in datos.js. Until then, the QR points to this page.",
-    },
-    etiquetas: {
-      nuevo: { es: "Nuevo", en: "New" },
-      agotado: { es: "Agotado", en: "Sold out" },
-      limitada: { es: "Edición limitada", en: "Limited edition" },
-      proximamente: { es: "Próximamente", en: "Coming soon" },
-    },
+  // ---------- Horario de la central ----------
+  const minutos = (hhmm) => { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; };
+  function centralAbierta() {
+    const ahora = new Date();
+    const m = ahora.getHours() * 60 + ahora.getMinutes();
+    const a = minutos(D.horario.abre), c = minutos(D.horario.cierra);
+    return a <= c ? m >= a && m < c : m >= a || m < c; // permite horarios que pasan la medianoche
+  }
+
+  // ---------- Carrito (un comercio por pedido) ----------
+  let carrito = guardado.get("carrito", { comercio: null, items: {} });
+  const cliente = guardado.get("cliente", {});
+  const guardarCarrito = () => { guardado.set("carrito", carrito); contador(); };
+  const lineas = () => {
+    const c = comercio(carrito.comercio);
+    if (!c) return [];
+    return Object.entries(carrito.items)
+      .map(([id, cant]) => ({ p: c.productos.find((p) => p.id === id), cant }))
+      .filter((l) => l.p && l.cant > 0);
   };
-  const t = (clave) => tx(TEXTOS[clave]);
+  const subtotal = () => lineas().reduce((s, l) => s + l.p.precio * l.cant, 0);
+  const unidades = () => lineas().reduce((s, l) => s + l.cant, 0);
 
-  // ---------- Utilidades ----------
-  const ICONO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="4" width="18" height="16" rx="1"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5-9 8"/></svg>`;
-  const foto = (src, alt = "") =>
-    src ? `<img src="${esc(src)}" alt="${esc(alt)}" loading="lazy" />` : `<div class="relleno" role="img" aria-label="${esc(alt)}">${ICONO}</div>`;
-  const etiqueta = (p) => (p.etiqueta && TEXTOS.etiquetas[p.etiqueta] ? `<span class="etiqueta e-${p.etiqueta}">${esc(tx(TEXTOS.etiquetas[p.etiqueta]))}</span>` : "");
-  const enlacePrenda = (p) => `prenda.html?id=${encodeURIComponent(p.id)}`;
-  const urlBase = () => (M.url ? M.url.replace(/\/?$/, "/") : location.href.replace(/[^/]*([?#].*)?$/, ""));
-
-  document.documentElement.lang = idioma;
-  document.documentElement.style.setProperty("--acento", M.colorAcento || "#111");
-
-  // ---------- Cabecera y pie (comunes) ----------
-  function pintarCabecera() {
-    const marca = M.logo ? `<img src="${esc(M.logo)}" alt="${esc(M.nombre)}" />` : esc(M.nombre);
-    $("#cabecera").innerHTML = `
-      <a class="logo" href="index.html">${marca}</a>
-      <nav class="menu">
-        <a href="index.html#catalogo">${t("catalogo")}</a>
-        <a href="info.html?p=nosotros">${t("nosotros")}</a>
-        <a href="info.html?p=envios">${t("envios")}</a>
-        <button type="button" class="idioma" id="cambiarIdioma" aria-label="Cambiar idioma">${idioma === "es" ? "EN" : "ES"}</button>
-      </nav>`;
-    $("#cambiarIdioma").addEventListener("click", () => {
-      idioma = idioma === "es" ? "en" : "es";
-      guardado.set("idioma", idioma);
-      location.reload();
-    });
-  }
-
-  function pintarPie() {
-    const redes = [
-      M.instagram && `<a href="https://instagram.com/${encodeURIComponent(M.instagram)}" target="_blank" rel="noopener">Instagram</a>`,
-      M.tiktok && `<a href="https://www.tiktok.com/@${encodeURIComponent(M.tiktok)}" target="_blank" rel="noopener">TikTok</a>`,
-      !M.instagram && `<span class="pendiente">Instagram</span>`,
-      !M.tiktok && `<span class="pendiente">TikTok</span>`,
-    ].filter(Boolean).join("");
-    $("#pie").innerHTML = `
-      <div class="pie-marca">${esc(M.nombre)}</div>
-      <div class="pie-enlaces">
-        ${redes}
-        <a href="info.html?p=envios">${t("envios")}</a>
-        <a href="info.html?p=nosotros">${t("nosotros")}</a>
-        <a href="qr.html">QR</a>
-      </div>
-      <div class="pie-copy">© ${new Date().getFullYear()} ${esc(M.nombre)}</div>`;
-  }
-
-  // ---------- Animaciones suaves al bajar ----------
-  function animar() {
-    const els = document.querySelectorAll(".aparece");
-    if (!("IntersectionObserver" in window) || matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      els.forEach((e) => e.classList.add("visible"));
-      return;
+  function cambiar(comercioId, prodId, delta) {
+    if (carrito.comercio && carrito.comercio !== comercioId && unidades() > 0) {
+      if (!confirm("Tu carrito tiene productos de otro comercio. ¿Vaciarlo y empezar uno nuevo?")) return;
+      carrito = { comercio: null, items: {} };
     }
-    const io = new IntersectionObserver((entradas) => {
-      for (const e of entradas) if (e.isIntersecting) { e.target.classList.add("visible"); io.unobserve(e.target); }
-    }, { rootMargin: "0px 0px -40px 0px" });
-    els.forEach((e) => io.observe(e));
+    carrito.comercio = comercioId;
+    const n = Math.max(0, (carrito.items[prodId] || 0) + delta);
+    if (n) carrito.items[prodId] = n; else delete carrito.items[prodId];
+    if (!Object.keys(carrito.items).length) carrito.comercio = null;
+    guardarCarrito();
   }
 
-  // ---------- Tarjeta de prenda (portada) ----------
-  const tarjeta = (p) => `
-    <a class="tarjeta aparece" href="${enlacePrenda(p)}">
-      <div class="tarjeta-foto">${foto(p.colores?.[0]?.imagen, tx(p.nombre))}${etiqueta(p)}</div>
-      <div class="tarjeta-info">
-        <h3>${esc(tx(p.nombre))}</h3>
-        <p>${esc(tx(D.tipos[p.tipo]))}</p>
-        ${p.colores?.length > 1 ? `<div class="puntos">${p.colores.map((c) => `<span style="background:${esc(c.hex)}" title="${esc(tx(c.nombre))}"></span>`).join("")}</div>` : ""}
+  function contador() {
+    const n = unidades(), b = $("#contador");
+    b.hidden = !n;
+    b.textContent = n;
+  }
+
+  // ---------- Avisos, WhatsApp, pedidos guardados ----------
+  let temporizador;
+  function aviso(texto) {
+    const a = $("#aviso");
+    a.textContent = texto;
+    a.classList.add("ver");
+    clearTimeout(temporizador);
+    temporizador = setTimeout(() => a.classList.remove("ver"), 2600);
+  }
+  const abrirWhatsApp = (texto) => window.open(`https://wa.me/${M.whatsapp}?text=${encodeURIComponent(texto)}`, "_blank");
+  function guardarPedido(tipo, titulo, resumen, total) {
+    const pedidos = guardado.get("pedidos", []);
+    pedidos.unshift({ tipo, titulo, resumen, total, fecha: new Date().toISOString() });
+    guardado.set("pedidos", pedidos.slice(0, 30));
+  }
+
+  // ---------- Ubicación (enlace de Google Maps para el motorizado) ----------
+  let ubicacion = null;
+  function pedirUbicacion(el) {
+    if (!navigator.geolocation) { el.textContent = "Tu teléfono no permite compartir la ubicación."; return; }
+    el.textContent = "Buscando tu ubicación…";
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        ubicacion = `https://maps.google.com/?q=${pos.coords.latitude.toFixed(6)},${pos.coords.longitude.toFixed(6)}`;
+        el.innerHTML = `✅ Ubicación agregada al pedido`;
+      },
+      () => { el.textContent = "No se pudo obtener la ubicación. Escribe bien la dirección y un punto de referencia."; },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  }
+
+  // ---------- Partes comunes ----------
+  function cabecera({ titulo, sub, atras } = {}) {
+    const abierta = centralAbierta();
+    $("#cabecera").innerHTML = `<div class="dentro">
+      ${atras ? `<button class="atras" aria-label="Volver" onclick="history.length > 1 ? history.back() : location.hash = '#/'">←</button>` : ""}
+      <div><div class="logo">${esc(titulo || M.nombre)}</div><div class="sub">${esc(sub ?? M.eslogan)}</div></div>
+      <span class="estado">${abierta ? "🟢 Motorizados activos" : "🔴 Cerrado"}</span>
+    </div>`;
+  }
+
+  const fotoComercio = (c) =>
+    `<div class="foto">${c.imagen ? `<img src="${esc(c.imagen)}" alt="" loading="lazy">` : categoria(c.categoria).icono}</div>`;
+
+  const camposCliente = () => `
+    <label for="nombre">Tu nombre</label>
+    <input id="nombre" autocomplete="name" value="${esc(cliente.nombre)}" required>
+    <label for="telefono">Teléfono</label>
+    <input id="telefono" type="tel" autocomplete="tel" value="${esc(cliente.telefono)}" placeholder="0414-0000000" required>
+    <label for="zona">Zona de entrega</label>
+    <select id="zona">${D.zonas.map((z) => `<option value="${z.id}" ${z.id === cliente.zona ? "selected" : ""}>${esc(z.nombre)} — ${usd(z.costo)}</option>`).join("")}</select>
+    <label for="direccion">Dirección y punto de referencia</label>
+    <textarea id="direccion" placeholder="Calle, casa, color de la casa, al lado de…" required>${esc(cliente.direccion)}</textarea>
+    <p class="ubicacion"><button type="button" class="enlace" id="btn-ubicacion">📍 Agregar mi ubicación actual</button></p>`;
+
+  const camposPago = () => `
+    <div class="opciones">${D.pagos.map((p, i) => `
+      <label class="opcion"><input type="radio" name="pago" value="${p.id}" ${(cliente.pago ? p.id === cliente.pago : i === 0) ? "checked" : ""}>
+      <span>${esc(p.nombre)}${p.detalle ? `<small>${esc(p.detalle)}</small>` : ""}</span></label>`).join("")}
+    </div>`;
+
+  function leerCliente() {
+    const datos = {
+      nombre: $("#nombre").value.trim(),
+      telefono: $("#telefono").value.trim(),
+      zona: $("#zona").value,
+      direccion: $("#direccion").value.trim(),
+      pago: ($("input[name=pago]:checked") || {}).value,
+    };
+    if (!datos.nombre || !datos.telefono || !datos.direccion) { aviso("Completa tu nombre, teléfono y dirección"); return null; }
+    Object.assign(cliente, datos);
+    guardado.set("cliente", cliente);
+    return datos;
+  }
+
+  const textoCliente = (d) => [
+    `👤 ${d.nombre} · ${d.telefono}`,
+    `📍 ${zona(d.zona).nombre}`,
+    `🏠 ${d.direccion}`,
+    ubicacion ? `🗺️ ${ubicacion}` : "",
+  ].filter(Boolean).join("\n");
+
+  const avisoCerrado = () => centralAbierta() ? "" :
+    `<p class="nota">⚠️ Ahora mismo estamos cerrados (horario ${D.horario.abre}–${D.horario.cierra}). Puedes enviar tu pedido y te respondemos al abrir.</p>`;
+
+  // ---------- Vistas ----------
+  let filtroCat = null, busqueda = "";
+
+  function vistaInicio() {
+    cabecera();
+    const v = $("#vista");
+    v.innerHTML = `
+      <div class="buscador"><input id="buscar" type="search" placeholder="¿Qué se te antoja hoy?" value="${esc(busqueda)}"></div>
+      <div class="categorias">${D.categorias.map((c) =>
+        `<button class="cat ${c.id === filtroCat ? "activa" : ""}" data-cat="${c.id}"><span>${c.icono}</span>${esc(c.nombre)}</button>`).join("")}
       </div>
-    </a>`;
+      <a class="banner" href="#/mandado"><span class="emoji">🛵</span><span><b>${esc(D.mandados.titulo)}</b><small>Te buscamos y llevamos lo que sea</small></span></a>
+      <h2 class="titulo">Comercios</h2>
+      <div class="lista" id="lista"></div>
+      <a class="banner" href="#/motorizados" style="margin-top:20px"><span class="emoji">🏍️</span><span><b>${esc(D.motorizados.titulo)}</b><small>Gana dinero haciendo entregas</small></span></a>`;
 
-  // ---------- Página: portada ----------
-  function portada() {
-    const P = D.portada;
-    $("#hero").innerHTML = `
-      ${P.video
-        ? `<video class="hero-video" autoplay muted loop playsinline ${P.poster ? `poster="${esc(P.poster)}"` : ""}><source src="${esc(P.video)}" /></video>`
-        : `<div class="hero-relleno"><span>Video de portada</span></div>`}
-      <div class="hero-texto">
-        <p class="hero-sub">${esc(tx(P.subtitulo))}</p>
-        <h1>${esc(tx(P.titulo))}</h1>
-        <a class="boton-claro" href="#catalogo">${t("verCatalogo")}</a>
-      </div>`;
+    const pintar = () => {
+      const q = busqueda.toLowerCase();
+      const lista = D.comercios
+        .filter((c) => !filtroCat || c.categoria === filtroCat)
+        .filter((c) => !q || [c.nombre, c.descripcion, ...c.productos.map((p) => p.nombre)].join(" ").toLowerCase().includes(q))
+        .sort((a, b) => b.abierto - a.abierto);
+      $("#lista").innerHTML = lista.length ? lista.map((c) => `
+        <a class="comercio ${c.abierto ? "" : "cerrado"}" href="#/comercio/${c.id}">
+          ${fotoComercio(c)}
+          <div><h3>${esc(c.nombre)}</h3><p>${esc(c.descripcion)}</p>
+            <div class="chips"><span class="chip ${c.abierto ? "ok" : "no"}">${c.abierto ? "● Abierto" : "Cerrado"}</span>
+            <span class="chip">⏱ ${esc(c.tiempo)} min</span></div></div>
+        </a>`).join("") : `<div class="vacio"><span>🔎</span>No encontramos comercios con esa búsqueda.</div>`;
+    };
+    pintar();
+    $("#buscar").addEventListener("input", (e) => { busqueda = e.target.value; pintar(); });
+    v.querySelectorAll(".cat").forEach((b) => b.addEventListener("click", () => {
+      filtroCat = filtroCat === b.dataset.cat ? null : b.dataset.cat;
+      v.querySelectorAll(".cat").forEach((x) => x.classList.toggle("activa", x.dataset.cat === filtroCat));
+      pintar();
+    }));
+  }
 
-    const nuevos = D.prendas.filter((p) => p.etiqueta === "nuevo");
-    $("#nuevos-bloque").hidden = nuevos.length === 0;
-    $("#nuevos").innerHTML = nuevos.map(tarjeta).join("");
+  function vistaComercio(id) {
+    const c = comercio(id);
+    if (!c) { location.hash = "#/"; return; }
+    cabecera({ titulo: c.nombre, sub: categoria(c.categoria).nombre, atras: true });
+    const secciones = [...new Set(c.productos.map((p) => p.seccion || "Productos"))];
+    const v = $("#vista");
 
-    // Filtros
-    const filtro = { tipo: "", coleccion: "", genero: "" };
-    const grupos = [
-      ["tipo", D.tipos],
-      ["coleccion", D.colecciones],
-      ["genero", D.generos],
-    ];
-    $("#filtros").innerHTML = grupos.map(([clave, lista]) => {
-      const usados = Object.keys(lista).filter((k) => D.prendas.some((p) => p[clave] === k));
-      return `
-        <label class="filtro">
-          <span>${t(clave)}</span>
-          <select data-filtro="${clave}">
-            <option value="">${t("todos")}</option>
-            ${usados.map((k) => `<option value="${esc(k)}">${esc(tx(lista[k]))}</option>`).join("")}
-          </select>
-        </label>`;
-    }).join("");
-
-    function pintar() {
-      const lista = D.prendas.filter((p) => Object.entries(filtro).every(([k, v]) => !v || p[k] === v));
-      $("#rejilla").innerHTML = lista.map(tarjeta).join("");
-      $("#vacio").hidden = lista.length > 0;
-      animar();
-    }
-    $("#filtros").addEventListener("change", (e) => {
-      const s = e.target.closest("[data-filtro]");
-      if (s) { filtro[s.dataset.filtro] = s.value; pintar(); }
-    });
+    const pintar = () => {
+      const enCarrito = carrito.comercio === c.id ? carrito.items : {};
+      v.innerHTML = `
+        <div class="portada">${fotoComercio(c)}<div><h1>${esc(c.nombre)}</h1><p>${esc(c.descripcion)}</p>
+          <div class="chips"><span class="chip ${c.abierto ? "ok" : "no"}">${c.abierto ? "● Abierto" : "Cerrado"}</span><span class="chip">⏱ ${esc(c.tiempo)} min</span></div></div></div>
+        ${c.abierto ? "" : `<p class="nota">Este comercio está cerrado ahora. Puedes ver el menú, pero no hacer pedidos.</p>`}
+        ${secciones.map((s) => `<h2 class="seccion">${esc(s)}</h2>` +
+          c.productos.filter((p) => (p.seccion || "Productos") === s).map((p) => {
+            const n = enCarrito[p.id] || 0;
+            return `<div class="producto"><div class="info"><h3>${esc(p.nombre)}</h3>${p.detalle ? `<p>${esc(p.detalle)}</p>` : ""}
+              <div class="precio">${usd(p.precio)} <small>${bs(p.precio)}</small></div></div>
+              ${c.abierto ? `<div class="cantidad">${n ? `<button class="menos" data-p="${p.id}" data-d="-1" aria-label="Quitar">−</button><b>${n}</b>` : ""}
+              <button data-p="${p.id}" data-d="1" aria-label="Agregar">+</button></div>` : ""}</div>`;
+          }).join("")).join("")}
+        ${carrito.comercio === c.id && unidades() ? `<a class="flotante" href="#/carrito"><span>Ver carrito (${unidades()})</span><span>${usd(subtotal())}</span></a>` : ""}`;
+      v.querySelectorAll("[data-p]").forEach((b) => b.addEventListener("click", () => {
+        cambiar(c.id, b.dataset.p, Number(b.dataset.d));
+        pintar();
+      }));
+    };
     pintar();
   }
 
-  // ---------- Página: ficha de prenda ----------
-  function ficha() {
-    const id = new URLSearchParams(location.search).get("id");
-    const p = D.prendas.find((x) => x.id === id);
-    if (!p) {
-      $("#ficha").innerHTML = `<div class="info"><p>${t("noEncontrada")}</p><a class="boton-gris" href="index.html">${t("volver")}</a></div>`;
+  function vistaCarrito() {
+    cabecera({ titulo: "Tu carrito", sub: "", atras: false });
+    const v = $("#vista");
+    const c = comercio(carrito.comercio);
+    if (!c || !unidades()) {
+      v.innerHTML = `<div class="vacio"><span>🛍️</span>Tu carrito está vacío.<br><a class="boton" href="#/">Ver comercios</a></div>`;
       return;
     }
-    const nombre = tx(p.nombre);
-    document.title = `${nombre} — ${M.nombre}`;
-    let colorActual = 0;
+    ubicacion = null;
+    v.innerHTML = `
+      <div class="caja"><h2>${esc(c.nombre)}</h2>
+        ${lineas().map((l) => `<div class="producto"><div class="info"><h3>${esc(l.p.nombre)}</h3><div class="precio">${usd(l.p.precio * l.cant)}</div></div>
+          <div class="cantidad"><button class="menos" data-p="${l.p.id}" data-d="-1">−</button><b>${l.cant}</b><button data-p="${l.p.id}" data-d="1">+</button></div></div>`).join("")}
+        <label for="nota">Nota para el comercio (opcional)</label>
+        <textarea id="nota" placeholder="Sin cebolla, salsa aparte…"></textarea>
+      </div>
+      <div class="caja"><h2>Entrega</h2>${camposCliente()}</div>
+      <div class="caja"><h2>Forma de pago</h2>${camposPago()}</div>
+      <div class="caja" id="totales"></div>
+      ${avisoCerrado()}
+      <button class="boton wa" id="enviar">Enviar pedido por WhatsApp</button>
+      <p class="nota">Al enviar se abre WhatsApp con tu pedido listo. La central te confirma el monto y el tiempo de entrega.</p>`;
 
-    const lista = (titulo, items) =>
-      items?.length ? `<section class="seccion aparece"><h2>${titulo}</h2><ul class="lista">${items.map((i) => `<li>${esc(tx(i))}</li>`).join("")}</ul></section>` : "";
-
-    const relacionadas = D.prendas.filter((x) => x.id !== p.id && (x.tipo === p.tipo || x.coleccion === p.coleccion)).slice(0, 2);
-
-    $("#ficha").innerHTML = `
-      <div class="ficha-foto"><div class="foto-grande" id="fotoGrande"></div></div>
-      <div class="ficha-info">
-        <section class="ficha-cabecera">
-          ${etiqueta(p)}
-          <h1>${esc(nombre)}</h1>
-          <p class="sub">${esc([tx(D.tipos[p.tipo]), tx(D.colecciones[p.coleccion]), tx(D.generos[p.genero])].filter(Boolean).join(" · "))}</p>
-          ${p.estilo?.length ? `<div class="estilo">${p.estilo.map((e) => `<div><div class="valor">${esc(tx(e.valor))}</div><div class="rotulo">${esc(tx(e.etiqueta))}</div></div>`).join("")}</div>` : ""}
-          ${p.descripcion ? `<p class="descripcion">${esc(tx(p.descripcion))}</p>` : ""}
-        </section>
-
-        ${p.colores?.length ? `
-        <section class="seccion">
-          <h2>${t("color")}</h2>
-          <div class="colores" id="colores">${p.colores.map((c, i) => `<button type="button" data-color="${i}" style="--c:${esc(c.hex)}" aria-label="${esc(tx(c.nombre))}"></button>`).join("")}</div>
-          <p class="nombre-color" id="nombreColor"></p>
-        </section>` : ""}
-
-        ${lista(t("detalles"), p.detalles)}
-        ${lista(t("cuidado"), p.cuidado)}
-
-        <section class="seccion aparece">
-          <h2 class="h2-chico">${t("enviosTitulo")}</h2>
-          <p class="centrado">${t("enviosTexto")}</p>
-          <a class="boton-gris" href="info.html?p=envios">${t("masInfo")}</a>
-        </section>
-
-        <section class="seccion final">
-          <a class="boton-principal" id="whatsapp" href="#" target="_blank" rel="noopener">${t("preguntar")}</a>
-          <button type="button" class="boton-gris ancho" id="compartir">${t("compartir")}</button>
-        </section>
-
-        ${relacionadas.length ? `
-        <section class="seccion aparece">
-          <h2>${t("otrasPrendas")}</h2>
-          <div class="relacionadas">${relacionadas.map(tarjeta).join("")}</div>
-        </section>` : ""}
-
-        <p class="volver"><a href="index.html#catalogo">${t("volver")}</a></p>
-      </div>`;
-
-    function pintarColor() {
-      const c = p.colores?.[colorActual];
-      $("#fotoGrande").innerHTML = foto(c?.imagen, `${nombre}${c ? ` — ${tx(c.nombre)}` : ""}`);
-      if (!c) return;
-      $("#nombreColor").textContent = tx(c.nombre);
-      document.querySelectorAll("[data-color]").forEach((b) => b.classList.toggle("activo", Number(b.dataset.color) === colorActual));
-    }
-    $("#ficha").addEventListener("click", (e) => {
-      const b = e.target.closest("[data-color]");
-      if (b) { colorActual = Number(b.dataset.color); pintarColor(); }
-    });
-    pintarColor();
-
-    // WhatsApp: mensaje general con el nombre de la prenda
-    const enlace = urlBase() + enlacePrenda(p);
-    const mensaje = `${tx(TEXTOS.mensajeWa).replace("{p}", nombre)}\n${enlace}`;
-    const wa = $("#whatsapp");
-    wa.href = `https://wa.me/${(M.whatsapp || "").replace(/\D/g, "")}?text=${encodeURIComponent(mensaje)}`;
-    if (!M.whatsapp) wa.title = "Falta el número de WhatsApp en datos.js";
-
-    $("#compartir").addEventListener("click", async () => {
-      if (navigator.share) {
-        try { await navigator.share({ title: `${nombre} — ${M.nombre}`, url: enlace }); } catch {}
-        return;
-      }
-      try { await navigator.clipboard.writeText(enlace); avisar(t("enlaceCopiado")); } catch { prompt("", enlace); }
+    const totales = () => {
+      const z = zona($("#zona").value), st = subtotal(), t = st + z.costo;
+      $("#totales").innerHTML = `
+        <div class="fila"><span>Productos</span><span>${usd(st)}</span></div>
+        <div class="fila"><span>Delivery</span><span>${usd(z.costo)}</span></div>
+        <div class="fila total"><span>Total</span><span>${usd(t)}<div class="bs">${bs(t)}</div></span></div>
+        <p class="nota">Tasa: Bs ${D.tasaBs.toLocaleString("es-VE")} por dólar</p>`;
+      return t;
+    };
+    totales();
+    $("#zona").addEventListener("change", totales);
+    $("#btn-ubicacion").addEventListener("click", (e) => pedirUbicacion(e.target.parentNode));
+    v.querySelectorAll("[data-p]").forEach((b) => b.addEventListener("click", () => {
+      const nota = $("#nota").value;
+      leerSinValidar();
+      cambiar(c.id, b.dataset.p, Number(b.dataset.d));
+      vistaCarrito();
+      if ($("#nota")) $("#nota").value = nota;
+    }));
+    $("#enviar").addEventListener("click", () => {
+      const d = leerCliente();
+      if (!d) return;
+      const t = totales(), z = zona(d.zona), nota = $("#nota").value.trim();
+      const detalle = lineas().map((l) => `• ${l.cant} x ${l.p.nombre} — ${usd(l.p.precio * l.cant)}`).join("\n");
+      const texto = [
+        `🛵 *NUEVO PEDIDO — ${M.nombre}*`,
+        `🏪 *${c.nombre}*`,
+        detalle,
+        nota ? `📝 ${nota}` : "",
+        "",
+        `Productos: ${usd(subtotal())}`,
+        `Delivery: ${usd(z.costo)}`,
+        `*Total: ${usd(t)} (${bs(t)})*`,
+        `💳 ${pago(d.pago).nombre}`,
+        "",
+        textoCliente(d),
+      ].filter((x) => x !== null).join("\n").replace(/\n{3,}/g, "\n\n");
+      guardarPedido("comercio", c.nombre, detalle, t);
+      abrirWhatsApp(texto);
+      carrito = { comercio: null, items: {} };
+      guardarCarrito();
+      location.hash = "#/pedidos";
+      aviso("¡Pedido listo! Envíalo en WhatsApp");
     });
   }
 
-  // ---------- Página: Sobre nosotros / Envíos ----------
-  function info() {
-    const clave = new URLSearchParams(location.search).get("p");
-    const pg = D.paginas[clave] || D.paginas.nosotros;
-    document.title = `${tx(pg.titulo)} — ${M.nombre}`;
-    $("#info").innerHTML = `
-      <h1>${esc(tx(pg.titulo))}</h1>
-      ${pg.imagen !== undefined ? `<div class="info-foto aparece">${foto(pg.imagen, tx(pg.titulo))}</div>` : ""}
-      ${(pg.parrafos || []).map((x) => `<p class="aparece">${esc(tx(x))}</p>`).join("")}
-      ${M.whatsapp ? `<a class="boton-principal" href="https://wa.me/${M.whatsapp.replace(/\D/g, "")}" target="_blank" rel="noopener">WhatsApp</a>` : ""}`;
+  // Guarda lo escrito en el formulario aunque falten datos (para no perderlo al redibujar).
+  function leerSinValidar() {
+    if (!$("#nombre")) return;
+    Object.assign(cliente, {
+      nombre: $("#nombre").value, telefono: $("#telefono").value, zona: $("#zona").value,
+      direccion: $("#direccion").value, pago: ($("input[name=pago]:checked") || {}).value,
+    });
+    guardado.set("cliente", cliente);
   }
 
-  // ---------- Página: código QR ----------
-  function qr() {
-    const destino = urlBase();
-    const q = window.qrcode(0, "M");
-    q.addData(destino);
-    q.make();
-    const png = q.createDataURL(10, 4);
-    $("#qr").innerHTML = `
-      <h1>${t("qrTitulo")}</h1>
-      <p>${t("qrTexto")}</p>
-      <img class="qr-img" src="${png}" alt="QR" width="300" height="300" />
-      <p class="qr-url">${esc(destino)}</p>
-      <a class="boton-principal" href="${png}" download="spot-qr.png">${t("qrDescargar")}</a>
-      ${M.url ? "" : `<p class="nota">${t("qrSinUrl")}</p>`}`;
+  function vistaMandado() {
+    cabecera({ titulo: "Mandados", sub: "Encomiendas y compras" });
+    ubicacion = null;
+    const v = $("#vista");
+    v.innerHTML = `
+      <div class="banner"><span class="emoji">🛵</span><span><b>¿Qué necesitas?</b><small>${esc(D.mandados.texto)}</small></span></div>
+      <div class="caja"><h2>El mandado</h2>
+        <label for="que">¿Qué hay que buscar, comprar o llevar?</label>
+        <textarea id="que" placeholder="Ej.: buscar un paquete y llevarlo a…  /  comprar 2 kg de queso en…"></textarea>
+        <label for="donde">¿Dónde se busca?</label>
+        <input id="donde" placeholder="Dirección o nombre del lugar">
+        <label><input type="checkbox" id="adelanto" style="width:auto"> El motorizado debe pagar la compra (te la cobramos al entregar)</label>
+      </div>
+      <div class="caja"><h2>¿A dónde se lleva?</h2>${camposCliente()}</div>
+      <div class="caja"><h2>Forma de pago</h2>${camposPago()}</div>
+      <div class="caja" id="totales"></div>
+      ${avisoCerrado()}
+      <button class="boton wa" id="enviar">Pedir motorizado por WhatsApp</button>`;
+    const totales = () => {
+      const z = zona($("#zona").value);
+      $("#totales").innerHTML = `<div class="fila total"><span>Costo del mandado</span><span>${usd(z.costo)}<div class="bs">${bs(z.costo)}</div></span></div>
+        <p class="nota">Si el motorizado paga una compra por ti, ese monto se suma al total.</p>`;
+    };
+    totales();
+    $("#zona").addEventListener("change", totales);
+    $("#btn-ubicacion").addEventListener("click", (e) => pedirUbicacion(e.target.parentNode));
+    $("#enviar").addEventListener("click", () => {
+      const que = $("#que").value.trim(), donde = $("#donde").value.trim();
+      if (!que || !donde) { aviso("Cuéntanos qué hay que buscar y dónde"); return; }
+      const d = leerCliente();
+      if (!d) return;
+      const z = zona(d.zona);
+      const texto = [
+        `🛵 *MANDADO — ${M.nombre}*`,
+        `📦 ${que}`,
+        `📌 Buscar en: ${donde}`,
+        $("#adelanto").checked ? "💵 El motorizado debe pagar la compra" : "",
+        `Costo del mandado: ${usd(z.costo)} (${bs(z.costo)})`,
+        `💳 ${pago(d.pago).nombre}`,
+        "",
+        "*Entregar a:*",
+        textoCliente(d),
+      ].filter(Boolean).join("\n");
+      guardarPedido("mandado", "Mandado", `${que}\nBuscar en: ${donde}`, z.costo);
+      abrirWhatsApp(texto);
+      location.hash = "#/pedidos";
+      aviso("¡Mandado listo! Envíalo en WhatsApp");
+    });
   }
 
-  // ---------- Aviso breve ----------
-  function avisar(msg) {
-    let el = $("#aviso");
-    if (!el) { el = document.createElement("div"); el.id = "aviso"; el.className = "aviso"; document.body.appendChild(el); }
-    el.textContent = msg;
-    el.classList.add("visible");
-    setTimeout(() => el.classList.remove("visible"), 1800);
+  function vistaPedidos() {
+    cabecera({ titulo: "Mis pedidos", sub: "Guardados en este teléfono" });
+    const pedidos = guardado.get("pedidos", []);
+    $("#vista").innerHTML = pedidos.length ? pedidos.map((p) => `
+      <article class="pedido"><header><span>${p.tipo === "mandado" ? "🛵" : "🏪"} ${esc(p.titulo)}</span><span>${usd(p.total)}</span></header>
+        <p>${esc(new Date(p.fecha).toLocaleString("es-VE", { dateStyle: "medium", timeStyle: "short" }))}</p>
+        <p>${esc(p.resumen)}</p></article>`).join("") +
+      `<button class="boton secundario" id="whatsapp">Preguntar por mi pedido</button>`
+      : `<div class="vacio"><span>🧾</span>Todavía no has hecho pedidos.<br><a class="boton" href="#/">Pedir ahora</a></div>`;
+    const b = $("#whatsapp");
+    if (b) b.addEventListener("click", () => abrirWhatsApp(`Hola ${M.nombre}, quiero saber cómo va mi pedido.`));
   }
 
-  // ---------- Estadísticas (GoatCounter, gratis y sin cookies) ----------
-  if (M.estadisticas && !/^(localhost|127\.|file)/.test(location.hostname || "file")) {
-    const s = document.createElement("script");
-    s.async = true;
-    s.src = "https://gc.zgo.at/count.js";
-    s.dataset.goatcounter = `https://${M.estadisticas}.goatcounter.com/count`;
-    document.head.appendChild(s);
+  function vistaMotorizados() {
+    cabecera({ titulo: "Trabaja con nosotros", sub: "Motorizados", atras: true });
+    $("#vista").innerHTML = `
+      <div class="banner"><span class="emoji">🏍️</span><span><b>${esc(D.motorizados.titulo)}</b><small>Llena tus datos y te contactamos</small></span></div>
+      <div class="caja"><h2>Requisitos</h2><ul class="requisitos">${D.motorizados.requisitos.map((r) => `<li>${esc(r)}</li>`).join("")}</ul></div>
+      <div class="caja"><h2>Tus datos</h2>
+        <label for="m-nombre">Nombre completo</label><input id="m-nombre">
+        <label for="m-cedula">Cédula</label><input id="m-cedula" inputmode="numeric">
+        <label for="m-tel">Teléfono</label><input id="m-tel" type="tel">
+        <label for="m-moto">Moto (marca, modelo y año)</label><input id="m-moto">
+        <label for="m-sector">¿En qué sector vives?</label><input id="m-sector">
+      </div>
+      <button class="boton wa" id="enviar">Enviar solicitud por WhatsApp</button>`;
+    $("#enviar").addEventListener("click", () => {
+      const val = (id) => $("#" + id).value.trim();
+      if (!val("m-nombre") || !val("m-tel") || !val("m-moto")) { aviso("Completa nombre, teléfono y moto"); return; }
+      abrirWhatsApp([
+        `🏍️ *Quiero trabajar como motorizado en ${M.nombre}*`,
+        `Nombre: ${val("m-nombre")}`, `Cédula: ${val("m-cedula")}`, `Teléfono: ${val("m-tel")}`,
+        `Moto: ${val("m-moto")}`, `Sector: ${val("m-sector")}`,
+      ].join("\n"));
+    });
   }
 
-  // ---------- Arranque ----------
-  pintarCabecera();
-  pintarPie();
-  document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = t(el.dataset.t)));
-  ({ portada, prenda: ficha, info, qr })[document.body.dataset.pagina]?.();
-  animar();
+  // ---------- Rutas ----------
+  function ir() {
+    const [, ruta = "", param] = (location.hash || "#/").split("/");
+    const nombre = ruta || "inicio";
+    document.querySelectorAll("#barra a").forEach((a) => a.classList.toggle("activo", a.dataset.ruta === nombre || (nombre === "comercio" && a.dataset.ruta === "inicio")));
+    ({ inicio: vistaInicio, comercio: () => vistaComercio(decodeURIComponent(param || "")), carrito: vistaCarrito,
+       mandado: vistaMandado, pedidos: vistaPedidos, motorizados: vistaMotorizados }[nombre] || vistaInicio)();
+    window.scrollTo(0, 0);
+  }
+
+  document.title = `${M.nombre} — ${M.eslogan}`;
+  window.addEventListener("hashchange", ir);
+  contador();
+  ir();
 })();
