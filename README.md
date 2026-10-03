@@ -22,10 +22,10 @@ Las estrellas cuentan solo cuando el admin aprueba la reseña.
 4. **Authentication → Configuración → Dominios autorizados**: agrega el dominio donde publiques la app (ej. `tuusuario.github.io`).
 5. **Firestore Database → Crear base de datos**. Luego, en **Reglas**, pega el contenido de **`firestore.rules`** y toca **Publicar**.
 6. **Crea tu usuario de administrador:**
-   - En **Authentication → Usuarios → Agregar usuario**, escribe `admin@whereapp.app` (o `TUUSUARIO@whereapp.app`) y una clave.
+   - En **Authentication → Usuarios → Agregar usuario**, escribe tu correo (por ejemplo tu Gmail) y una clave.
    - Copia el **UID** que aparece en la lista.
    - En **Firestore → Iniciar colección**, crea la colección `admins` con un documento cuyo ID sea ese UID (sin campos, o con `nombre`).
-   - Entra a `admin.html` con usuario `admin` y tu clave.
+   - Entra a `admin.html` con ese correo y tu clave.
 7. Para probar, en el panel toca **Crear motorizado de prueba** (usuario `prueba`, clave `prueba123`) y entra con él en `moto.html`.
 
 A los motorizados los creas desde el panel: les pones usuario y clave, y entran por `moto.html`.

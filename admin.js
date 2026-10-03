@@ -32,7 +32,7 @@ function iniciar() {
     $("#vista").innerHTML = `<div class="entrada">
       <div class="logo">${NOMBRE}</div><div class="logo-sub">Administración</div>
       <form class="caja" id="login"><h2>Entrar</h2>
-        <label for="usuario">Usuario</label><input id="usuario" autocomplete="username" autocapitalize="none">
+        <label for="usuario">Correo o usuario</label><input id="usuario" type="email" inputmode="email" autocomplete="username" autocapitalize="none" placeholder="tucorreo@gmail.com">
         <label for="clave">Clave</label><input id="clave" type="password" autocomplete="current-password">
         <button class="boton">Entrar</button></form></div>`;
     $("#login").onsubmit = async (e) => {

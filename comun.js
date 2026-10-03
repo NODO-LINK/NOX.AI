@@ -35,7 +35,11 @@ export function authSecundaria() {
 export const CENTRO = [10.9833, -71.6667];
 
 // Usuario de motorizados y administrador → correo interno de Firebase.
-export const correoDe = (usuario) => `${String(usuario).trim().toLowerCase().replace(/[^a-z0-9._-]/g, "")}@whereapp.app`;
+// Si se escribe un correo completo (ej. el Gmail del administrador), se usa tal cual.
+export const correoDe = (usuario) => {
+  const u = String(usuario).trim().toLowerCase();
+  return u.includes("@") ? u : `${u.replace(/[^a-z0-9._-]/g, "")}@whereapp.app`;
+};
 
 export const $ = (sel, raiz = document) => raiz.querySelector(sel);
 export const $$ = (sel, raiz = document) => [...raiz.querySelectorAll(sel)];
