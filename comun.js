@@ -4,6 +4,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, connectFirestoreEmulator, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig as configReal } from "./firebase-config.js";
+import { icono, pintarIconos } from "./iconos.js";
+
+export { icono };
+pintarIconos();
 
 export const NOMBRE = "Whereapp";
 // En la computadora (localhost) la app usa el simulador de Firebase, para hacer pruebas sin tocar los datos reales.
@@ -40,7 +44,7 @@ export const fechaTexto = (t) => { const f = fecha(t); return f ? f.toLocaleStri
 export const estrellas = (m) => {
   if (!m.ratingCount) return "Sin calificaciones";
   const p = m.ratingSum / m.ratingCount;
-  return `★ ${p.toFixed(1)} (${m.ratingCount})`;
+  return `${icono("estrella")} ${p.toFixed(1)} (${m.ratingCount})`;
 };
 export const promedio = (m) => (m.ratingCount ? m.ratingSum / m.ratingCount : 0);
 
@@ -95,7 +99,7 @@ const pin = (color, letra) => window.L.divIcon({
 export const ICONOS = {
   get origen() { return pin("#16a34a", "A"); },
   get destino() { return pin("#7c3aed", "B"); },
-  get moto() { return pin("#111827", "🏍"); },
+  get moto() { return pin("#111827", icono("moto")); },
 };
 export function nuevoMapa(id) {
   const m = window.L.map(id, { zoomControl: true }).setView(CENTRO, 14);

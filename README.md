@@ -42,5 +42,6 @@ Abierta en `localhost`, la app usa el simulador de Firebase en lugar de los dato
 
 ## Créditos
 
+Íconos: [Lucide](https://lucide.dev) (ISC) y [Tabler Icons](https://tabler.io/icons) (MIT), en `iconos.js`.
 Mapas: [Leaflet](https://leafletjs.com) (licencia BSD, en `vendor/leaflet`) con datos de © OpenStreetMap.
 Distancias por calle: [OSRM](https://project-osrm.org). Si no responde, se usa la línea recta × 1,3.

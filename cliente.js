@@ -8,7 +8,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   auth, db, NOMBRE, $, $$, esc, usd, fechaTexto, estrellas, promedio, habilitado, leerTarifas, precio, ruta,
-  ICONOS, nuevoMapa, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
+  ICONOS, icono, nuevoMapa, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
 } from "./comun.js";
 
 if (!avisoSinConfigurar()) iniciar();
@@ -150,14 +150,14 @@ function iniciar() {
     $("#vista").innerHTML = `
       <h1 class="titulo">¿A dónde vamos?</h1>
       <div class="segmento" id="tipo">
-        <button data-t="delivery">📦 Delivery</button><button data-t="mototaxi">🏍️ Mototaxi</button>
+        <button data-t="delivery">${icono("paquete")} Delivery</button><button data-t="mototaxi">${icono("moto")} Mototaxi</button>
       </div>
-      ${pedido.para ? `<div class="para pildora">Para: ${esc(pedido.para.nombre)} <button id="quitar-para" aria-label="Quitar">✕</button></div>` : ""}
+      ${pedido.para ? `<div class="para pildora">Para: ${esc(pedido.para.nombre)} <button id="quitar-para" aria-label="Quitar">${icono("cerrar")}</button></div>` : ""}
       <button class="punto" data-p="origen"><span class="letra" style="background:#16a34a">A</span>
-        <span><b>${pedido.tipo === "mototaxi" ? "¿Dónde te buscamos?" : "¿Dónde se busca?"}</b><small id="txt-origen">${pedido.origen ? "Marcado en el mapa ✓" : "Toca aquí y luego en el mapa"}</small></span></button>
+        <span><b>${pedido.tipo === "mototaxi" ? "¿Dónde te buscamos?" : "¿Dónde se busca?"}</b><small id="txt-origen">${pedido.origen ? "Marcado en el mapa" : "Toca aquí y luego en el mapa"}</small></span></button>
       <button class="punto" data-p="destino"><span class="letra" style="background:#7c3aed">B</span>
-        <span><b>¿A dónde se lleva?</b><small id="txt-destino">${pedido.destino ? "Marcado en el mapa ✓" : "Toca aquí y luego en el mapa"}</small></span></button>
-      <button class="boton secundario chico" id="mi-ubicacion" style="margin-top:8px">📍 Usar mi ubicación como punto A</button>
+        <span><b>¿A dónde se lleva?</b><small id="txt-destino">${pedido.destino ? "Marcado en el mapa" : "Toca aquí y luego en el mapa"}</small></span></button>
+      <button class="boton secundario chico" id="mi-ubicacion" style="margin-top:8px">${icono("ubicarme")} Usar mi ubicación como punto A</button>
       <div class="mapa" id="mapa"></div>
       <div class="precio-caja" id="precio"></div>
       <label for="dir-origen">Referencia del punto A</label>
@@ -182,8 +182,8 @@ function iniciar() {
       $$(".punto").forEach((b) => b.classList.toggle("activo", b.dataset.p === pedido.marcando));
       $$("#tipo button").forEach((b) => b.classList.toggle("activo", b.dataset.t === pedido.tipo));
       $("#caja-nota").hidden = pedido.tipo !== "delivery";
-      $("#txt-origen").textContent = pedido.origen ? "Marcado en el mapa ✓ (puedes arrastrarlo)" : "Toca aquí y luego en el mapa";
-      $("#txt-destino").textContent = pedido.destino ? "Marcado en el mapa ✓ (puedes arrastrarlo)" : "Toca aquí y luego en el mapa";
+      $("#txt-origen").textContent = pedido.origen ? "Marcado en el mapa (puedes arrastrarlo)" : "Toca aquí y luego en el mapa";
+      $("#txt-destino").textContent = pedido.destino ? "Marcado en el mapa (puedes arrastrarlo)" : "Toca aquí y luego en el mapa";
       const t = tarifas[pedido.tipo];
       $("#precio").innerHTML = pedido.km != null
         ? `<span>${pedido.km.toFixed(1)} km</span><b>${usd(precio(tarifas, pedido.tipo, pedido.km))}</b>`
@@ -275,13 +275,13 @@ function iniciar() {
         <article class="tarjeta">
           <div class="avatar">${esc(iniciales(m.nombre))}</div>
           <div class="info"><h3>${esc(m.nombre)}</h3>
-            <p>🏍️ ${esc(m.moto || "")}${m.placa ? ` · Placa ${esc(m.placa)}` : ""}</p>
+            <p>${icono("moto")} ${esc(m.moto || "")}${m.placa ? ` · Placa ${esc(m.placa)}` : ""}</p>
             <span class="rating">${estrellas(m)}</span></div>
           <div class="acciones">
-            <a class="boton secundario" href="tel:${esc(m.telefono)}" data-llamar="${m.id}">📞 Llamar</a>
+            <a class="boton secundario" href="tel:${esc(m.telefono)}" data-llamar="${m.id}">${icono("telefono")} Llamar</a>
             <button class="boton" data-pedir="${m.id}">Pedir a este</button>
           </div>
-        </article>`).join("") : `<div class="vacio"><span>🛵</span>No hay motorizados activos ahora.<br>Intenta en un rato.</div>`}
+        </article>`).join("") : `<div class="vacio">${icono("moto")}No hay motorizados activos ahora.<br>Intenta en un rato.</div>`}
       </div>`;
     $$("[data-llamar]").forEach((a) => a.addEventListener("click", () => {
       setDoc(doc(db, "llamadas", a.dataset.llamar), { n: increment(1) }, { merge: true }).catch(() => {});
@@ -299,7 +299,7 @@ function iniciar() {
     if (motoSeguida) { motoSeguida(); motoSeguida = null; }
     if (mapa) { mapa.remove(); mapa = null; }
     if (!c) {
-      $("#vista").innerHTML = `<div class="vacio"><span>🛵</span>No tienes carreras en curso.<br><button class="boton" id="ir-pedir">Pedir una carrera</button></div>`;
+      $("#vista").innerHTML = `<div class="vacio">${icono("ruta")}No tienes carreras en curso.<br><button class="boton" id="ir-pedir">Pedir una carrera</button></div>`;
       $("#ir-pedir").onclick = () => ir("pedir");
       return;
     }
@@ -307,7 +307,7 @@ function iniciar() {
 
     const resumen = `
       <div class="caja">
-        <div class="fila"><span>Servicio</span><b>${c.tipo === "mototaxi" ? "🏍️ Mototaxi" : "📦 Delivery"}</b></div>
+        <div class="fila"><span>Servicio</span><b>${c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`}</b></div>
         <div class="fila"><span>A</span><span>${esc(c.origen.dir)}</span></div>
         <div class="fila"><span>B</span><span>${esc(c.destino.dir)}</span></div>
         ${c.nota ? `<div class="fila"><span>Llevar</span><span>${esc(c.nota)}</span></div>` : ""}
@@ -318,7 +318,7 @@ function iniciar() {
 
     if (c.estado === "esperando") {
       $("#vista").innerHTML = `
-        <div class="estado-carrera"><div class="grande latido">🛵</div>
+        <div class="estado-carrera"><div class="grande latido">${icono("moto")}</div>
           <h2>${c.paraMoto ? `Esperando a que ${esc(c.paraMotoNombre)} acepte…` : "Buscando motorizado…"}</h2>
           <p class="nota">Te avisamos apenas un motorizado acepte. Puedes dejar esta pantalla abierta.</p></div>
         ${resumen}
@@ -326,13 +326,13 @@ function iniciar() {
     } else {
       const m = motos.find((x) => x.id === c.motoUid) || {};
       $("#vista").innerHTML = `
-        <div class="estado-carrera"><div class="grande">🏍️</div><h2>${esc(c.motoNombre)} viene en camino</h2></div>
+        <div class="estado-carrera"><div class="grande">${icono("moto")}</div><h2>${esc(c.motoNombre)} viene en camino</h2></div>
         <article class="tarjeta">
           <div class="avatar">${esc(iniciales(c.motoNombre || "?"))}</div>
           <div class="info"><h3>${esc(c.motoNombre)}</h3>
-            <p>🏍️ ${esc(c.motoMoto || "")}${c.motoPlaca ? ` · Placa <b>${esc(c.motoPlaca)}</b>` : ""}</p>
+            <p>${icono("moto")} ${esc(c.motoMoto || "")}${c.motoPlaca ? ` · Placa <b>${esc(c.motoPlaca)}</b>` : ""}</p>
             ${m.ratingCount ? `<span class="rating">${estrellas(m)}</span>` : ""}</div>
-          <div class="acciones"><a class="boton" href="tel:${esc(c.motoTel)}">📞 Llamar a ${esc(c.motoNombre)}</a></div>
+          <div class="acciones"><a class="boton" href="tel:${esc(c.motoTel)}">${icono("telefono")} Llamar a ${esc(c.motoNombre)}</a></div>
         </article>
         <div class="mapa" id="mapa"></div>
         <p class="nota" id="ubic-moto">Esperando la ubicación del motorizado…</p>
@@ -363,9 +363,9 @@ function iniciar() {
   function vistaCalificar(c) {
     let puntos = 5;
     $("#vista").innerHTML = `
-      <div class="estado-carrera"><div class="grande">✅</div><h2>¡Llegaste! ¿Cómo te fue con ${esc(c.motoNombre)}?</h2></div>
+      <div class="estado-carrera"><div class="grande">${icono("listo")}</div><h2>¡Llegaste! ¿Cómo te fue con ${esc(c.motoNombre)}?</h2></div>
       <div class="caja">
-        <div class="estrellas" id="estrellas">${[1, 2, 3, 4, 5].map((n) => `<button data-n="${n}" aria-label="${n} estrellas">★</button>`).join("")}</div>
+        <div class="estrellas" id="estrellas">${[1, 2, 3, 4, 5].map((n) => `<button data-n="${n}" aria-label="${n} estrellas">${icono("estrella")}</button>`).join("")}</div>
         <label for="comentario">Comentario (opcional)</label>
         <textarea id="comentario" placeholder="¿Qué tal el servicio?"></textarea>
         <button class="boton" id="calificar">Enviar calificación</button>

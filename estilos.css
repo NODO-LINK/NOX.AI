@@ -28,6 +28,16 @@ a { color: inherit; text-decoration: none; }
 button, input, select, textarea { font: inherit; color: inherit; }
 h1, h2, h3 { margin: 0; line-height: 1.25; }
 [hidden] { display: none !important; }
+
+/* Íconos vectoriales */
+.ico { width: 1.15em; height: 1.15em; vertical-align: -0.2em; flex: 0 0 auto; }
+.ico.apagada { color: #d4d4d8; }
+.rating .ico { width: 1em; height: 1em; vertical-align: -0.12em; }
+.pin .ico { width: 16px; height: 16px; vertical-align: 0; }
+.letra-a, .letra-b { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: #fff; font-style: normal; font-weight: 700; font-size: .7rem; margin-right: 4px; }
+.letra-a { background: var(--verde); }
+.letra-b { background: var(--marca); }
+.para button .ico { width: 14px; height: 14px; }
 .vista { max-width: 640px; margin: 0 auto; padding: 0 16px 24px; }
 
 /* Cabecera blanca con logo morado */
@@ -109,20 +119,22 @@ textarea { resize: vertical; min-height: 64px; }
 .tarjeta .acciones .boton { flex: 1; margin-top: 0; padding: 10px; font-size: .88rem; }
 .rating { color: #f59e0b; font-weight: 600; font-size: .8rem; }
 .vacio { text-align: center; color: var(--texto-2); padding: 36px 0; }
-.vacio span { font-size: 2.6rem; display: block; margin-bottom: 6px; }
+.vacio > .ico { display: block; width: 44px; height: 44px; margin: 0 auto 8px; color: var(--marca); opacity: .8; }
 .fila { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; font-size: .9rem; }
 .fila span:first-child { color: var(--texto-2); }
 
 /* Estado de carrera */
 .estado-carrera { text-align: center; padding: 18px 10px; }
-.estado-carrera .grande { font-size: 2.4rem; }
+.estado-carrera .grande { display: inline-grid; place-items: center; width: 72px; height: 72px; border-radius: 50%; background: var(--marca-suave); color: var(--marca); }
+.estado-carrera .grande .ico { width: 38px; height: 38px; vertical-align: 0; }
 .estado-carrera h2 { font-size: 1.1rem; margin-top: 6px; }
 .latido { animation: latido 1.4s infinite; }
 @keyframes latido { 50% { transform: scale(1.12); } }
 
 /* Estrellas para calificar */
 .estrellas { display: flex; justify-content: center; gap: 6px; margin: 10px 0; }
-.estrellas button { font-size: 2.2rem; border: 0; background: none; cursor: pointer; color: #d4d4d8; padding: 0; }
+.estrellas button { border: 0; background: none; cursor: pointer; color: #d4d4d8; padding: 0; }
+.estrellas button .ico { width: 38px; height: 38px; }
 .estrellas button.on { color: #f59e0b; }
 
 /* Barra inferior */

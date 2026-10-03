@@ -5,7 +5,7 @@ import {
   doc, onSnapshot, updateDoc, collection, query, where, runTransaction, serverTimestamp, arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  auth, db, NOMBRE, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, nuevoMapa,
+  auth, db, NOMBRE, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, nuevoMapa,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar,
 } from "./comun.js";
 
@@ -73,7 +73,7 @@ function iniciar() {
         .sort((a, b) => (fecha(a.creada) || 0) - (fecha(b.creada) || 0));
       const nuevas = disponibles.filter((c) => !conocidas.has(c.id));
       nuevas.forEach((c) => conocidas.add(c.id));
-      if (nuevas.length && !primeraCarga) { sonar(); aviso("🔔 ¡Carrera nueva!"); }
+      if (nuevas.length && !primeraCarga) { sonar(); aviso("¡Carrera nueva!"); }
       primeraCarga = false;
       pintar();
     }, () => {}));
@@ -123,9 +123,9 @@ function iniciar() {
 
     if (miCarrera) html += vistaMiCarrera(miCarrera);
     else if (ok) {
-      html += `${sonido ? "" : `<button class="boton secundario" id="activar-sonido">🔔 Activar sonido de carreras nuevas</button>`}
+      html += `${sonido ? "" : `<button class="boton secundario" id="activar-sonido">${icono("campana")} Activar sonido de carreras nuevas</button>`}
         <h1 class="titulo">Carreras disponibles (${disponibles.length})</h1>
-        <div class="lista">${disponibles.length ? disponibles.map(tarjetaCarrera).join("") : `<div class="vacio"><span>🛵</span>No hay carreras por ahora.<br>Deja esta pantalla abierta: te avisamos con un sonido.</div>`}</div>`;
+        <div class="lista">${disponibles.length ? disponibles.map(tarjetaCarrera).join("") : `<div class="vacio">${icono("ruta")}No hay carreras por ahora.<br>Deja esta pantalla abierta: te avisamos con un sonido.</div>`}</div>`;
     }
     $("#vista").innerHTML = html;
 
@@ -135,7 +135,7 @@ function iniciar() {
     if (miCarrera) activarMiCarrera(miCarrera);
   }
 
-  const tipoTexto = (c) => (c.tipo === "mototaxi" ? "🏍️ Mototaxi" : "📦 Delivery");
+  const tipoTexto = (c) => (c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`);
   const tarjetaCarrera = (c) => `
     <article class="tarjeta"><div class="info">
       <h3>${tipoTexto(c)} · ${usd(c.precio)} · ${c.km} km ${c.paraMoto ? `<span class="pildora">Para ti</span>` : ""}</h3>
@@ -175,13 +175,13 @@ function iniciar() {
       </div>
       <div class="mapa" id="mapa"></div>
       <div class="caja">
-        <div class="fila"><span>🟢 A (origen)</span><span>${esc(c.origen.dir)}</span></div>
+        <div class="fila"><span><i class="letra-a">A</i> Origen</span><span>${esc(c.origen.dir)}</span></div>
         <a class="boton secundario" href="${mapsLink(c.origen)}" target="_blank" rel="noopener">Ir al punto A con Google Maps</a>
-        <div class="fila" style="margin-top:10px"><span>🟣 B (destino)</span><span>${esc(c.destino.dir)}</span></div>
+        <div class="fila" style="margin-top:10px"><span><i class="letra-b">B</i> Destino</span><span>${esc(c.destino.dir)}</span></div>
         <a class="boton secundario" href="${mapsLink(c.destino)}" target="_blank" rel="noopener">Ir al punto B con Google Maps</a>
       </div>
-      <a class="boton" href="tel:${esc(c.clienteTel)}">📞 Llamar a ${esc(c.clienteNombre)}</a>
-      <button class="boton verde" id="termine">✅ Terminé</button>
+      <a class="boton" href="tel:${esc(c.clienteTel)}">${icono("telefono")} Llamar a ${esc(c.clienteNombre)}</a>
+      <button class="boton verde" id="termine">${icono("listo")} Terminé</button>
       <button class="boton peligro" id="cancelar">Cancelar carrera</button>
       <p class="nota">Mientras tengas una carrera, tu ubicación se comparte con el cliente.</p>`;
   }

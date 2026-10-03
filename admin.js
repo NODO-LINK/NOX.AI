@@ -8,7 +8,7 @@ import {
   serverTimestamp, increment, writeBatch, Timestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  auth, authSecundaria, db, NOMBRE, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
+  auth, authSecundaria, db, NOMBRE, icono, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
   leerTarifas, aviso, avisoSinConfigurar,
 } from "./comun.js";
 
@@ -96,7 +96,7 @@ function iniciar() {
   function vistaMotos() {
     const avisos = porVencer();
     $("#vista").innerHTML = `
-      ${avisos.length ? `<h1 class="titulo">⚠️ Cuotas por vencer o vencidas</h1><div class="lista">${avisos.map((m) => `
+      ${avisos.length ? `<h1 class="titulo">${icono("alerta")} Cuotas por vencer o vencidas</h1><div class="lista">${avisos.map((m) => `
         <article class="tarjeta"><div class="info"><h3>${esc(m.nombre)}</h3><p>${estadoPago(m)} · hasta ${fechaTexto(m.pagadoHasta)}</p></div>
           <div class="acciones">
             <a class="boton verde" href="https://wa.me/${telWa(m.telefono)}?text=${encodeURIComponent(mensajeCobro(m))}" target="_blank" rel="noopener">Avisar por WhatsApp</a>
@@ -107,14 +107,14 @@ function iniciar() {
       <div class="lista" style="margin-top:12px">${motos.map((m) => `
         <article class="tarjeta"><div class="info">
           <h3>${esc(m.nombre)} ${habilitado(m) ? `<span class="pildora ok">En la app</span>` : `<span class="pildora mal">No sale</span>`}</h3>
-          <p>Usuario: <b>${esc(m.usuario)}</b> · 📞 ${esc(m.telefono)}</p>
-          <p>🏍️ ${esc(m.moto)} · Placa ${esc(m.placa)} · <span class="rating">${estrellas(m)}</span></p>
+          <p>Usuario: <b>${esc(m.usuario)}</b> · ${icono("telefono")} ${esc(m.telefono)}</p>
+          <p>${icono("moto")} ${esc(m.moto)} · Placa ${esc(m.placa)} · <span class="rating">${estrellas(m)}</span></p>
           <p>${estadoPago(m)} hasta ${fechaTexto(m.pagadoHasta)} · ${llamadas[m.id] || 0} llamadas</p></div>
           <div class="acciones">
             <button class="boton ${m.activo ? "peligro" : "verde"}" data-activo="${m.id}">${m.activo ? "Desactivar" : "Activar"}</button>
             <button class="boton secundario" data-pago="${m.id}">Pago ${usd(tarifas.cuota)}</button>
             <button class="boton secundario" data-editar="${m.id}">Editar</button></div>
-        </article>`).join("") || `<div class="vacio"><span>🏍️</span>Aún no hay motorizados.</div>`}</div>`;
+        </article>`).join("") || `<div class="vacio">${icono("moto")}Aún no hay motorizados.</div>`}</div>`;
     $("#nuevo").onclick = () => formularioMoto();
     $$("[data-activo]").forEach((b) => (b.onclick = () => {
       const m = motos.find((x) => x.id === b.dataset.activo);
@@ -215,18 +215,18 @@ function iniciar() {
       <h1 class="titulo">Últimas carreras</h1>
       <div class="lista">${carreras.map((c) => {
         const [cl, tx] = ESTADOS[c.estado] || ["", c.estado];
-        const cancel = [...(c.cancelaciones || []).map((x) => `🏍️ ${esc(x.motoNombre)} canceló: ${esc(x.motivo)}`),
-          c.cancelacion ? `${c.cancelacion.por === "admin" ? "🛠️ Admin" : "👤 Cliente"} canceló: ${esc(c.cancelacion.motivo)}` : ""].filter(Boolean);
+        const cancel = [...(c.cancelaciones || []).map((x) => `${icono("moto")} ${esc(x.motoNombre)} canceló: ${esc(x.motivo)}`),
+          c.cancelacion ? `${c.cancelacion.por === "admin" ? `${icono("escudo")} Admin` : `${icono("usuario")} Cliente`} canceló: ${esc(c.cancelacion.motivo)}` : ""].filter(Boolean);
         return `<article class="tarjeta"><div class="info">
-          <h3>${c.tipo === "mototaxi" ? "🏍️ Mototaxi" : "📦 Delivery"} · ${usd(c.precio)} · ${c.km} km <span class="pildora ${cl}">${tx}</span></h3>
-          <p>👤 ${esc(c.clienteNombre)} · ${esc(c.clienteTel)}</p>
-          <p>🏍️ ${c.motoNombre && c.motoUid ? esc(c.motoNombre) : c.paraMotoNombre ? `Pedida a ${esc(c.paraMotoNombre)}` : "—"}</p>
-          <p>A: ${esc(c.origen?.dir)} → B: ${esc(c.destino?.dir)}</p>
+          <h3>${c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`} · ${usd(c.precio)} · ${c.km} km <span class="pildora ${cl}">${tx}</span></h3>
+          <p>${icono("usuario")} ${esc(c.clienteNombre)} · ${esc(c.clienteTel)}</p>
+          <p>${icono("moto")} ${c.motoNombre && c.motoUid ? esc(c.motoNombre) : c.paraMotoNombre ? `Pedida a ${esc(c.paraMotoNombre)}` : "—"}</p>
+          <p>A: ${esc(c.origen?.dir)} ${icono("flecha")} B: ${esc(c.destino?.dir)}</p>
           <p>${fechaTexto(c.creada)}</p>
           ${cancel.map((x) => `<p style="color:var(--rojo)">${x}</p>`).join("")}</div>
           ${c.estado === "esperando" || c.estado === "aceptada" ? `<div class="acciones"><button class="boton peligro" data-cancelar="${c.id}">Cancelar</button></div>` : ""}
         </article>`;
-      }).join("") || `<div class="vacio"><span>🛵</span>Todavía no hay carreras.</div>`}</div>`;
+      }).join("") || `<div class="vacio">${icono("ruta")}Todavía no hay carreras.</div>`}</div>`;
     $$("[data-cancelar]").forEach((b) => (b.onclick = async () => {
       const motivo = prompt("Motivo de la cancelación:");
       if (motivo === null) return;
@@ -238,7 +238,7 @@ function iniciar() {
   function vistaResenas() {
     const pendientes = resenas.filter((r) => !r.aprobada), aprobadas = resenas.filter((r) => r.aprobada);
     const tarjeta = (r, botones) => `<article class="tarjeta"><div class="info">
-      <h3><span class="rating">${"★".repeat(r.estrellas)}${"☆".repeat(5 - r.estrellas)}</span> para ${esc(r.motoNombre)}</h3>
+      <h3><span class="rating">${[1, 2, 3, 4, 5].map((n) => icono("estrella", n <= r.estrellas ? "" : "apagada")).join("")}</span> para ${esc(r.motoNombre)}</h3>
       ${r.comentario ? `<p>“${esc(r.comentario)}”</p>` : `<p><i>Sin comentario</i></p>`}
       <p>De ${esc(r.clienteNombre)} · ${fechaTexto(r.fecha)}</p></div>${botones}</article>`;
     $("#vista").innerHTML = `
@@ -246,7 +246,7 @@ function iniciar() {
       <p class="nota">Las estrellas cuentan para el motorizado solo cuando apruebas la reseña.</p>
       <div class="lista">${pendientes.map((r) => tarjeta(r, `<div class="acciones">
         <button class="boton verde" data-aprobar="${r.id}">Aprobar</button><button class="boton peligro" data-rechazar="${r.id}">Rechazar</button></div>`)).join("")
-        || `<div class="vacio"><span>⭐</span>No hay reseñas pendientes.</div>`}</div>
+        || `<div class="vacio">${icono("estrella")}No hay reseñas pendientes.</div>`}</div>
       <h1 class="titulo">Aprobadas</h1>
       <div class="lista">${aprobadas.map((r) => tarjeta(r, "")).join("") || `<p class="nota">Ninguna todavía.</p>`}</div>`;
     $$("[data-aprobar]").forEach((b) => (b.onclick = async () => {
@@ -267,13 +267,13 @@ function iniciar() {
     $("#vista").innerHTML = `<form id="tarifas">
       <h1 class="titulo">Tarifas por kilómetro</h1>
       <p class="nota">Precio = base + (precio por km × kilómetros). El cliente lo ve calculado en el mapa.</p>
-      <div class="caja"><h2>📦 Delivery</h2><div class="dos">
+      <div class="caja"><h2>${icono("paquete")} Delivery</h2><div class="dos">
         <div><label>Base ($)</label><input name="db" type="number" step="0.01" min="0" value="${t.delivery.base}"></div>
         <div><label>Por km ($)</label><input name="dk" type="number" step="0.01" min="0" value="${t.delivery.porKm}"></div></div></div>
-      <div class="caja"><h2>🏍️ Mototaxi</h2><div class="dos">
+      <div class="caja"><h2>${icono("moto")} Mototaxi</h2><div class="dos">
         <div><label>Base ($)</label><input name="mb" type="number" step="0.01" min="0" value="${t.mototaxi.base}"></div>
         <div><label>Por km ($)</label><input name="mk" type="number" step="0.01" min="0" value="${t.mototaxi.porKm}"></div></div></div>
-      <div class="caja"><h2>💳 Cuota de motorizados</h2><div class="dos">
+      <div class="caja"><h2>${icono("tarjeta")} Cuota de motorizados</h2><div class="dos">
         <div><label>Monto ($)</label><input name="cuota" type="number" step="0.01" min="0" value="${t.cuota}"></div>
         <div><label>Cada cuántos días</label><input name="dias" type="number" step="1" min="1" value="${t.diasCuota}"></div></div></div>
       <button class="boton">Guardar tarifas</button></form>`;
