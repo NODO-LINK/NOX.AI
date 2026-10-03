@@ -8,7 +8,7 @@ import {
   serverTimestamp, increment, writeBatch, Timestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  auth, authSecundaria, db, NOMBRE, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
+  auth, authSecundaria, db, NOMBRE, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
   leerTarifas, aviso, avisoSinConfigurar,
 } from "./comun.js";
 
@@ -38,7 +38,7 @@ function iniciar() {
     $("#login").onsubmit = async (e) => {
       e.preventDefault();
       try { await signInWithEmailAndPassword(auth, correoDe($("#usuario").value), $("#clave").value); }
-      catch { aviso("Usuario o clave incorrectos"); }
+      catch (err) { console.error(err); aviso(motivoEntrada(err)); }
     };
   }
 

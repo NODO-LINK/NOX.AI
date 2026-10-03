@@ -252,3 +252,18 @@ export async function compartirCarrera(c, nombreCliente) {
   try { await navigator.clipboard.writeText(url); aviso("Enlace copiado. Pégalo en WhatsApp"); }
   catch { window.open(`https://wa.me/?text=${encodeURIComponent(`${texto} ${url}`)}`, "_blank"); }
 }
+
+// Explica por qué no se pudo entrar (el código entre paréntesis ayuda a encontrar el problema).
+export function motivoEntrada(e) {
+  const m = {
+    "auth/invalid-credential": "Correo o clave incorrectos.",
+    "auth/wrong-password": "La clave es incorrecta.",
+    "auth/user-not-found": "Ese correo no está registrado en Firebase (Authentication → Usuarios).",
+    "auth/invalid-email": "El correo no está bien escrito.",
+    "auth/operation-not-allowed": "Falta activar «Correo electrónico/contraseña» en Firebase (Authentication → Método de acceso).",
+    "auth/too-many-requests": "Demasiados intentos. Espera unos minutos.",
+    "auth/network-request-failed": "Sin conexión a internet.",
+    "auth/unauthorized-domain": "Falta autorizar este dominio en Firebase (Authentication → Configuración → Dominios autorizados).",
+  }[e && e.code];
+  return `${m || "No se pudo entrar."} (${(e && e.code) || "error"})`;
+}
