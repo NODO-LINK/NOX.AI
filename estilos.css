@@ -17,7 +17,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body {
-  font-family: "Poppins", system-ui, sans-serif;
+  font-family: "Nunito", system-ui, sans-serif;
   background: var(--fondo);
   color: var(--texto);
   -webkit-tap-highlight-color: transparent;
