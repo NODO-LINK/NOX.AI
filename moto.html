@@ -4,14 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#ffffff" />
-  <title>Whereapp — Motorizados en El Moján</title>
-  <meta name="description" content="Pide delivery o mototaxi en El Moján. Mira el precio por kilómetro y sigue a tu motorizado en el mapa." />
-  <meta property="og:type" content="website" />
-  <meta property="og:title" content="Whereapp — Motorizados en El Moján" />
-  <meta property="og:description" content="Delivery y mototaxi en El Moján." />
+  <title>Whereapp — Motorizados</title>
+  <meta name="robots" content="noindex" />
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="icono.svg" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="icono.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -19,15 +15,9 @@
   <link rel="stylesheet" href="estilos.css?v=4" />
   <script src="vendor/leaflet/leaflet.js"></script>
 </head>
-<body>
+<body class="sin-barra">
   <header class="cabecera" id="cabecera" hidden></header>
   <main id="vista" class="vista"></main>
-  <nav class="barra" id="barra" hidden>
-    <button data-ruta="pedir"><span>📍</span>Pedir</button>
-    <button data-ruta="motorizados"><span>🏍️</span>Motorizados</button>
-    <button data-ruta="carrera"><span>🛵</span>Mi carrera<b id="punto" hidden></b></button>
-  </nav>
-  <div id="recaptcha"></div>
-  <script type="module" src="cliente.js?v=4"></script>
+  <script type="module" src="moto.js?v=4"></script>
 </body>
 </html>

@@ -1,10 +1,10 @@
 {
-  "name": "MojánYa — Motorizados en El Moján",
-  "short_name": "MojánYa",
+  "name": "Whereapp — Motorizados en El Moján",
+  "short_name": "Whereapp",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#ff4d2e",
+  "theme_color": "#7c3aed",
   "lang": "es",
   "icons": [
     { "src": "icono.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }

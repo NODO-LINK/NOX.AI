@@ -1,0 +1,94 @@
+rules_version = '2';
+
+// Reglas de seguridad de Whereapp. Cópialas en: Consola de Firebase → Firestore Database → Reglas → Publicar.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function dentro() { return request.auth != null; }
+    function esAdmin() { return dentro() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
+    function esMoto() { return dentro() && exists(/databases/$(database)/documents/motorizados/$(request.auth.uid)); }
+    function motoHabilitado() {
+      let m = get(/databases/$(database)/documents/motorizados/$(request.auth.uid)).data;
+      return m.activo == true && m.pagadoHasta > request.time;
+    }
+    function soloCambia(campos) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos); }
+
+    match /admins/{uid} {
+      allow read: if dentro() && request.auth.uid == uid;
+    }
+
+    match /config/{doc} {
+      allow read: if true;
+      allow write: if esAdmin();
+    }
+
+    match /motorizados/{uid} {
+      allow read: if dentro();
+      allow create, delete: if esAdmin();
+      allow update: if esAdmin() || (dentro() && request.auth.uid == uid && soloCambia(['ubicacion']));
+    }
+
+    match /clientes/{uid} {
+      allow read, write: if dentro() && request.auth.uid == uid;
+      allow read: if esAdmin();
+    }
+
+    match /carreras/{id} {
+      allow read: if esAdmin()
+        || (dentro() && resource.data.clienteUid == request.auth.uid)
+        || (esMoto() && resource.data.motoUid == request.auth.uid)
+        || (esMoto() && resource.data.estado == 'esperando' && motoHabilitado());
+
+      allow create: if dentro()
+        && request.resource.data.clienteUid == request.auth.uid
+        && request.resource.data.estado == 'esperando'
+        && request.resource.data.motoUid == null;
+
+      allow update: if esAdmin()
+        // El cliente cancela su carrera…
+        || (dentro() && resource.data.clienteUid == request.auth.uid
+            && resource.data.estado in ['esperando', 'aceptada']
+            && request.resource.data.estado == 'cancelada'
+            && soloCambia(['estado', 'cancelacion']))
+        // …o la califica cuando terminó.
+        || (dentro() && resource.data.clienteUid == request.auth.uid
+            && resource.data.estado == 'terminada'
+            && soloCambia(['calificada']))
+        // El motorizado acepta una carrera disponible.
+        || (esMoto() && motoHabilitado()
+            && resource.data.estado == 'esperando'
+            && (resource.data.paraMoto == null || resource.data.paraMoto == request.auth.uid)
+            && request.resource.data.estado == 'aceptada'
+            && request.resource.data.motoUid == request.auth.uid
+            && soloCambia(['estado', 'motoUid', 'motoNombre', 'motoTel', 'motoMoto', 'motoPlaca', 'aceptada']))
+        // El motorizado termina o cancela su carrera (al cancelar vuelve a quedar disponible).
+        || (esMoto() && resource.data.motoUid == request.auth.uid && resource.data.estado == 'aceptada'
+            && ((request.resource.data.estado == 'terminada' && soloCambia(['estado', 'terminada']))
+             || (request.resource.data.estado == 'esperando' && request.resource.data.motoUid == null
+                 && soloCambia(['estado', 'motoUid', 'paraMoto', 'paraMotoNombre', 'cancelaciones']))));
+    }
+
+    match /resenas/{id} {
+      allow create: if dentro()
+        && request.resource.data.clienteUid == request.auth.uid
+        && request.resource.data.aprobada == false
+        && request.resource.data.estrellas is int
+        && request.resource.data.estrellas >= 1 && request.resource.data.estrellas <= 5;
+      allow read, update, delete: if esAdmin();
+    }
+
+    match /pagos/{id} {
+      allow read, write: if esAdmin();
+    }
+
+    match /llamadas/{motoUid} {
+      allow read: if esAdmin();
+      allow create: if dentro() && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n == 1;
+      allow update: if dentro() && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n == resource.data.n + 1;
+    }
+
+    match /stats/visitas {
+      allow read: if esAdmin();
+      allow create, update: if request.resource.data.keys().hasOnly(['total', 'dias']);
+    }
+  }
+}

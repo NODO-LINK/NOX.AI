@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>Whereapp — Administración</title>
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="icono.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="estilos.css?v=4" />
+</head>
+<body>
+  <header class="cabecera" id="cabecera" hidden></header>
+  <main id="vista" class="vista"></main>
+  <nav class="barra" id="barra" hidden>
+    <button data-ruta="motos"><span>🏍️</span>Motorizados<b id="punto-motos" hidden></b></button>
+    <button data-ruta="carreras"><span>🛵</span>Carreras</button>
+    <button data-ruta="resenas"><span>⭐</span>Reseñas<b id="punto-resenas" hidden></b></button>
+    <button data-ruta="tarifas"><span>💲</span>Tarifas</button>
+    <button data-ruta="stats"><span>📊</span>Números</button>
+  </nav>
+  <script type="module" src="admin.js?v=4"></script>
+</body>
+</html>
