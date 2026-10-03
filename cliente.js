@@ -9,7 +9,7 @@ import {
 import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fechaTexto, estrellas, promedio, habilitado, leerTarifas, precio, ruta,
   ICONOS, icono, nuevoMapa, transicion, activarBarra, progreso, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
-} from "./comun.js";
+} from "./comun.js?v=19";
 
 if (!avisoSinConfigurar()) iniciar();
 

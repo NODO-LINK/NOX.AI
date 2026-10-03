@@ -10,7 +10,7 @@ import {
 import {
   auth, authSecundaria, db, NOMBRE, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
   leerTarifas, aviso, avisoSinConfigurar,
-} from "./comun.js";
+} from "./comun.js?v=19";
 
 if (!avisoSinConfigurar()) iniciar();
 

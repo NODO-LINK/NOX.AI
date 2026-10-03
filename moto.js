@@ -7,7 +7,7 @@ import {
 import {
   auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, nuevoMapa, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar,
-} from "./comun.js";
+} from "./comun.js?v=19";
 
 if (!avisoSinConfigurar()) iniciar();
 
