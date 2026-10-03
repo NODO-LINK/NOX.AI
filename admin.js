@@ -10,7 +10,7 @@ import {
 import {
   auth, authSecundaria, db, NOMBRE, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
   leerTarifas, aviso, avisoSinConfigurar,
-} from "./comun.js?v=20";
+} from "./comun.js?v=21";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -50,8 +50,15 @@ function iniciar() {
     $$("#barra button").forEach((b) => (b.onclick = () => ir(b.dataset.ruta)));
     tarifas = await leerTarifas();
 
-    const escuchar = (q, fn) => subs.push(onSnapshot(q, (s) => { fn(s); refrescar(); }, (e) => console.error(e)));
-    escuchar(collection(db, "motorizados"), (s) => { motos = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.nombre.localeCompare(b.nombre)); });
+    // Si fn devuelve false, no hace falta redibujar la pantalla.
+    const escuchar = (q, fn) => subs.push(onSnapshot(q, (s) => { if (fn(s) !== false) refrescar(); }, (e) => console.error(e)));
+    // La ubicación de los motorizados cambia cada pocos segundos: eso no redibuja el panel.
+    const sinUbicacion = (lista) => JSON.stringify(lista.map(({ ubicacion, ...resto }) => resto));
+    escuchar(collection(db, "motorizados"), (s) => {
+      const antes = sinUbicacion(motos);
+      motos = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.nombre.localeCompare(b.nombre));
+      return sinUbicacion(motos) !== antes;
+    });
     escuchar(query(collection(db, "carreras"), orderBy("creada", "desc"), limit(100)), (s) => { carreras = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
     escuchar(query(collection(db, "resenas"), orderBy("fecha", "desc"), limit(100)), (s) => { resenas = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
     escuchar(query(collection(db, "pagos"), orderBy("fecha", "desc"), limit(500)), (s) => { pagos = s.docs.map((d) => ({ id: d.id, ...d.data() })); });

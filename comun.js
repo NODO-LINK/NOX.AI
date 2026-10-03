@@ -3,8 +3,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, connectFirestoreEmulator, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=20";
-import { icono, pintarIconos } from "./iconos.js?v=20";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=21";
+import { icono, pintarIconos } from "./iconos.js?v=21";
 
 export { icono };
 pintarIconos();
@@ -16,7 +16,10 @@ export const SERVICIOS = ["mototaxi"];
 const simulador = location.hostname === "localhost";
 export const firebaseConfig = simulador ? { ...configReal, apiKey: "demo", projectId: "demo-whereapp" } : configReal;
 export const configurado = simulador || !String(configReal.apiKey).startsWith("PEGA");
-export const app = initializeApp(firebaseConfig);
+// Cada parte (cliente, motorizado, administrador) guarda su propia sesión. Así, abrir el panel
+// en el mismo navegador no cierra la sesión del cliente ni la del motorizado, y viceversa.
+const ROL = /admin\.html$/.test(location.pathname) ? "admin" : /moto\.html$/.test(location.pathname) ? "moto" : "cliente";
+export const app = initializeApp(firebaseConfig, ROL);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 if (simulador) {
