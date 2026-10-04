@@ -1,16 +1,18 @@
 // Whereapp — panel de administración: motorizados, cuotas, carreras, reseñas, tarifas y números.
 
 import {
-  signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, deleteUser,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, onSnapshot,
+  doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, onSnapshot,
   serverTimestamp, increment, writeBatch, Timestamp, runTransaction,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   auth, authSecundaria, db, NOMBRE, botonTema, botonInstalar, nuevoMapa, ICONOS, recargos, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
   leerTarifas, escucharTarifas, aviso, avisoSinConfigurar, bs, sonarAlerta, mostrarLugares, tipoLugar, TIPOS_PARA_AGREGAR, ASPECTOS, insigniasSeguridad, opinionPublica, fotosDe, olvidarFotos, achicarFoto, pintarFotos,
-} from "./comun.js?v=52";
+  hoyLocal,
+} from "./comun.js?v=53";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -23,7 +25,7 @@ function iniciar() {
 
   onAuthStateChanged(auth, async (u) => {
     subs.forEach((f) => f()); subs = [];
-    if (!u) return pantallaEntrada();
+    if (!u) { $("#banda-sos")?.remove(); sosVistos.clear(); return pantallaEntrada(); }
     const esAdmin = await getDoc(doc(db, "admins", u.uid)).then((s) => s.exists()).catch(() => false);
     if (!esAdmin) { aviso("Esta cuenta no es de administrador"); return signOut(auth); }
     arrancar(u);
@@ -152,6 +154,7 @@ function iniciar() {
   };
 
   // ---------- Mapa en vivo de los motorizados ----------
+  const ubicOk = (u) => !!u && Number.isFinite(Number(u.lat)) && Number.isFinite(Number(u.lng));
   const colorMoto = (m) => (!habilitado(m) ? "#9ca3af" : m.enCarrera ? "#f59e0b" : m.deTurno === false ? "#6b7280" : "#16a34a");
   const estadoMoto = (m) => (!habilitado(m) ? "No sale en la app" : m.enCarrera ? "Carrera en curso" : m.deTurno === false ? "Descansando" : "Disponible");
   function moverMapaVivo() {
@@ -159,17 +162,19 @@ function iniciar() {
     const L = window.L;
     for (const m of motos) {
       const u = m.ubicacion;
-      if (!u) continue;
+      if (!ubicOk(u)) continue;
       const icono = L.divIcon({ className: "", html: `<div class="pin" style="background:${colorMoto(m)}"><span>${esc(m.nombre.slice(0, 1).toUpperCase())}</span></div>`, iconSize: [30, 30], iconAnchor: [15, 30] });
       const texto = `<b>${esc(m.nombre)}</b><br>${estadoMoto(m)}<br><small>${fechaTexto(u.t)}</small>`;
       if (!marcasVivo[m.id]) marcasVivo[m.id] = L.marker([u.lat, u.lng], { icon: icono }).bindPopup(texto).addTo(mapaVivo);
       else marcasVivo[m.id].setLatLng([u.lat, u.lng]).setIcon(icono).setPopupContent(texto);
     }
+    // Quita los pines de motorizados borrados o sin ubicación.
+    for (const id of Object.keys(marcasVivo)) if (!motos.some((m) => m.id === id && ubicOk(m.ubicacion))) { marcasVivo[id].remove(); delete marcasVivo[id]; }
   }
 
   function vistaMotos() {
     if (mapaVivo) { mapaVivo.remove(); mapaVivo = null; marcasVivo = {}; }
-    const conUbic = motos.filter((m) => m.ubicacion).length;
+    const conUbic = motos.filter((m) => ubicOk(m.ubicacion)).length;
     $("#vista").innerHTML = `
       <h1 class="titulo">${icono("pin")} Mapa en vivo</h1>
       <div class="mapa" id="mapa-vivo"></div>
@@ -193,7 +198,7 @@ function iniciar() {
         </article>`).join("") || `<div class="vacio">${icono("moto")}Aún no hay motorizados.</div>`}</div>`;
     mapaVivo = nuevoMapa("mapa-vivo");
     moverMapaVivo();
-    const puntos = motos.filter((m) => m.ubicacion).map((m) => [m.ubicacion.lat, m.ubicacion.lng]);
+    const puntos = motos.filter((m) => ubicOk(m.ubicacion)).map((m) => [Number(m.ubicacion.lat), Number(m.ubicacion.lng)]);
     if (puntos.length > 1) mapaVivo.fitBounds(window.L.latLngBounds(puntos).pad(0.3), { animate: false });
     else if (puntos.length === 1) mapaVivo.setView(puntos[0], 15, { animate: false });
     $("#nuevo").onclick = () => formularioMoto();
@@ -244,8 +249,16 @@ function iniciar() {
     $$("[data-rechazar-pago]").forEach((b) => (b.onclick = async () => {
       const motivo = prompt("¿Por qué lo rechazas? (lo verá el motorizado)", "No llegó el pago");
       if (motivo === null) return;
-      await updateDoc(doc(db, "reportesPago", b.dataset.rechazarPago), { estado: "rechazado", motivo: motivo.trim(), revisado: serverTimestamp() });
-      aviso("Reporte rechazado");
+      try {
+        // Solo si sigue pendiente (otro teléfono pudo aprobarlo mientras se escribía el motivo).
+        await runTransaction(db, async (tx) => {
+          const ref = doc(db, "reportesPago", b.dataset.rechazarPago);
+          const d = await tx.get(ref);
+          if (!d.exists() || d.data().estado !== "pendiente") throw new Error("Ese pago ya fue revisado");
+          tx.update(ref, { estado: "rechazado", motivo: motivo.trim().slice(0, 200), revisado: serverTimestamp() });
+        });
+        aviso("Reporte rechazado");
+      } catch (e) { console.error(e); aviso(e.message && !e.code ? e.message : "No se pudo rechazar. Intenta de nuevo."); }
     }));
   }
   const fechaPago = (m) => (yaPago(m) || diasRestantes(m) > 0 ? `pagado hasta ${fechaTexto(m.pagadoHasta)}` : "nunca ha pagado");
@@ -283,7 +296,7 @@ function iniciar() {
   let registrando = false;
   async function registrarPago(m, reporte = null) {
     if (registrando) return;
-    if (!confirm(reporte ? `¿Aprobar el pago de ${m.nombre} (ref. ${reporte.referencia})? Se le suman ${tarifas.diasCuota} días.`
+    if (!confirm(reporte ? `¿Aprobar el pago de ${m.nombre}: ${reporte.moneda === "bs" ? `Bs ${reporte.monto}` : usd(reporte.monto)} (ref. ${reporte.referencia})? Se le suman ${tarifas.diasCuota} días.`
       : `¿Registrar pago de ${usd(tarifas.cuota)} de ${m.nombre}? Se le suman ${tarifas.diasCuota} días.`)) return;
     registrando = true;
     try {
@@ -323,13 +336,23 @@ function iniciar() {
     if (motos.some((x) => x.usuario === usuario)) throw new Error("Ese usuario ya existe");
     // Se usa una segunda conexión para crear la cuenta sin cerrar la sesión del admin.
     const authSeg = authSecundaria();
-    const cred = await createUserWithEmailAndPassword(authSeg, correoDe(usuario), clave);
-    await signOut(authSeg);
-    await setDoc(doc(db, "motorizados", cred.user.uid), {
-      ...datos, usuario, activo, ratingSum: 0, ratingCount: 0, creado: serverTimestamp(),
-      pagadoHasta: Timestamp.fromDate(new Date(Date.now() + (pagado ? dias * DIA : 0))),
-    });
-    if (pagado && cobrar) await addDoc(collection(db, "pagos"), { motoUid: cred.user.uid, nombre: datos.nombre, monto: tarifas.cuota, fecha: serverTimestamp() });
+    try {
+      const cred = await createUserWithEmailAndPassword(authSeg, correoDe(usuario), clave);
+      try {
+        await setDoc(doc(db, "motorizados", cred.user.uid), {
+          ...datos, usuario, activo, ratingSum: 0, ratingCount: 0, creado: serverTimestamp(),
+          pagadoHasta: Timestamp.fromDate(new Date(Date.now() + (pagado ? dias * DIA : 0))),
+        });
+      } catch (e) {
+        // Sin ficha la cuenta quedaría huérfana y el usuario "ocupado": se borra para poder reintentar.
+        await deleteUser(cred.user).catch(() => {});
+        throw e;
+      }
+      if (pagado && cobrar) await addDoc(collection(db, "pagos"), { motoUid: cred.user.uid, nombre: datos.nombre, monto: tarifas.cuota, fecha: serverTimestamp() });
+    } finally {
+      await signOut(authSeg).catch(() => {});
+      await deleteApp(authSeg.app).catch(() => {});
+    }
   }
 
   async function crearMotoPrueba(boton) {
@@ -371,9 +394,19 @@ function iniciar() {
     if (borrar) borrar.onclick = async () => {
       if (m.enCarrera || carreras.some((c) => c.motoUid === m.id && c.estado === "aceptada")) return aviso(`${m.nombre} tiene una carrera en curso: espera que termine (o cancélala en Carreras) antes de eliminarlo.`);
       if (!confirm(`¿Eliminar a ${m.nombre}? Ya no podrá entrar ni saldrá en la app.\n\nSi solo quieres que deje de salir, mejor usa «Desactivar». Ojo: su usuario «${m.usuario}» no se podrá volver a crear.`)) return;
-      await deleteDoc(doc(db, "motorizados", m.id));
-      deleteDoc(doc(db, "fotos", m.id)).catch(() => {});
-      cerrar();
+      borrar.disabled = true;
+      try {
+        // Se borra todo lo suyo de una vez y se liberan las carreras que esperaban solo por él.
+        const b = writeBatch(db);
+        ["motorizados", "fotos", "ubicaciones", "llamadas"].forEach((c) => b.delete(doc(db, c, m.id)));
+        (await getDocs(collection(db, "motorizados", m.id, "opiniones"))).forEach((d) => b.delete(d.ref));
+        reportesPago.filter((r) => r.motoUid === m.id && r.estado === "pendiente")
+          .forEach((r) => b.update(doc(db, "reportesPago", r.id), { estado: "rechazado", motivo: "Motorizado eliminado", revisado: serverTimestamp() }));
+        carreras.filter((c) => c.estado === "esperando" && c.paraMoto === m.id)
+          .forEach((c) => b.update(doc(db, "carreras", c.id), { paraMoto: null, paraMotoNombre: null }));
+        await b.commit();
+        cerrar();
+      } catch (e) { console.error(e); aviso("No se pudo eliminar. ¿Publicaste las reglas nuevas?"); borrar.disabled = false; }
     };
     f.onsubmit = async (e) => {
       e.preventDefault();
@@ -427,7 +460,20 @@ function iniciar() {
     $$("[data-cancelar]").forEach((b) => (b.onclick = async () => {
       const motivo = prompt("Motivo de la cancelación:");
       if (motivo === null) return;
-      await updateDoc(doc(db, "carreras", b.dataset.cancelar), { estado: "cancelada", cancelacion: { por: "admin", motivo: motivo || "Sin motivo", fecha: new Date() } });
+      try {
+        // Solo si sigue en curso (pudo terminarse mientras se escribía el motivo); libera al motorizado.
+        await runTransaction(db, async (tx) => {
+          const ref = doc(db, "carreras", b.dataset.cancelar);
+          const d = await tx.get(ref);
+          const c = d.data();
+          if (!c || !["esperando", "aceptada"].includes(c.estado)) throw new Error("La carrera ya cambió de estado");
+          const mRef = c.estado === "aceptada" && c.motoUid ? doc(db, "motorizados", c.motoUid) : null;
+          const md = mRef ? await tx.get(mRef) : null;
+          tx.update(ref, { estado: "cancelada", cancelacion: { por: "admin", motivo: motivo.trim().slice(0, 200) || "Sin motivo", fecha: new Date() } });
+          if (md?.exists()) tx.update(mRef, { enCarrera: false });
+        });
+        aviso("Carrera cancelada");
+      } catch (e) { console.error(e); aviso(e.message && !e.code ? e.message : "No se pudo cancelar. Intenta de nuevo."); }
     }));
   }
 
@@ -525,8 +571,17 @@ function iniciar() {
         });
       } catch (e) { if (e.message !== "ya") { console.error(e); aviso("No se pudo aprobar. Intenta de nuevo."); b.disabled = false; } }
     }));
-    $$("[data-rechazar]").forEach((b) => (b.onclick = () => {
-      if (confirm("¿Rechazar y borrar esta reseña?")) deleteDoc(doc(db, "resenas", b.dataset.rechazar));
+    $$("[data-rechazar]").forEach((b) => (b.onclick = async () => {
+      if (!confirm("¿Rechazar y borrar esta reseña?")) return;
+      try {
+        await runTransaction(db, async (tx) => {
+          const ref = doc(db, "resenas", b.dataset.rechazar);
+          const d = await tx.get(ref);
+          if (!d.exists()) return;
+          if (d.data().aprobada === true) throw new Error("Esa reseña ya fue aprobada");
+          tx.delete(ref);
+        });
+      } catch (e) { console.error(e); aviso(e.message && !e.code ? e.message : "No se pudo rechazar. Intenta de nuevo."); }
     }));
   }
 
@@ -568,7 +623,7 @@ function iniciar() {
       e.preventDefault();
       const fd = new FormData(e.target);
       const num = (k) => Number(fd.get(k)) || 0;
-      tarifas = {
+      const nuevas = {
         delivery: { base: num("db"), porKm: num("dk") }, mototaxi: { base: num("mb"), porKm: num("mk") }, cuota: num("cuota"), diasCuota: num("dias") || 15,
         nocturna: { activa: fd.get("nocheActiva") === "on", desde: fd.get("nocheDesde") || "20:00", hasta: fd.get("nocheHasta") || "05:00", extra: num("nocheExtra") },
         lluvia: { activa: fd.get("lluviaActiva") === "on", extra: num("lluviaExtra") },
@@ -576,10 +631,14 @@ function iniciar() {
         cobro: { banco: String(fd.get("cobroBanco") || "").trim(), telefono: String(fd.get("cobroTel") || "").trim(), cedula: String(fd.get("cobroCed") || "").trim() },
         tasaFecha: num("tasa") !== (t.tasa || 0) ? new Date() : (t.tasaFecha || new Date()),
       };
-      await setDoc(doc(db, "config", "general"), tarifas);
-      document.activeElement?.blur();
-      aviso("Tarifas guardadas");
-      ir(ruta, true);
+      const bt = $("button", e.target); bt.disabled = true;
+      try {
+        await setDoc(doc(db, "config", "general"), nuevas);
+        tarifas = nuevas;
+        document.activeElement?.blur();
+        aviso("Tarifas guardadas");
+        ir(ruta, true);
+      } catch (err) { console.error(err); aviso("No se pudieron guardar las tarifas. Revisa la conexión."); bt.disabled = false; }
     };
   }
 
@@ -657,7 +716,9 @@ function iniciar() {
       e.preventDefault();
       const f = new FormData(e.target);
       const n = String(f.get("n")).trim();
-      if (!n) return;
+      const bt = $("button[type=submit], button:not([type])", e.target);
+      if (!n || bt?.disabled) return;
+      if (bt) bt.disabled = true;
       try {
         await addDoc(collection(db, "lugares"), { n, t: f.get("t"), lat: latlng.lat, lng: latlng.lng, creado: serverTimestamp() });
         aviso(`«${n}» agregado. Ya lo ven todos.`);
@@ -666,6 +727,7 @@ function iniciar() {
       } catch (err) {
         console.error(err);
         aviso("No se pudo guardar. ¿Publicaste las reglas nuevas de Firebase?");
+        if (bt) bt.disabled = false;
       }
     };
     setTimeout(() => $("input", fondo).focus(), 50);
@@ -678,7 +740,7 @@ function iniciar() {
   }
   function vistaStats() {
     const dias = visitas.dias || {};
-    const hoy = new Date().toISOString().slice(0, 10);
+    const hoy = hoyLocal();
     const semana = Object.entries(dias).filter(([d]) => new Date(d) > new Date(Date.now() - 7 * DIA)).reduce((s, [, n]) => s + n, 0);
     const porQuincena = {};
     pagos.forEach((p) => {

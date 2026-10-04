@@ -3,7 +3,7 @@
 
 import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { fecha, auth, db, NOMBRE, $, esc, icono, ICONOS, nuevoMapa, marcarRecorrido, filasRecorrido, progreso, afinarEta, transicion, avisoSinConfigurar } from "./comun.js?v=52";
+import { fecha, auth, db, NOMBRE, $, esc, icono, ICONOS, nuevoMapa, marcarRecorrido, filasRecorrido, progreso, afinarEta, transicion, avisoSinConfigurar } from "./comun.js?v=53";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -30,7 +30,8 @@ function iniciar() {
       if (carrera.estado === "aceptada" && carrera.motoUid) seguirMoto(carrera.motoUid);
       else if (quitarMoto) { quitarMoto(); quitarMoto = null; }
       pintar();
-    }, () => mensaje("alerta", "No se pudo abrir el seguimiento", "Puede que el enlace ya no sea válido."));
+    }, () => mensaje(carrera ? "check" : "alerta", carrera ? "El viaje terminó" : "No se pudo abrir el seguimiento",
+      carrera ? "Este enlace ya no está disponible." : "Puede que el enlace ya no sea válido (dura 24 horas)."));
   });
 
   function seguirMoto(uid) {

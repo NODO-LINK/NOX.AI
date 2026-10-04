@@ -28,15 +28,19 @@ service cloud.firestore {
     match /motorizados/{uid} {
       allow read: if dentro();
       allow create, delete: if esAdmin();
-      allow update: if esAdmin() || (dentro() && request.auth.uid == uid && soloCambia(['ubicacion', 'enCarrera', 'deTurno', 'pagoMovil']));
+      allow update: if esAdmin() || (dentro() && request.auth.uid == uid && soloCambia(['ubicacion', 'enCarrera', 'deTurno', 'pagoMovil'])
+        && (!('ubicacion' in request.resource.data) || request.resource.data.ubicacion == null
+            || (request.resource.data.ubicacion.lat is number && request.resource.data.ubicacion.lng is number)));
     }
 
     // Ubicación en vivo del motorizado durante una carrera (la escribe él, cada pocos segundos).
     match /ubicaciones/{uid} {
       allow read: if dentro();
-      allow write: if esMoto() && request.auth.uid == uid
+      allow create, update: if esMoto() && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['lat', 'lng', 't'])
         && request.resource.data.lat is number && request.resource.data.lng is number;
+      // Al terminar la carrera el motorizado la borra (y el admin al eliminarlo).
+      allow delete: if esAdmin() || (dentro() && request.auth.uid == uid);
     }
 
     // Opiniones públicas en el perfil del motorizado (copia de las reseñas que aprueba el admin).
@@ -75,8 +79,12 @@ service cloud.firestore {
     }
 
     match /carreras/{id} {
-      // Una carrera sola se puede abrir con su id (enlace de seguimiento que el cliente comparte).
-      allow get: if dentro();
+      // Una carrera sola se puede abrir con su id (enlace de seguimiento que el cliente comparte),
+      // durante las 24 horas desde que se pidió (así el amigo ve que llegó bien); después, solo quien participó.
+      allow get: if esAdmin()
+        || (dentro() && (resource.data.clienteUid == request.auth.uid || resource.data.get('motoUid', null) == request.auth.uid))
+        || (dentro() && (resource.data.estado in ['esperando', 'aceptada']
+            || (resource.data.creada is timestamp && request.time < resource.data.creada + duration.value(24, 'h'))));
       // Las listas solo las ve quien participa.
       allow list: if esAdmin()
         || (dentro() && resource.data.clienteUid == request.auth.uid)
@@ -91,6 +99,13 @@ service cloud.firestore {
         && request.resource.data.km is number && request.resource.data.km >= 0 && request.resource.data.km < 200
         && request.resource.data.precio is number && request.resource.data.precio > 0 && request.resource.data.precio < 1000
         && punto(request.resource.data.origen) && punto(request.resource.data.destino)
+        && (!('paradas' in request.resource.data) || (request.resource.data.paradas is list && request.resource.data.paradas.size() <= 5))
+        && request.resource.data.keys().hasOnly(['clienteUid', 'clienteNombre', 'clienteTel', 'tipo', 'origen', 'destino', 'paradas', 'retorno', 'nota',
+             'km', 'precio', 'recargos', 'ofertaCliente', 'precioSugerido', 'precioCliente', 'formaPago', 'tasa', 'precioBs', 'precioBsCliente',
+             'estado', 'paraMoto', 'paraMotoNombre', 'motoUid', 'calificada', 'cancelaciones', 'creada'])
+        && request.resource.data.get('precioCliente', request.resource.data.precio) == request.resource.data.precio
+        && request.resource.data.get('precioBsCliente', null) == request.resource.data.get('precioBs', null)
+        && request.resource.data.get('calificada', false) == false
         && request.resource.data.clienteNombre is string && request.resource.data.clienteNombre.size() <= 80;
 
       allow update: if esAdmin()
@@ -111,6 +126,7 @@ service cloud.firestore {
             && motoData(request.resource.data.motoUid).pagadoHasta > request.time
             && request.resource.data.motoNombre == motoData(request.resource.data.motoUid).nombre
             && request.resource.data.motoTel == motoData(request.resource.data.motoUid).get('telefono', '')
+            && motoData(request.resource.data.motoUid).get('deTurno', true) != false
             && soloCambia(['estado', 'motoUid', 'motoNombre', 'motoTel', 'motoMoto', 'motoPlaca', 'aceptada', 'precio', 'precioBs', 'contraoferta']))
         // …avisa una emergencia (SOS) durante el viaje…
         || (dentro() && resource.data.clienteUid == request.auth.uid
@@ -120,6 +136,7 @@ service cloud.firestore {
         // …o la califica cuando terminó.
         || (dentro() && resource.data.clienteUid == request.auth.uid
             && resource.data.estado == 'terminada'
+            && request.resource.data.calificada == true
             && soloCambia(['calificada']))
         // El motorizado acepta una carrera disponible.
         || (esMoto() && motoHabilitado()
@@ -127,6 +144,11 @@ service cloud.firestore {
             && (resource.data.paraMoto == null || resource.data.paraMoto == request.auth.uid)
             && request.resource.data.estado == 'aceptada'
             && request.resource.data.motoUid == request.auth.uid
+            // Sus datos reales (nadie puede hacerse pasar por otro) y una sola carrera a la vez.
+            && request.resource.data.motoNombre == motoData(request.auth.uid).nombre
+            && request.resource.data.motoTel == motoData(request.auth.uid).get('telefono', '')
+            && request.resource.data.motoPlaca == motoData(request.auth.uid).get('placa', '')
+            && motoData(request.auth.uid).get('enCarrera', false) != true
             && soloCambia(['estado', 'motoUid', 'motoNombre', 'motoTel', 'motoMoto', 'motoPlaca', 'aceptada']))
         // El motorizado avisa que ya recogió, termina o cancela su carrera (al cancelar vuelve a quedar disponible).
         || (esMoto() && resource.data.motoUid == request.auth.uid && resource.data.estado == 'aceptada'
@@ -140,6 +162,9 @@ service cloud.firestore {
                  && request.resource.data.cancelaciones is list
                  && request.resource.data.cancelaciones.size() == resource.data.get('cancelaciones', []).size() + 1
                  && request.resource.data.get('precio', 0) == resource.data.get('precioCliente', resource.data.get('precio', 0))
+                 && request.resource.data.get('precioBs', null) == resource.data.get('precioBsCliente', resource.data.get('precioBs', null))
+                 && request.resource.data.get('paraMotoNombre', null) == null
+                 && request.resource.data.get('contraoferta', false) == false
                  && soloCambia(['estado', 'motoUid', 'paraMoto', 'paraMotoNombre', 'cancelaciones', 'recogido', 'llegoEn',
                                 'motoNombre', 'motoTel', 'motoMoto', 'motoPlaca', 'precio', 'precioBs', 'contraoferta']))));
     }
@@ -161,6 +186,10 @@ service cloud.firestore {
       function participa() { return dentro() && (carrera().clienteUid == request.auth.uid || carrera().motoUid == request.auth.uid); }
       allow read: if participa() || esAdmin();
       allow create: if participa()
+        && carrera().estado == 'aceptada'
+        && request.resource.data.keys().hasOnly(['de', 'nombre', 'texto', 'fecha'])
+        && request.resource.data.fecha == request.time
+        && request.resource.data.nombre is string && request.resource.data.nombre.size() <= 80
         && request.resource.data.de == request.auth.uid
         && request.resource.data.texto is string
         && request.resource.data.texto.size() > 0 && request.resource.data.texto.size() <= 500;
@@ -177,9 +206,12 @@ service cloud.firestore {
     }
 
     match /resenas/{id} {
-      allow create: if dentro() && idNormal(id)
+      // Una sola reseña por carrera: su id es el de la carrera (repetirla sería "editar", y eso solo lo hace el admin).
+      allow create: if dentro() && id == request.resource.data.carreraId
         && request.resource.data.clienteUid == request.auth.uid
+        && request.resource.data.fecha == request.time
         && !exists(/databases/$(database)/documents/bloqueados/$(get(/databases/$(database)/documents/clientes/$(request.auth.uid)).data.cedula))
+        && request.resource.data.clienteNombre == get(/databases/$(database)/documents/clientes/$(request.auth.uid)).data.nombre
         && get(/databases/$(database)/documents/carreras/$(request.resource.data.carreraId)).data.clienteUid == request.auth.uid
         && get(/databases/$(database)/documents/carreras/$(request.resource.data.carreraId)).data.motoUid == request.resource.data.motoUid
         && get(/databases/$(database)/documents/carreras/$(request.resource.data.carreraId)).data.estado == 'terminada'
@@ -205,8 +237,9 @@ service cloud.firestore {
     }
 
     match /llamadas/{motoUid} {
-      allow read: if esAdmin();
-      allow create: if dentro() && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n == 1;
+      allow read, delete: if esAdmin();
+      allow create: if dentro() && exists(/databases/$(database)/documents/motorizados/$(motoUid))
+        && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n == 1;
       allow update: if dentro() && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n == resource.data.n + 1;
     }
 
@@ -214,9 +247,12 @@ service cloud.firestore {
       allow read: if esAdmin();
       // Solo se puede sumar 1 visita (nada de borrar ni poner textos raros).
       allow create: if dentro() && request.resource.data.keys().hasOnly(['total', 'dias'])
-        && request.resource.data.total == 1 && request.resource.data.dias is map;
+        && request.resource.data.total == 1 && request.resource.data.dias is map && request.resource.data.dias.size() == 1;
+      // Solo se suma en el día de hoy: no se pueden borrar ni cambiar los otros días.
       allow update: if dentro() && request.resource.data.keys().hasOnly(['total', 'dias'])
-        && request.resource.data.total == resource.data.total + 1 && request.resource.data.dias is map;
+        && request.resource.data.total == resource.data.total + 1 && request.resource.data.dias is map
+        && request.resource.data.dias.diff(resource.data.dias).removedKeys().size() == 0
+        && request.resource.data.dias.diff(resource.data.dias).affectedKeys().size() == 1;
     }
   }
 }

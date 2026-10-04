@@ -7,7 +7,8 @@ import {
 import {
   pedirAvisosAlTocar, leerOpiniones, listaOpiniones, ENLACE_POLITICAS, sonarAlerta, ASPECTOS, insigniasSeguridad, textoCobro, FORMAS_PAGO, bs, auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar, escucharTarifas, aBs, lineaRecta,
-} from "./comun.js?v=52";
+  hoyLocal,
+} from "./comun.js?v=53";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -20,7 +21,19 @@ function iniciar() {
   const opiniones = { abiertas: false, html: "" };   // se recuerda si la lista está abierta al redibujar
   let disponibles = [], miCarrera = null, conocidas = new Set(), primeraCarga = true;
   let mapa = null, vigilaGps = null, sonido = null, ultimoModo = null;
-  let terminadas = [], chat = { id: null, quitar: null, sinLeer: 0 }, bloqueoPantalla = null;
+  let terminadas = [], chat = { id: null, quitar: null, sinLeer: 0, ajenos: null }, bloqueoPantalla = null;
+  let chatAbierto = null, aceptando = false;
+  const cerradasPorMi = new Set();   // carreras que él terminó o canceló (para no avisarle "te cancelaron")
+  // Paradas bien formadas (una carrera mal escrita no debe romper la pantalla de todos).
+  const limpiarCarrera = (c) => ({ ...c, paradas: Array.isArray(c.paradas) ? c.paradas.filter((p) => p && typeof p.dir === "string" && Number.isFinite(p.lat) && Number.isFinite(p.lng)) : [] });
+  const carreraValida = (c) => [c.origen, c.destino].every((p) => p && typeof p.dir === "string" && Number.isFinite(p.lat) && Number.isFinite(p.lng));
+  const cerrarChat = () => { if (chatAbierto) { try { chatAbierto(); } catch {} chatAbierto = null; } };
+  // Quita sus contraofertas en todas las carreras (al salir o al pasar a descanso).
+  async function retirarTodasOfertas() {
+    const ids = [...misOfertas.keys()];
+    misOfertas.clear();
+    await Promise.all(ids.map((id) => deleteDoc(doc(db, "carreras", id, "ofertas", yo.uid)).catch(() => {})));
+  }
   // Mantener la pantalla encendida (se recuerda en este teléfono).
   let pantallaFija = (() => { try { return localStorage.getItem("whereapp.pantalla") === "1"; } catch { return false; } })();
 
@@ -29,7 +42,8 @@ function iniciar() {
     pararCarreras(); pararGps();
     // Si cambia la cuenta en este teléfono, no debe quedar nada del motorizado anterior.
     if (chat.quitar) chat.quitar();
-    chat = { id: null, quitar: null, sinLeer: 0 };
+    chat = { id: null, quitar: null, sinLeer: 0, ajenos: null };
+    cerrarChat(); cerradasPorMi.clear();
     misOfertas.clear(); aceptadasPorMi.clear(); revisadas.clear(); conocidas = new Set();
     Object.assign(opiniones, { abiertas: false, html: "" });
     terminadas = []; reportes = []; tarifas = null; primeraCarga = true;
@@ -48,10 +62,11 @@ function iniciar() {
       // Los cambios de ubicación (cada pocos segundos) no redibujan la pantalla.
       if (firma(perfil) !== firmaAntes) pintar();
     }));
-    subs.push(escucharTarifas((t) => { tarifas = t; if (perfil) pintar(); }));
+    // Con una carrera en curso no se redibuja (el mapa perdería el zoom); se verá al terminarla.
+    subs.push(escucharTarifas((t) => { tarifas = t; if (perfil && !miCarrera) pintar(); }));
     subs.push(onSnapshot(query(collection(db, "reportesPago"), where("motoUid", "==", u.uid)), (s) => {
       reportes = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (fecha(b.creado) || new Date()) - (fecha(a.creado) || new Date()));
-      if (perfil) pintar();
+      if (perfil && !miCarrera) pintar();
     }, () => {}));
   });
 
@@ -86,8 +101,22 @@ function iniciar() {
     subsCarreras.push(onSnapshot(query(collection(db, "carreras"), where("motoUid", "==", yo.uid), where("estado", "==", "aceptada")), (s) => {
       const antes = miCarrera;
       // Si por algo tuviera dos, se muestra primero la más antigua (al terminarla aparece la otra).
-      const lista = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (fecha(a.aceptada) || new Date()) - (fecha(b.aceptada) || new Date()));
+      const lista = s.docs.map((d) => limpiarCarrera({ id: d.id, ...d.data() })).sort((a, b) => (fecha(a.aceptada) || new Date()) - (fecha(b.aceptada) || new Date()));
       miCarrera = lista[0] || null;
+      // Le cancelaron la carrera (el cliente o el admin): que se entere aunque tenga la app minimizada.
+      if (antes && (!miCarrera || miCarrera.id !== antes.id) && !cerradasPorMi.has(antes.id)) {
+        const previa = antes;
+        cerrarChat();
+        getDoc(doc(db, "carreras", previa.id)).then((d) => {
+          if (d.exists() && d.data().estado === "cancelada") {
+            const por = d.data().cancelacion?.por === "admin" ? "El administrador" : "El cliente";
+            sonar(); aviso(`${por} canceló la carrera`);
+            notificar("❌ Carrera cancelada", `${por} canceló: ${previa.origen?.dir || ""}`, { tag: "whereapp-moto", urgente: true });
+          }
+        }).catch(() => {});
+      }
+      // La volvió a tomar (después de haberla cancelado): ya no cuenta como "cerrada por él".
+      if (miCarrera) cerradasPorMi.delete(miCarrera.id);
       if (lista.length > 1 && (!antes || antes.id !== miCarrera.id)) aviso(`Tienes ${lista.length} carreras aceptadas: termina esta y luego verás la otra.`);
       if (miCarrera) retirarOtrasOfertas(miCarrera.id);
       // Si la carrera llegó sin que él la aceptara, es que el cliente aceptó su contraoferta.
@@ -113,8 +142,8 @@ function iniciar() {
     if (!habilitado(perfil) || perfil.deTurno === false) { disponibles = []; return; }
     primeraCarga = true;
     subsCarreras.push(onSnapshot(query(collection(db, "carreras"), where("estado", "==", "esperando")), (s) => {
-      disponibles = s.docs.map((d) => ({ id: d.id, ...d.data() }))
-        .filter((c) => !c.paraMoto || c.paraMoto === yo.uid)
+      disponibles = s.docs.map((d) => limpiarCarrera({ id: d.id, ...d.data() }))
+        .filter((c) => carreraValida(c) && (!c.paraMoto || c.paraMoto === yo.uid))
         .sort((a, b) => (fecha(a.creada) || 0) - (fecha(b.creada) || 0));
       const nuevas = disponibles.filter((c) => !conocidas.has(c.id));
       nuevas.forEach((c) => conocidas.add(c.id));
@@ -129,9 +158,20 @@ function iniciar() {
         });
       }
       primeraCarga = false;
+      cerrarAvisosViejos();
       // Con una carrera en curso no se redibuja (si no, el mapa se reinicia a cada rato).
       if (!miCarrera) pintar();
     }, () => {}));
+  }
+
+  // Quita de la barra del teléfono los avisos de carreras que ya tomó otro o se cancelaron.
+  async function cerrarAvisosViejos() {
+    try {
+      const reg = await navigator.serviceWorker?.getRegistration();
+      if (!reg) return;
+      for (const n of await reg.getNotifications())
+        if (n.tag && n.tag.startsWith("carrera-") && !disponibles.some((c) => "carrera-" + c.id === n.tag)) n.close();
+    } catch {}
   }
 
   // La cuota vence con el reloj (sin que cambie nada en la base de datos): se revisa cada minuto.
@@ -147,13 +187,15 @@ function iniciar() {
   function seguirChat() {
     if (chat.id === (miCarrera && miCarrera.id)) return;
     if (chat.quitar) chat.quitar();
-    chat = { id: null, quitar: null, sinLeer: 0 };
+    chat = { id: null, quitar: null, sinLeer: 0, ajenos: null };
     if (!miCarrera) return;
     const c = miCarrera;
     chat.id = c.id;
-    chat.quitar = escucharChat(c.id, yo.uid, (msgs, sinLeer) => {
-      const nuevo = sinLeer > chat.sinLeer;
-      chat.sinLeer = sinLeer;
+    chat.quitar = escucharChat(c.id, yo.uid, (msgs, sinLeer, ajenos) => {
+      // Mensaje nuevo = llegó uno más del cliente (aunque ya haya leído los anteriores).
+      const nuevo = chat.ajenos !== null && ajenos > chat.ajenos;
+      chat.ajenos = ajenos;
+      chat.sinLeer = $(".chat") ? 0 : sinLeer;
       const b = $("#chat-sin-leer");
       if (b) { b.hidden = !sinLeer; b.textContent = sinLeer; }
       const ult = msgs[msgs.length - 1];
@@ -203,10 +245,10 @@ function iniciar() {
     const fondo = document.createElement("div");
     fondo.className = "modal";
     fondo.innerHTML = `<form class="ventana"><h2>Reportar pago de la cuota</h2>
-      <label>Número de referencia</label><input name="ref" inputmode="numeric" required placeholder="Ej.: 012345">
+      <label>Número de referencia</label><input name="ref" inputmode="numeric" maxlength="20" required placeholder="Ej.: 012345">
       <div class="dos"><div><label>Monto</label><input name="monto" inputmode="decimal" required value="${montoBs ? montoBs.toFixed(2).replace(".", ",") : tarifas.cuota}"></div>
         <div><label>Moneda</label><select name="moneda"><option value="bs" ${montoBs ? "selected" : ""}>Bs</option><option value="usd" ${montoBs ? "" : "selected"}>$</option></select></div></div>
-      <label>Fecha del pago</label><input name="fecha" type="date" value="${new Date().toISOString().slice(0, 10)}">
+      <label>Fecha del pago</label><input name="fecha" type="date" value="${hoyLocal()}">
       <button class="boton">Enviar reporte</button><button class="boton secundario" type="button" data-no>Cancelar</button></form>`;
     document.body.append(fondo);
     $("[data-no]", fondo).onclick = () => fondo.remove();
@@ -217,6 +259,7 @@ function iniciar() {
       const t = String(f.get("monto")).trim().replace(/[^\d.,]/g, "");
       const monto = t.includes(",") ? parseFloat(t.replace(/\./g, "").replace(",", ".")) : /^\d+\.\d{1,2}$/.test(t) ? parseFloat(t) : parseFloat(t.replace(/\./g, ""));
       if (ref.length < 4) return aviso("Escribe el número de referencia (al menos 4 números)");
+      if (ref.length > 20) return aviso("La referencia es muy larga (máximo 20 números)");
       if (!(monto > 0)) return aviso("Escribe el monto que pagaste");
       try {
         await addDoc(collection(db, "reportesPago"), {
@@ -344,6 +387,8 @@ function iniciar() {
       <button class="boton secundario chico" id="salir">Salir</button></div></div>`;
     // Al salir deja de estar de turno: así no sale como disponible con el teléfono apagado.
     $("#salir").onclick = async () => {
+      if (miCarrera && !confirm("Tienes una carrera en curso. Si sales, el cliente dejará de verte llegar. ¿Salir de todos modos?")) return;
+      await retirarTodasOfertas();
       if (!miCarrera) await updateDoc(doc(db, "motorizados", yo.uid), { deTurno: false }).catch(() => {});
       signOut(auth);
     };
@@ -417,6 +462,8 @@ function iniciar() {
     const t = $("#turno");
     if (t) t.onclick = async () => {
       t.disabled = true;
+      // Al pasar a descanso se retiran sus contraofertas (si no, un cliente podría aceptarle sin que esté).
+      if (deTurno) await retirarTodasOfertas();
       await updateDoc(doc(db, "motorizados", yo.uid), { deTurno: !deTurno }).catch(() => { t.disabled = false; aviso("No se pudo cambiar el turno"); });
     };
     const pf = $("#pantalla");
@@ -501,9 +548,12 @@ function iniciar() {
   }
 
   async function aceptar(id) {
-    if (miCarrera) return aviso("Ya tienes una carrera en curso");
+    if (miCarrera || aceptando) return aviso("Ya tienes una carrera en curso");
+    aceptando = true;
     aceptadasPorMi.add(id);
     try {
+      // En una sola transacción: la toma solo si sigue libre y queda marcado "en carrera" al instante
+      // (así no le pueden aceptar otra oferta ni tomar dos a la vez).
       await runTransaction(db, async (tx) => {
         const ref = doc(db, "carreras", id);
         const s = await tx.get(ref);
@@ -512,6 +562,7 @@ function iniciar() {
           estado: "aceptada", motoUid: yo.uid, motoNombre: perfil.nombre, motoTel: perfil.telefono || "",
           motoMoto: perfil.moto || "", motoPlaca: perfil.placa || "", aceptada: serverTimestamp(),
         });
+        tx.update(doc(db, "motorizados", yo.uid), { enCarrera: true });
       });
       aviso("¡Carrera aceptada!");
       retirarOtrasOfertas(id);
@@ -520,7 +571,7 @@ function iniciar() {
       aviso(e && e.message === "tomada" ? "Otro motorizado ya la aceptó"
         : e && e.code === "permission-denied" ? "No puedes aceptar ahora: revisa que estés activo y con la cuota al día"
         : "No se pudo aceptar. Revisa tu internet e intenta de nuevo.");
-    }
+    } finally { aceptando = false; }
   }
   // Cuando ya tiene una carrera, quita sus ofertas en otras (para que no le acepten dos a la vez).
   function retirarOtrasOfertas(excepto) {
@@ -635,7 +686,11 @@ function iniciar() {
   }
 
   function activarMiCarrera(c) {
-    $("#chat").onclick = () => abrirChat(c.id, yo.uid, perfil.nombre, c.clienteNombre.split(" ")[0]);
+    $("#chat").onclick = () => {
+      cerrarChat();
+      chatAbierto = abrirChat(c.id, yo.uid, perfil.nombre, c.clienteNombre.split(" ")[0]);
+      chat.sinLeer = 0; const b = $("#chat-sin-leer"); if (b) b.hidden = true;
+    };
     mapa = nuevoMapa("mapa", "", { yo: true });
     mapa.fitBounds(marcarRecorrido(mapa, c).pad(0.3), { animate: false });
     // Lugares de El Moján (escuelas, mercados, playas…) para ubicarse mejor.
@@ -656,9 +711,17 @@ function iniciar() {
     if (termine) termine.onclick = async () => {
       if (!confirm("¿Entregaste y cobraste la carrera?")) return;
       termine.disabled = true;
-      // Sin esperar al servidor (con mala señal tarda): se guarda en cuanto haya conexión.
-      updateDoc(doc(db, "carreras", c.id), { estado: "terminada", terminada: serverTimestamp() })
-        .catch(() => aviso("No se pudo terminar: puede que el cliente la haya cancelado."));
+      cerradasPorMi.add(c.id);
+      aviso("Guardando…");
+      // Se espera al servidor: si no hay señal, el motorizado lo sabe y puede intentarlo de nuevo.
+      try {
+        await updateDoc(doc(db, "carreras", c.id), { estado: "terminada", terminada: serverTimestamp() });
+      } catch (e) {
+        cerradasPorMi.delete(c.id); termine.disabled = false;
+        return aviso(e.code === "permission-denied" ? "No se pudo terminar: puede que el cliente la haya cancelado." : "No se pudo terminar. Revisa tu internet e intenta de nuevo.");
+      }
+      deleteDoc(doc(db, "ubicaciones", yo.uid)).catch(() => {});
+      cerrarChat();
       aviso("¡Carrera terminada!");
       calificarCliente(c);
     };
@@ -666,6 +729,7 @@ function iniciar() {
     if (cancelar) cancelar.onclick = async () => {
       const motivo = await elegirMotivo("¿Por qué cancelas?", MOTIVOS_MOTO);
       if (!motivo) return;
+      cerradasPorMi.add(c.id);
       // La carrera vuelve a quedar disponible para los demás motorizados, con el precio que puso el cliente
       // (si había aceptado una contraoferta) y sin los datos de este motorizado. Su oferta se borra.
       const lote = writeBatch(db);
@@ -683,10 +747,12 @@ function iniciar() {
       try { await lote.commit(); }
       catch (e) {
         // Reglas viejas (sin restaurar precio): se cancela como antes.
-        if (e.code !== "permission-denied") return aviso("No se pudo cancelar. Revisa tu internet e intenta de nuevo.");
-        try { await updateDoc(doc(db, "carreras", c.id), base); } catch { return aviso("No se pudo cancelar."); }
+        if (e.code !== "permission-denied") { cerradasPorMi.delete(c.id); return aviso("No se pudo cancelar. Revisa tu internet e intenta de nuevo."); }
+        try { await updateDoc(doc(db, "carreras", c.id), base); } catch { cerradasPorMi.delete(c.id); return aviso("No se pudo cancelar."); }
       }
       misOfertas.delete(c.id); revisadas.delete(c.id); aviso("Cancelaste la carrera");
+      deleteDoc(doc(db, "ubicaciones", yo.uid)).catch(() => {});
+      cerrarChat();
       if (!miCarrera) pintar();
     };
   }

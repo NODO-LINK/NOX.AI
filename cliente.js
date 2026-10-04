@@ -10,7 +10,8 @@ import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
   pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
-} from "./comun.js?v=52";
+  hoyLocal,
+} from "./comun.js?v=53";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -98,7 +99,7 @@ function iniciar() {
     $("#vista").innerHTML = `<div class="entrada">${cabeza}
       <form class="caja" id="registro"><h2>Entra con tus datos</h2>
         <label for="nombre">Nombre completo</label>
-        <input id="nombre" autocomplete="name" placeholder="Ej.: María José Pérez González" value="${esc(previos.nombre)}" required>
+        <input id="nombre" maxlength="80" autocomplete="name" placeholder="Ej.: María José Pérez González" value="${esc(previos.nombre)}" required>
         <label for="cedula">Cédula</label>
         <div class="cedula">
           <select id="nacionalidad" aria-label="Nacionalidad"><option ${nac === "V" ? "selected" : ""}>V</option><option ${nac === "E" ? "selected" : ""}>E</option></select>
@@ -176,7 +177,13 @@ function iniciar() {
     $("#widget").onclick = () => ir("carrera");
     tarifas = await leerTarifas();
     // Tarifas en vivo: el recargo de lluvia aparece apenas el admin lo enciende.
-    cancelarSubs.push(escucharTarifas((t) => { tarifas = t; if (enPedido() && !$(".selector")) vistaPedir(); }));
+    // Si está escribiendo, se espera a que termine (si no, se le cierra el teclado).
+    cancelarSubs.push(escucharTarifas((t) => {
+      tarifas = t;
+      if (!enPedido() || $(".selector")) return;
+      if (tecleando()) $("#vista").addEventListener("focusout", () => setTimeout(() => { if (enPedido() && !$(".selector") && !tecleando()) vistaPedir(); }, 200), { once: true });
+      else vistaPedir();
+    }));
     contarVisita();
     // Cédula bloqueada por el administrador: no puede pedir.
     bloqueado = await getDoc(doc(db, "bloqueados", cliente.cedula || "-")).then((x) => x.exists()).catch(() => false);
@@ -188,6 +195,8 @@ function iniciar() {
         .sort((a, b) => !!a.enCarrera - !!b.enCarrera || promedio(b) - promedio(a) || (b.ratingCount || 0) - (a.ratingCount || 0));
       // La ubicación de los motorizados cambia seguido; solo se redibuja si cambió otra cosa.
       if (rutaActual === "motorizados" && JSON.stringify(motos.map(sinUbicacion)) !== antes) vistaMotorizados();
+      // Si un motorizado deja de estar disponible, su oferta ya no se puede aceptar.
+      if (rutaActual === "carrera" && JSON.stringify(motos.map(sinUbicacion)) !== antes) pintarOfertas();
     }));
     let primeraVez = true;
     cancelarSubs.push(onSnapshot(query(collection(db, "carreras"), where("clienteUid", "==", usuario.uid)), (s) => {
@@ -216,6 +225,7 @@ function iniciar() {
   }
 
   const sinUbicacion = ({ ubicacion, ...resto }) => resto;
+  const tecleando = () => { const a = document.activeElement; return !!a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && $("#vista").contains(a); };
   const tiempo = (c) => (c.creada && c.creada.toMillis ? c.creada.toMillis() : Date.now());
   function carreraActual() {
     return carreras
@@ -224,6 +234,7 @@ function iniciar() {
   }
 
   // "pedir" (a un motorizado) y "publicar" (a todos, con el precio que pone el cliente) usan la misma pantalla.
+  let cerrarSelector = null;
   function enPedido() { return rutaActual === "pedir" || rutaActual === "publicar"; }
   const publicando = () => rutaActual === "publicar";
 
@@ -234,6 +245,8 @@ function iniciar() {
     rutaActual = r;
     activarBarra(r === "pedir" ? "motorizados" : r);
     if (mapa) { mapa.remove(); mapa = null; }
+    // El mapa del selector se cierra bien (si no, su GPS seguiría encendido).
+    if (cerrarSelector) cerrarSelector();
     const sel = $(".selector");
     if (sel) { sel.remove(); document.body.classList.remove("con-selector"); }
     seguimiento.alMover = null;
@@ -324,7 +337,8 @@ function iniciar() {
     $$("#tipo button").forEach((b) => b.classList.toggle("activo", b.dataset.t === pedido.tipo));
     if ($("#tipo")) $("#tipo").dataset.activo = pedido.tipo;
     $("#caja-nota").hidden = pedido.tipo === "mototaxi";
-    pintarListaPuntos(() => vistaPedir());
+    // Solo si sigue en esta pantalla (el GPS o la ruta pueden responder cuando ya cambió de pestaña).
+    pintarListaPuntos(() => { if (enPedido() && !$(".selector")) vistaPedir(); });
 
     $("#abrir-mapa").onclick = () => abrirSelector();
     if ($("#agregar")) $("#agregar").onclick = () => {
@@ -335,7 +349,7 @@ function iniciar() {
     };
     if ($("#agregar")) $("#agregar").disabled = pedido.paradaPendiente || n >= MAX_PUNTOS;
     if ($("#ordenar")) $("#ordenar").onclick = () => ordenarParadas(() => vistaPedir());
-    if ($("#retorno")) $("#retorno").onchange = async (e) => { pedido.retorno = e.target.checked; await recalcular(); vistaPedir(); };
+    if ($("#retorno")) $("#retorno").onchange = async (e) => { pedido.retorno = e.target.checked; await recalcular(); if (enPedido() && !$(".selector")) vistaPedir(); };
     $$("#tipo button").forEach((b) => (b.onclick = () => { pedido.tipo = b.dataset.t; vistaPedir(); }));
     const nota = $("#nota");
     if (nota) nota.addEventListener("input", (e) => { pedido.nota = e.target.value; });
@@ -397,6 +411,8 @@ function iniciar() {
         if ($("#nota-pago")) pintarPago();
       };
       if (!pedido.ofertaTocada && sugerido != null) { pedido.oferta = sugerido; pedido.ofertaBs = null; }
+      // Si escribió el monto en Bs y cambió la tasa, el equivalente en $ se recalcula.
+      else if (enBs && pedido.ofertaBs != null && tasa > 0) pedido.oferta = Math.round((pedido.ofertaBs / tasa) * 100) / 100;
       const inicial = mostrado();
       campo.value = escribir(inicial);
       campo.addEventListener("input", () => { fijar(valor()); pedido.ofertaTocada = true; pintarOferta(); });
@@ -423,7 +439,11 @@ function iniciar() {
         const escribiendo = $("[data-nuevo=A]") && $("[data-nuevo=A]").value.trim();
         if (pedido.puntos.length || escribiendo || !enZona(aqui)) return;
         pedido.puntos.push(aqui); pedido.refs.push("Mi ubicación actual");
-        if (enPedido() && !$(".selector")) { vistaPedir(); setTimeout(() => $("[data-nuevo=B]")?.focus(), 60); }
+        if (enPedido() && !$(".selector") && !tecleando()) { vistaPedir(); setTimeout(() => $("[data-nuevo=B]")?.focus(), 60); }
+        else if (enPedido() && !$(".selector")) {
+          // Estaba escribiendo otra cosa: se pone A sin moverle el teclado; la lista se actualiza al terminar.
+          $("#vista").addEventListener("focusout", () => setTimeout(() => { if (enPedido() && !$(".selector") && !tecleando()) vistaPedir(); }, 200), { once: true });
+        }
       }, quitarAviso, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
     }
   }
@@ -565,7 +585,7 @@ function iniciar() {
           : f.pendiente === "B" ? (f.bloqueada ? "Primero el punto A" : "¿A dónde vas? Escribe un lugar…") : "¿Dónde es la parada? Escribe un lugar…";
         return `<div class="parada-fila pendiente ${pedido.filaNueva === "P" && f.pendiente === "P" ? "nueva" : ""}">
           <i class="${clase}">${letra}</i>
-          <div class="campo-lugar"><input data-nuevo="${f.pendiente}" placeholder="${ph}" ${f.bloqueada ? "disabled" : ""} autocomplete="off"><div class="sugerencias" hidden></div></div>
+          <div class="campo-lugar"><input data-nuevo="${f.pendiente}" maxlength="200" placeholder="${ph}" ${f.bloqueada ? "disabled" : ""} autocomplete="off"><div class="sugerencias" hidden></div></div>
           <button class="quitar" data-en-mapa="${f.pendiente}" aria-label="Marcar en el mapa" ${f.bloqueada ? "disabled" : ""}>${icono("pin")}</button>
           ${f.pendiente === "P" ? `<button class="quitar" data-cancelar-parada aria-label="Quitar parada">${icono("cerrar")}</button>` : ""}
         </div>`;
@@ -574,7 +594,7 @@ function iniciar() {
       const movible = i > 0 && n >= 3 && !pedido.paradaPendiente;
       return `<div class="parada-fila ${pedido.filaNueva === i ? "nueva" : ""}" data-fila="${i}">
         <i class="${clasePunto(i, n)} ${movible ? "asa" : ""}" ${movible ? `data-arrastrar="${i}" title="Arrastra para cambiar el orden"` : ""}>${letraPunto(i, n)}${movible ? `<b class="agarre">${icono("agarrar")}</b>` : ""}</i>
-        <div class="campo-lugar"><input data-ref="${i}" placeholder="${i === 0 ? "Referencia: casa, color, frente a…" : "Referencia del lugar…"}" value="${esc(pedido.refs[i] || "")}" autocomplete="off"><div class="sugerencias" hidden></div></div>
+        <div class="campo-lugar"><input data-ref="${i}" maxlength="200" placeholder="${i === 0 ? "Referencia: casa, color, frente a…" : "Referencia del lugar…"}" value="${esc(pedido.refs[i] || "")}" autocomplete="off"><div class="sugerencias" hidden></div></div>
         <button class="estrella-fav ${esFavorito(pedido.puntos[i]) ? "on" : ""}" data-fav="${i}" aria-label="Guardar en mis lugares">${icono("favorito")}</button>
         ${i > 0 ? `<button class="quitar" data-quitar="${i}" aria-label="Quitar punto">${icono("cerrar")}</button>` : ""}
       </div>`;
@@ -728,7 +748,10 @@ function iniciar() {
         + (q.length >= 2 && !lista.length ? `<p class="nota">No encontramos «${esc(input.value.trim())}». Márcalo en el mapa con el botón ${icono("pin")}.</p>` : "")
         + `<button type="button" data-mapa><span class="lugar" style="background:#7c3aed">${icono("pin")}</span><span><b>Marcar en el mapa</b><small>Toca el lugar exacto</small></span></button>`;
       caja.hidden = false;
-      $$("[data-k]", caja).forEach((b) => b.addEventListener("pointerdown", (e) => {
+      // Se elige al soltar (click), no al poner el dedo: así se puede deslizar la lista sin elegir nada.
+      // El mousedown se frena para que el campo no pierda el foco antes del click.
+      $$("[data-k], [data-mapa]", caja).forEach((b) => b.addEventListener("mousedown", (e) => e.preventDefault()));
+      $$("[data-k]", caja).forEach((b) => b.addEventListener("click", (e) => {
         e.preventDefault();
         const l = items[Number(b.dataset.k)];
         caja.hidden = true; input.blur();
@@ -741,7 +764,7 @@ function iniciar() {
           { enableHighAccuracy: true, timeout: 15000 }
         );
       }));
-      $("[data-mapa]", caja).addEventListener("pointerdown", (e) => {
+      $("[data-mapa]", caja).addEventListener("click", (e) => {
         e.preventDefault(); caja.hidden = true; input.blur();
         abrirSelector(input.dataset.nuevo === "P");
       });
@@ -752,8 +775,8 @@ function iniciar() {
       // Que la lista no quede tapada por la barra de abajo.
       setTimeout(() => input.scrollIntoView({ behavior: "smooth", block: "center" }), 250);
     });
-    input.addEventListener("blur", () => setTimeout(() => { caja.hidden = true; }, 150));
-    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { const b = $("[data-k]", caja); if (b) b.dispatchEvent(new Event("pointerdown")); } });
+    input.addEventListener("blur", (e) => { if (!caja.contains(e.relatedTarget)) setTimeout(() => { caja.hidden = true; }, 250); });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { const b = $("[data-k]", caja); if (b) b.click(); } });
   }
 
   // ---------- Mapa en pantalla completa para elegir A, paradas y B ----------
@@ -884,7 +907,7 @@ function iniciar() {
         const fin = setTimeout(() => listo(), 8000);
         function listo() {
           clearTimeout(fin); navigator.geolocation.clearWatch(id);
-          if (!mejor) return;
+          if (!mejor || !document.body.contains(caja)) return;
           m.flyTo([mejor.coords.latitude, mejor.coords.longitude], 18, { duration: 0.6 });
           aviso(`Te ubicamos (±${Math.round(mejor.coords.accuracy)} m). Ajusta la mira si hace falta y toca «Guardar este punto».`);
           mejor = null;
@@ -985,6 +1008,7 @@ function iniciar() {
     $("#sel-ubicacion", caja).onclick = () => {
       if (!navigator.geolocation) return aviso("Tu teléfono no permite usar la ubicación");
       const usar = (aqui) => {
+        if (!document.body.contains(caja)) return;   // ya cerró el mapa
         if (pedido.puntos.length) { pedido.puntos[0] = aqui; pedido.refs[0] = pedido.refs[0] || "Mi ubicación actual"; }
         else { pedido.puntos.push(aqui); pedido.refs.push("Mi ubicación actual"); }
         ir(aqui, 16);
@@ -998,10 +1022,14 @@ function iniciar() {
         { enableHighAccuracy: true, timeout: 15000 }
       );
     };
-    const cerrar = () => {
+    cerrarSelector = () => {
+      cerrarSelector = null;
       m.stop(); m.remove(); caja.remove();
       document.body.classList.remove("con-selector");
       pedido.agregando = false;
+    };
+    const cerrar = () => {
+      if (cerrarSelector) cerrarSelector();
       if (enPedido()) vistaPedir();
     };
     $("#cerrar-sel", caja).onclick = cerrar;
@@ -1023,7 +1051,7 @@ function iniciar() {
     if (pub && !(pedido.oferta > 0)) return aviso("Escribe cuánto quieres pagar");
     $("#pedir").disabled = true;
     pedirPermisoAvisos();
-    const punto = (i) => ({ lat: pedido.puntos[i].lat, lng: pedido.puntos[i].lng, dir: pedido.refs[i].trim() });
+    const punto = (i) => ({ lat: pedido.puntos[i].lat, lng: pedido.puntos[i].lng, dir: pedido.refs[i].trim().slice(0, 200) });
     try {
       await addDoc(collection(db, "carreras"), {
         clienteUid: usuario.uid,
@@ -1194,7 +1222,8 @@ function iniciar() {
     pintarFotos(caja);
     $$("[data-tomar]", caja).forEach((b) => (b.onclick = async () => {
       const o = ofertas.lista.find((x) => x.motoUid === b.dataset.tomar);
-      const m0 = motos.find((x) => x.id === o.motoUid);
+      const m0 = o && motos.find((x) => x.id === o.motoUid);
+      if (!o || !m0) { aviso("Esa oferta ya no está disponible"); return pintarOfertas(); }
       if (!confirm(`¿Aceptar la oferta de ${m0.nombre} por ${usd(o.precio)}${enBs && o.precioBs ? ` (${bs(o.precioBs)})` : ""}?`)) return;
       b.disabled = true;
       try {
@@ -1442,6 +1471,7 @@ function iniciar() {
     Object.assign(pedido, {
       puntos: pts.map((p) => L.latLng(p.lat, p.lng)), refs: pts.map((p) => p.dir || ""),
       retorno: !!x.retorno, agregando: false, km: null, linea: null, nota: x.nota || "",
+      oferta: null, ofertaBs: null, ofertaTocada: false, paradaPendiente: false, filaNueva: null,
     });
     const m = motos.find((y) => y.id === x.motoUid);
     pedido.para = m ? { id: m.id, nombre: m.nombre } : null;
@@ -1513,12 +1543,18 @@ function iniciar() {
       try {
         // Si la reseña ya se guardó en un intento anterior, no se repite.
         if (!enviada) {
-          await addDoc(collection(db, "resenas"), {
-            motoUid: c.motoUid, motoNombre: c.motoNombre, carreraId: c.id,
-            clienteUid: usuario.uid, clienteNombre: cliente.nombre,
-            estrellas: puntos, comentario: $("#comentario").value.trim().slice(0, 500), aprobada: false, fecha: serverTimestamp(),
-            seguro, buenos: [...buenos], malos: [...malos],
-          });
+          // Su id es el de la carrera: así no se puede reseñar dos veces el mismo viaje.
+          try {
+            await setDoc(doc(db, "resenas", c.id), {
+              motoUid: c.motoUid, motoNombre: c.motoNombre, carreraId: c.id,
+              clienteUid: usuario.uid, clienteNombre: cliente.nombre,
+              estrellas: puntos, comentario: $("#comentario").value.trim().slice(0, 500), aprobada: false, fecha: serverTimestamp(),
+              seguro, buenos: [...buenos], malos: [...malos],
+            });
+          } catch (e) {
+            // Ya existía (se envió en un intento anterior): se sigue y se marca como calificada.
+            if (e.code !== "permission-denied") throw e;
+          }
           enviada = true;
         }
         await updateDoc(doc(db, "carreras", c.id), { calificada: true });
@@ -1641,7 +1677,7 @@ function iniciar() {
 
   function contarVisita() {
     try { if (sessionStorage.getItem("whereapp.visita")) return; sessionStorage.setItem("whereapp.visita", "1"); } catch {}
-    const hoy = new Date().toISOString().slice(0, 10);
+    const hoy = hoyLocal();
     setDoc(doc(db, "stats", "visitas"), { total: increment(1), dias: { [hoy]: increment(1) } }, { merge: true }).catch(() => {});
   }
 }

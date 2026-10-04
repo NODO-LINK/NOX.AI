@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=52";
-import { icono, pintarIconos } from "./iconos.js?v=52";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=53";
+import { icono, pintarIconos } from "./iconos.js?v=53";
 
 export { icono };
 pintarIconos();
@@ -71,6 +71,8 @@ export function textoCobro(c) {
 // Precio en $ con su equivalente en Bs (si hay tasa).
 export const conBs = (montoUsd, tasa) => (tasa > 0 ? `${usd(montoUsd)} · ${bs(aBs(montoUsd, tasa))}` : usd(montoUsd));
 export const fecha = (t) => (t ? (t.toDate ? t.toDate() : new Date(t)) : null);
+// Fecha de hoy (AAAA-MM-DD) en hora de Venezuela, no en UTC (que cambia de día a las 8 p. m.).
+export const hoyLocal = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Caracas" });
 export const fechaTexto = (t) => { const f = fecha(t); return f ? f.toLocaleString("es-VE", { dateStyle: "medium", timeStyle: "short" }) : "—"; };
 export const estrellas = (m) => {
   const n = Number(m.ratingCount) || 0;
@@ -219,13 +221,20 @@ export function lineaRecta(a, b) {
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
+// fetch con tiempo límite: con mala señal no se queda "Calculando…" para siempre.
+export function traer(url, opciones = {}, ms = 8000) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  return fetch(url, { ...opciones, signal: ctl.signal }).finally(() => clearTimeout(t));
+}
 // Distancia por calle pasando por todos los puntos en orden (OSRM, gratis).
 // Si falla, suma las líneas rectas × 1,3. Acepta ruta([p1, p2, …]) o ruta(p1, p2).
 export async function ruta(...args) {
   const pts = Array.isArray(args[0]) ? args[0] : args;
   try {
     const coords = pts.map((p) => `${p.lng},${p.lat}`).join(";");
-    const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`);
+    const r = await traer(`https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`);
+    if (!r.ok) throw 0;
     const j = await r.json();
     if (j.code !== "Ok") throw 0;
     return { km: j.routes[0].distance / 1000, linea: j.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]) };
@@ -267,6 +276,14 @@ export function marcarRecorrido(mapa, c) {
   (c.paradas || []).forEach((p, i) => L.marker(p, { icon: ICONOS.parada(i + 1) }).addTo(mapa));
   L.marker(c.destino, { icon: ICONOS.destino }).addTo(mapa);
   return L.latLngBounds([c.origen, ...(c.paradas || []), c.destino]);
+}
+
+// Leaflet 1.9.4 falla si se quita un mapa en medio de un zoom animado (su temporizador sigue vivo):
+// al quitarlo se da por terminada la animación.
+if (window.L && window.L.Map && !window.L.Map.prototype._quitarSeguro) {
+  const quitar = window.L.Map.prototype.remove;
+  window.L.Map.prototype.remove = function () { this._animatingZoom = false; return quitar.call(this); };
+  window.L.Map.prototype._quitarSeguro = true;
 }
 
 // Íconos de mapa (Leaflet).
@@ -520,7 +537,7 @@ export async function afinarEta(c, u, memoria, listo) {
   if (memoria.pidiendo || (r && r.meta === clave && Date.now() - r.t < 45000 && lineaRecta(r.desde, u) < 0.15)) return;
   memoria.pidiendo = true;
   try {
-    const x = await fetch(`https://router.project-osrm.org/route/v1/driving/${u.lng},${u.lat};${meta.lng},${meta.lat}?overview=full&geometries=geojson`).then((y) => y.json());
+    const x = await traer(`https://router.project-osrm.org/route/v1/driving/${u.lng},${u.lat};${meta.lng},${meta.lat}?overview=full&geometries=geojson`).then((y) => y.json());
     if (x.code === "Ok") {
       // linea: el camino por calles que le falta al motorizado (para dibujarlo en el mapa del cliente).
       memoria.real = { km: x.routes[0].distance / 1000, t: Date.now(), desde: { lat: u.lat, lng: u.lng }, meta: clave,
@@ -657,8 +674,11 @@ async function descargarLugares() {
     nwr["name"]["highway"="bus_stop"]${caja};
     nwr["name"]["place"~"^(neighbourhood|suburb|quarter|hamlet|village|locality|isolated_dwelling)$"]${caja};
   );out center tags;`;
-  const r = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+  const r = await traer("https://overpass-api.de/api/interpreter", { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } }, 30000);
+  if (!r.ok) throw new Error("overpass " + r.status);
   const j = await r.json();
+  // Respuesta a medias (se le acabó el tiempo al servidor): no se guarda 7 días.
+  if (j.remark && /error|timed out/i.test(j.remark)) throw new Error(j.remark);
   const vistos = new Set();
   const lugares = (j.elements || []).map((el) => {
     const tag = el.tags || {};
@@ -861,8 +881,10 @@ export async function pedirPermisoAvisos() {
 }
 export async function notificar(titulo, cuerpo, { tag = "whereapp", sonar = true, url = location.href.split("#")[0], urgente = false } = {}) {
   if (!avisosPosibles() || Notification.permission !== "granted") return;
-  const reg = (await registroSw) || (await navigator.serviceWorker.ready.catch(() => null));
-  if (!reg) return;
+  // Espera a que el service worker esté activo (la primera vez tarda un poco), máximo 3 s.
+  const reg = await Promise.race([navigator.serviceWorker.ready, new Promise((r) => setTimeout(r, 3000))]).catch(() => null)
+    || (await registroSw);
+  if (!reg || !reg.active) return;
   reg.showNotification(titulo, {
     body: cuerpo, tag, renotify: sonar, silent: !sonar, icon: "icono-192.png", badge: "icono-192.png",
     data: { url }, vibrate: sonar ? (urgente ? [150, 80, 400, 120, 400] : [200, 100, 200]) : undefined,
@@ -937,4 +959,30 @@ export function abrirChat(carreraId, yoUid, yoNombre, conQuien) {
   addEventListener("offline", pintar);
   addEventListener("online", () => { pintar(); aviso("Conexión restablecida"); });
   if (document.readyState === "loading") addEventListener("DOMContentLoaded", pintar); else pintar();
+})();
+
+// ---------- Botón "atrás" del teléfono ----------
+// Con una ventana abierta (mapa, chat, perfil, SOS…), "atrás" la cierra en vez de salir de la app.
+(() => {
+  if (typeof document === "undefined" || !window.history || !window.MutationObserver) return;
+  const capas = () => [...document.querySelectorAll("body > .modal, body > .selector")];
+  let abiertas = 0, quitando = 0;
+  addEventListener("popstate", () => {
+    if (quitando > 0) { quitando--; return; }   // lo provocó la app al cerrar una ventana con su botón
+    if (abiertas === 0) return;
+    abiertas--;
+    const c = capas().pop();
+    if (!c) return;
+    const boton = c.querySelector("#cerrar-sel, [data-cerrar], [data-no]");
+    if (boton) boton.click(); else c.remove();
+  });
+  new MutationObserver(() => {
+    const n = capas().length;
+    if (n > abiertas) { for (let i = abiertas; i < n; i++) history.pushState({ capa: i + 1 }, ""); abiertas = n; }
+    else if (n < abiertas) {
+      // Se cerró con su propio botón: se quita también su entrada del historial.
+      const sobran = abiertas - n; abiertas = n;
+      quitando++; history.go(-sobran);
+    }
+  }).observe(document.body, { childList: true });
 })();
