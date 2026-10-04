@@ -691,3 +691,34 @@ body.con-selector { overflow: hidden; }
 .segmento.tres[data-pos="1"]::before { transform: translateX(100%); }
 .segmento.tres[data-pos="2"]::before { transform: translateX(200%); }
 .fila-mi-lugar small { color: var(--texto-2); font-size: .75rem; flex: 0 0 auto; }
+/* ---------- Escribir A y B con sugerencias ---------- */
+.campo-lugar { position: relative; flex: 1; min-width: 0; }
+.campo-lugar input { width: 100%; }
+.parada-fila.pendiente input { border-style: dashed; }
+.parada-fila .quitar[disabled] { opacity: .35; }
+.sugerencias { position: absolute; left: 0; right: -52px; top: calc(100% + 6px); z-index: 600; background: var(--superficie); border-radius: 22px; box-shadow: var(--sombra-3); padding: 6px; max-height: 320px; overflow: auto; animation: entrar .25s var(--suave) both; }
+.sugerencias button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; background: none; border-radius: 16px; text-align: left; cursor: pointer; color: var(--texto); }
+.sugerencias button:active, .sugerencias button:hover { background: var(--marca-suave); }
+.sugerencias b { display: block; font-size: .9rem; }
+.sugerencias small { color: var(--texto-2); font-size: .74rem; }
+.sugerencias .lugar { width: 32px; height: 32px; }
+.sugerencias .lugar .ico { width: 16px; height: 16px; }
+.sugerencias .nota { padding: 6px 10px; font-size: .8rem; }
+.sugerencias .nota .ico { width: 14px; height: 14px; vertical-align: -2px; }
+/* ---------- Ver por dónde viene la moto ---------- */
+.mapa-vivo-caja { position: relative; margin-top: 14px; }
+.mapa-vivo-caja .mapa { margin-top: 0; }
+.mapa.grande { height: 340px; }
+.mapa-estado { position: absolute; top: 12px; left: 12px; z-index: 500; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: var(--pildora); background: var(--vidrio-fuerte); box-shadow: var(--sombra-2); font-weight: 800; font-size: .78rem; color: var(--texto); }
+.mapa-estado:empty { display: none; }
+.mapa-estado .ico { width: 15px; height: 15px; }
+.mapa-estado.alerta { background: #fee2e2; color: #b91c1c; }
+.en-vivo { width: 9px; height: 9px; border-radius: 50%; background: #16a34a; box-shadow: 0 0 0 0 rgba(22, 163, 74, .6); animation: pulso-verde 1.6s ease-out infinite; }
+@keyframes pulso-verde { to { box-shadow: 0 0 0 8px rgba(22, 163, 74, 0); } }
+.seguir-moto { position: absolute; top: 10px; right: 10px; z-index: 500; box-shadow: var(--sombra-2); }
+.seguir-moto.activo { background: var(--degradado); color: #fff; }
+.leyenda-mapa { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: .75rem; margin-top: 6px; }
+.linea-camino, .linea-rastro { display: inline-block; width: 22px; height: 0; border-top: 4px dotted #7c3aed; }
+.linea-rastro { border-top: 4px solid #64748b; }
+.parada-fila { position: relative; }
+.parada-fila:focus-within { z-index: 700; }

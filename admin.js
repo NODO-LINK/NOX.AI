@@ -10,7 +10,7 @@ import {
 import {
   auth, authSecundaria, db, NOMBRE, botonTema, botonInstalar, nuevoMapa, ICONOS, recargos, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
   leerTarifas, aviso, avisoSinConfigurar, mostrarLugares, tipoLugar, TIPOS_PARA_AGREGAR,
-} from "./comun.js?v=36";
+} from "./comun.js?v=37";
 
 if (!avisoSinConfigurar()) iniciar();
 

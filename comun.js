@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=36";
-import { icono, pintarIconos } from "./iconos.js?v=36";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=37";
+import { icono, pintarIconos } from "./iconos.js?v=37";
 
 export { icono };
 pintarIconos();
@@ -409,8 +409,13 @@ export async function afinarEta(c, u, memoria, listo) {
   if (memoria.pidiendo || (r && r.meta === clave && Date.now() - r.t < 45000 && lineaRecta(r.desde, u) < 0.15)) return;
   memoria.pidiendo = true;
   try {
-    const x = await fetch(`https://router.project-osrm.org/route/v1/driving/${u.lng},${u.lat};${meta.lng},${meta.lat}?overview=false`).then((y) => y.json());
-    if (x.code === "Ok") { memoria.real = { km: x.routes[0].distance / 1000, t: Date.now(), desde: { lat: u.lat, lng: u.lng }, meta: clave }; listo && listo(); }
+    const x = await fetch(`https://router.project-osrm.org/route/v1/driving/${u.lng},${u.lat};${meta.lng},${meta.lat}?overview=full&geometries=geojson`).then((y) => y.json());
+    if (x.code === "Ok") {
+      // linea: el camino por calles que le falta al motorizado (para dibujarlo en el mapa del cliente).
+      memoria.real = { km: x.routes[0].distance / 1000, t: Date.now(), desde: { lat: u.lat, lng: u.lng }, meta: clave,
+        linea: x.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]) };
+      listo && listo();
+    }
   } catch {} finally { memoria.pidiendo = false; }
 }
 

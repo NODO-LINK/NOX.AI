@@ -9,8 +9,8 @@ import {
 import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
-  sonarAlerta,
-} from "./comun.js?v=36";
+  sonarAlerta, cargarLugares, CENTRO,
+} from "./comun.js?v=37";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -23,6 +23,7 @@ function iniciar() {
   // puntos[0] = A (donde te buscan), los del medio = paradas, el último = B (destino).
   const pedido = { tipo: SERVICIOS[0], puntos: [], refs: [], retorno: false, agregando: false, nota: "", para: null, km: null, linea: null, oferta: null, ofertaTocada: false };
   const MAX_PUNTOS = 6;
+  let lugares = null;   // lugares de El Moján para el buscador y las sugerencias
 
   contarVisita();
 
@@ -268,7 +269,8 @@ function iniciar() {
     pintarListaPuntos(() => vistaPedir());
 
     $("#abrir-mapa").onclick = () => abrirSelector();
-    if ($("#agregar")) $("#agregar").onclick = () => abrirSelector(true);
+    if ($("#agregar")) $("#agregar").onclick = () => { pedido.paradaPendiente = true; vistaPedir(); setTimeout(() => $("[data-nuevo=P]")?.focus(), 60); };
+    if ($("#agregar")) $("#agregar").disabled = pedido.paradaPendiente || n >= MAX_PUNTOS;
     if ($("#retorno")) $("#retorno").onchange = async (e) => { pedido.retorno = e.target.checked; await recalcular(); vistaPedir(); };
     $$("#tipo button").forEach((b) => (b.onclick = () => { pedido.tipo = b.dataset.t; vistaPedir(); }));
     const nota = $("#nota");
@@ -299,8 +301,21 @@ function iniciar() {
     const quitar = $("#quitar-para");
     if (quitar) quitar.onclick = () => { pedido.para = null; ir("motorizados"); };
     if ($("#pedir")) $("#pedir").onclick = enviarPedido;
-    // Si todavía no hay puntos, el mapa se abre solo.
-    if (n === 0 && !activa && !bloqueado) abrirSelector();
+    // Lugares para las sugerencias.
+    if (!lugares) cargarLugares().then((l) => { lugares = l; }).catch(() => {});
+    // Tu ubicación se pone sola como punto A.
+    if (n === 0 && !activa && !bloqueado && !pedido.yoIntentado && navigator.geolocation) {
+      pedido.yoIntentado = true; pedido.buscandoA = true;
+      const quitarAviso = () => { pedido.buscandoA = false; const el = $("[data-nuevo=A]"); if (el) el.placeholder = "¿Dónde te buscan? Escribe un lugar…"; };
+      navigator.geolocation.getCurrentPosition((p) => {
+        quitarAviso();
+        const aqui = L.latLng(p.coords.latitude, p.coords.longitude);
+        const escribiendo = $("[data-nuevo=A]") && $("[data-nuevo=A]").value.trim();
+        if (pedido.puntos.length || escribiendo || !enZona(aqui)) return;
+        pedido.puntos.push(aqui); pedido.refs.push("Mi ubicación actual");
+        if (enPedido() && !$(".selector")) { vistaPedir(); setTimeout(() => $("[data-nuevo=B]")?.focus(), 60); }
+      }, quitarAviso, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+    }
   }
 
   const resumenRecorrido = () => {
@@ -414,16 +429,63 @@ function iniciar() {
   }
 
   // Lista de puntos con su referencia escrita (se puede quitar cada uno menos A).
+  // Casillas de A, paradas y B. Se escriben directo: mientras escribes salen lugares sugeridos y al tocar uno
+  // queda marcado (no hace falta abrir el mapa). La fila "pendiente" es el próximo punto que falta.
+  const enZona = (p) => Math.abs(p.lat - CENTRO[0]) < 0.15 && Math.abs(p.lng - CENTRO[1]) < 0.15;
+  function filasPuntos() {
+    const n = pedido.puntos.length;
+    const filas = pedido.puntos.map((p, i) => ({ i, p }));
+    if (n === 0) filas.push({ pendiente: "A", pos: 0 }, { pendiente: "B", pos: 1, bloqueada: true });
+    else if (n === 1) filas.push({ pendiente: "B", pos: 1 });
+    else if (pedido.paradaPendiente) filas.splice(n - 1, 0, { pendiente: "P", pos: n - 1 });
+    return filas;
+  }
   function pintarListaPuntos(alCambiar) {
     const n = pedido.puntos.length;
-    $("#paradas").innerHTML = pedido.puntos.map((_, i) => `
-      <div class="parada-fila">
+    const total = n < 2 ? 2 : n + (pedido.paradaPendiente ? 1 : 0);
+    $("#paradas").innerHTML = filasPuntos().map((f, k) => {
+      if (f.pendiente) {
+        const letra = f.pendiente === "P" ? String(f.pos) : f.pendiente;
+        const clase = f.pendiente === "A" ? "letra-a" : f.pendiente === "B" ? "letra-b" : "letra-p";
+        const ph = f.pendiente === "A" ? (pedido.buscandoA ? "Buscando tu ubicación…" : "¿Dónde te buscan? Escribe un lugar…")
+          : f.pendiente === "B" ? (f.bloqueada ? "Primero el punto A" : "¿A dónde vas? Escribe un lugar…") : "¿Dónde es la parada? Escribe un lugar…";
+        return `<div class="parada-fila pendiente">
+          <i class="${clase}">${letra}</i>
+          <div class="campo-lugar"><input data-nuevo="${f.pendiente}" placeholder="${ph}" ${f.bloqueada ? "disabled" : ""} autocomplete="off"><div class="sugerencias" hidden></div></div>
+          <button class="quitar" data-en-mapa="${f.pendiente}" aria-label="Marcar en el mapa" ${f.bloqueada ? "disabled" : ""}>${icono("pin")}</button>
+          ${f.pendiente === "P" ? `<button class="quitar" data-cancelar-parada aria-label="Quitar parada">${icono("cerrar")}</button>` : ""}
+        </div>`;
+      }
+      const i = f.i;
+      return `<div class="parada-fila">
         <i class="${clasePunto(i, n)}">${letraPunto(i, n)}</i>
-        <input data-ref="${i}" placeholder="${i === 0 ? "¿Dónde te buscan? Casa, calle, referencia…" : i === n - 1 ? "¿A dónde vas? Referencia…" : "Referencia de la parada…"}" value="${esc(pedido.refs[i] || "")}">
+        <div class="campo-lugar"><input data-ref="${i}" placeholder="${i === 0 ? "Referencia: casa, color, frente a…" : "Referencia del lugar…"}" value="${esc(pedido.refs[i] || "")}" autocomplete="off"><div class="sugerencias" hidden></div></div>
         <button class="estrella-fav ${esFavorito(pedido.puntos[i]) ? "on" : ""}" data-fav="${i}" aria-label="Guardar en mis lugares">${icono("favorito")}</button>
         ${i > 0 ? `<button class="quitar" data-quitar="${i}" aria-label="Quitar punto">${icono("cerrar")}</button>` : ""}
-      </div>`).join("");
-    $$("[data-ref]").forEach((el) => el.addEventListener("input", () => { pedido.refs[Number(el.dataset.ref)] = el.value; }));
+      </div>`;
+    }).join("");
+    void total;
+
+    const listo = async () => { await recalcular(); if (enPedido() && !$(".selector")) alCambiar(); };
+    // Puntos ya marcados: lo escrito es la referencia; si eliges una sugerencia, el punto cambia a ese lugar.
+    $$("[data-ref]").forEach((el) => {
+      const i = Number(el.dataset.ref);
+      el.addEventListener("input", () => { pedido.refs[i] = el.value; });
+      sugerir(el, i === 0, (l) => {
+        pedido.puntos[i] = L.latLng(l.lat, l.lng); pedido.refs[i] = l.n;
+        alCambiar(); listo();
+      });
+    });
+    // Punto que falta: al elegir una sugerencia se agrega (A, B o parada antes de B).
+    $$("[data-nuevo]").forEach((el) => sugerir(el, el.dataset.nuevo === "A", (l) => {
+      const p = L.latLng(l.lat, l.lng);
+      if (el.dataset.nuevo === "P") { const k = pedido.puntos.length - 1; pedido.puntos.splice(k, 0, p); pedido.refs.splice(k, 0, l.n); pedido.paradaPendiente = false; }
+      else { pedido.puntos.push(p); pedido.refs.push(l.n); }
+      alCambiar(); listo();
+      setTimeout(() => { const sig = $("[data-nuevo]:not([disabled])"); if (sig) sig.focus(); }, 60);
+    }));
+    $$("[data-en-mapa]").forEach((b) => (b.onclick = () => abrirSelector(b.dataset.enMapa === "P")));
+    if ($("[data-cancelar-parada]")) $("[data-cancelar-parada]").onclick = () => { pedido.paradaPendiente = false; alCambiar(); };
     $$("[data-fav]").forEach((b) => (b.onclick = async () => { await alternarFavorito(Number(b.dataset.fav)); b.classList.toggle("on", esFavorito(pedido.puntos[Number(b.dataset.fav)])); }));
     $$("[data-quitar]").forEach((b) => (b.onclick = async () => {
       const i = Number(b.dataset.quitar);
@@ -432,8 +494,73 @@ function iniciar() {
     }));
   }
 
+  // Lista de lugares sugeridos debajo de una casilla, según lo que se va escribiendo.
+  function sugerir(input, conMiUbicacion, alElegir) {
+    const caja = input.parentElement.querySelector(".sugerencias");
+    const cerca = pedido.puntos[0];
+    const pintar = () => {
+      const q = normalizar(input.value.trim());
+      const favs = favoritos.leer().map((f) => ({ ...f, t: "favorito", mio: true }));
+      let lista;
+      if (q.length < 2) {
+        // Sin escribir: tu ubicación y tus lugares guardados.
+        lista = favs.slice(0, 5);
+      } else {
+        const palabras = q.split(/\s+/);
+        const puntaje = (l) => {
+          const nom = normalizar(l.n);
+          if (!palabras.every((w) => nom.includes(w) || normalizar(tipoLugar(l.t).nombre).includes(w))) return null;
+          let p = nom.startsWith(q) ? 0 : nom.split(/\s+/).some((w) => w.startsWith(palabras[0])) ? 1 : 2;
+          if (l.mio) p -= 3; else if (l.propio) p -= 2; else if (l.t === "sector") p -= 0.5;
+          if (cerca) p += Math.min(lineaRecta(cerca, l), 10) / 10;
+          return p;
+        };
+        lista = [...favs, ...(lugares || [])].map((l) => ({ l, p: puntaje(l) })).filter((x) => x.p != null)
+          .sort((a, b) => a.p - b.p).slice(0, 7).map((x) => x.l);
+      }
+      const items = [
+        ...(conMiUbicacion ? [{ yo: true, n: "Mi ubicación actual", t: "otro" }] : []),
+        ...lista,
+      ];
+      caja.innerHTML = items.map((l, k) => {
+        const tipo = l.mio ? tipoMio(l) : tipoLugar(l.t);
+        const ic = l.yo ? "ubicarme" : tipo.icono;
+        const color = l.yo ? "#2563eb" : tipo.color;
+        const sub = l.yo ? "Usar el GPS del teléfono" : l.mio ? "Tus lugares" : tipoLugar(l.t).nombre;
+        return `<button type="button" data-k="${k}"><span class="lugar" style="background:${color}">${icono(ic)}</span><span><b>${esc(l.n)}</b><small>${esc(sub)}</small></span></button>`;
+      }).join("")
+        + (q.length >= 2 && !lista.length ? `<p class="nota">No encontramos «${esc(input.value.trim())}». Márcalo en el mapa con el botón ${icono("pin")}.</p>` : "")
+        + `<button type="button" data-mapa><span class="lugar" style="background:#7c3aed">${icono("pin")}</span><span><b>Marcar en el mapa</b><small>Toca el lugar exacto</small></span></button>`;
+      caja.hidden = false;
+      $$("[data-k]", caja).forEach((b) => b.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        const l = items[Number(b.dataset.k)];
+        caja.hidden = true; input.blur();
+        if (!l.yo) return alElegir(l);
+        if (!navigator.geolocation) return aviso("Tu teléfono no permite usar la ubicación");
+        aviso("Buscando tu ubicación…");
+        navigator.geolocation.getCurrentPosition(
+          (p) => alElegir({ n: "Mi ubicación actual", lat: p.coords.latitude, lng: p.coords.longitude }),
+          () => aviso("No se pudo obtener tu ubicación. Activa el GPS y da permiso."),
+          { enableHighAccuracy: true, timeout: 15000 }
+        );
+      }));
+      $("[data-mapa]", caja).addEventListener("pointerdown", (e) => {
+        e.preventDefault(); caja.hidden = true; input.blur();
+        abrirSelector(input.dataset.nuevo === "P");
+      });
+    };
+    input.addEventListener("input", pintar);
+    input.addEventListener("focus", () => {
+      pintar();
+      // Que la lista no quede tapada por la barra de abajo.
+      setTimeout(() => input.scrollIntoView({ behavior: "smooth", block: "center" }), 250);
+    });
+    input.addEventListener("blur", () => setTimeout(() => { caja.hidden = true; }, 150));
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { const b = $("[data-k]", caja); if (b) b.dispatchEvent(new Event("pointerdown")); } });
+  }
+
   // ---------- Mapa en pantalla completa para elegir A, paradas y B ----------
-  let lugares = null;
   function abrirSelector(agregar = false) {
     if ($(".selector")) return;
     pedido.agregando = agregar && pedido.puntos.length >= 2;
@@ -644,7 +771,7 @@ function iniciar() {
         cancelaciones: [],
         creada: serverTimestamp(),
       });
-      Object.assign(pedido, { puntos: [], refs: [], retorno: false, agregando: false, km: null, linea: null, nota: "", para: null, oferta: null, ofertaTocada: false });
+      Object.assign(pedido, { puntos: [], refs: [], retorno: false, agregando: false, km: null, linea: null, nota: "", para: null, oferta: null, ofertaTocada: false, paradaPendiente: false, yoIntentado: false });
       ir("carrera");
     } catch (e) {
       console.error(e);
@@ -758,28 +885,75 @@ function iniciar() {
       const m = motos.find((x) => x.id === c.motoUid) || {};
       $("#vista").innerHTML = `
         <div class="vivo" id="vivo"></div>
-        <article class="tarjeta">
+        <article class="tarjeta" id="tarjeta-moto">
           <div class="avatar">${esc(iniciales(c.motoNombre || "?"))}</div>
           <div class="info"><h3>${esc(c.motoNombre)}</h3>
             <p>${icono("moto")} ${esc(c.motoMoto || "")}${c.motoPlaca ? ` · Placa <b>${esc(c.motoPlaca)}</b>` : ""}</p>
             ${m.ratingCount ? `<span class="rating">${estrellas(m)}</span>` : ""}</div>
           <div class="acciones"><a class="boton" href="tel:${esc(c.motoTel)}">${icono("telefono")} Llamar a ${esc(c.motoNombre.split(" ")[0])}</a></div>
         </article>
+        <div class="mapa-vivo-caja">
+          <div class="mapa grande" id="mapa"></div>
+          <div class="mapa-estado" id="mapa-estado"></div>
+          <button class="boton secundario chico seguir-moto" id="seguir-moto">${icono("moto")} Seguir la moto</button>
+        </div>
+        <p class="nota leyenda-mapa"><i class="linea-camino"></i> camino que va a tomar · <i class="linea-rastro"></i> por dónde ha venido</p>
         ${botonesExtra}
-        <div class="mapa" id="mapa"></div>
         ${resumen}
         <button class="boton peligro" id="cancelar">Cancelar carrera</button>`;
       mapa = nuevoMapa("mapa", "", { yo: true });
       const limites = marcarRecorrido(mapa, c);
       mapa.fitBounds(limites.pad(0.3), { animate: false });
-      let marcaMoto = null, centrado = false;
+      // El mapa va antes de la tarjeta del motorizado: es lo primero que se quiere ver.
+      $("#vivo").after($(".mapa-vivo-caja"), $(".leyenda-mapa"));
+      let marcaMoto = null, centrado = false, siguiendo = true, animando = null;
+      const camino = L.polyline([], { color: "#7c3aed", weight: 5, opacity: 0.85, dashArray: "2 9", lineCap: "round" }).addTo(mapa);
+      const rastro = L.polyline([], { color: "#64748b", weight: 4, opacity: 0.7 }).addTo(mapa);
+      const botonSeguir = $("#seguir-moto");
+      const pintarSeguir = () => botonSeguir.classList.toggle("activo", siguiendo);
+      botonSeguir.onclick = () => { siguiendo = !siguiendo; pintarSeguir(); if (siguiendo) encuadrarMoto(true); };
+      // Si mueves el mapa con el dedo, deja de seguir a la moto (con el botón vuelve a seguirla).
+      mapa.on("dragstart", () => { siguiendo = false; pintarSeguir(); });
+      pintarSeguir();
+      const encuadrarMoto = (animar) => {
+        if (!marcaMoto) return;
+        const meta = c.recogido ? c.destino : c.origen;
+        mapa.fitBounds(L.latLngBounds([marcaMoto.getLatLng(), [meta.lat, meta.lng]]).pad(0.35), { animate: animar, maxZoom: 17 });
+      };
+      // La moto se desliza de su posición anterior a la nueva en vez de saltar.
+      const deslizar = (desde, hasta) => {
+        cancelAnimationFrame(animando);
+        const t0 = performance.now();
+        const paso = (t) => {
+          const k = Math.min(1, (t - t0) / 900);
+          marcaMoto.setLatLng([desde.lat + (hasta.lat - desde.lat) * k, desde.lng + (hasta.lng - desde.lng) * k]);
+          if (k < 1) animando = requestAnimationFrame(paso);
+        };
+        animando = requestAnimationFrame(paso);
+      };
       seguimiento.alMover = (info, u) => {
         if (!$("#vivo")) return;
         $("#vivo").innerHTML = tarjetaVivo(info);
-        if (!u || !mapa) return;
-        if (!marcaMoto) marcaMoto = L.marker([u.lat, u.lng], { icon: ICONOS.moto }).addTo(mapa);
-        else marcaMoto.setLatLng([u.lat, u.lng]);
+        if (!u || !mapa) { $("#mapa-estado").innerHTML = `${icono("reloj")} Esperando la ubicación de la moto…`; return; }
+        // Rastro: las posiciones por donde ha pasado desde que aceptó.
+        const r = seguimiento.rastro;
+        const ult = r[r.length - 1];
+        if (!ult || lineaRecta(ult, u) > 0.01) { r.push({ lat: u.lat, lng: u.lng, t: Date.now() }); seguimiento.movido = Date.now(); }
+        rastro.setLatLngs(r.map((p) => [p.lat, p.lng]));
+        // Camino que le falta (por calles), si ya se calculó.
+        const real = seguimiento.memoria.real;
+        camino.setLatLngs(real && real.linea && !info.llego ? real.linea : []);
+        if (!marcaMoto) marcaMoto = L.marker([u.lat, u.lng], { icon: ICONOS.moto, zIndexOffset: 1000 }).addTo(mapa);
+        else { const a = marcaMoto.getLatLng(); if (a.lat !== u.lat || a.lng !== u.lng) deslizar(a, u); }
         if (!centrado) { mapa.fitBounds(limites.extend([u.lat, u.lng]).pad(0.3), { animate: false }); centrado = true; }
+        else if (siguiendo) encuadrarMoto(true);
+        // Estado: hace cuánto se actualizó y si está detenido.
+        const edad = Math.round((Date.now() - (fecha(u.t) || new Date()).getTime()) / 1000);
+        const quieto = seguimiento.movido ? Math.round((Date.now() - seguimiento.movido) / 60000) : 0;
+        $("#mapa-estado").innerHTML = info.llego ? `${icono("check")} Llegó al punto A`
+          : quieto >= 2 ? `${icono("alerta")} Detenido hace ${quieto} min`
+          : `<i class="en-vivo"></i> ${edad < 60 ? "En vivo" : `Ubicación de hace ${Math.round(edad / 60)} min`}`;
+        $("#mapa-estado").classList.toggle("alerta", quieto >= 2 && !info.llego);
       };
       seguimiento.alMover(seguimiento.info || progreso(c, null), seguimiento.ubic);
     }
@@ -852,7 +1026,7 @@ function iniciar() {
   }
 
   // ---------- Seguimiento en vivo: widget flotante y aviso en la barra de notificaciones ----------
-  const seguimiento = { id: null, motoUid: null, quitar: null, quitarChat: null, sinLeer: 0, ubic: null, info: null, memoria: {}, alMover: null, ultimoAviso: "" };
+  const seguimiento = { id: null, motoUid: null, quitar: null, quitarChat: null, sinLeer: 0, ubic: null, info: null, memoria: {}, alMover: null, ultimoAviso: "", rastro: [], movido: 0 };
   const avisosPosibles = () => "Notification" in window && "serviceWorker" in navigator;
 
   async function pedirPermisoAvisos() {
@@ -889,7 +1063,7 @@ function iniciar() {
     if (!enCurso || seguimiento.id !== c.id || seguimiento.motoUid !== c.motoUid) {
       if (seguimiento.quitar) seguimiento.quitar();
       if (seguimiento.quitarChat) seguimiento.quitarChat();
-      Object.assign(seguimiento, { id: null, motoUid: null, quitar: null, quitarChat: null, sinLeer: 0, ubic: null, info: null, memoria: {} });
+      Object.assign(seguimiento, { id: null, motoUid: null, quitar: null, quitarChat: null, sinLeer: 0, ubic: null, info: null, memoria: {}, rastro: [], movido: 0 });
     }
     if (enCurso && !seguimiento.id) {
       Object.assign(seguimiento, { id: c.id, motoUid: c.motoUid });
@@ -920,6 +1094,8 @@ function iniciar() {
   }
 
   // Recalcula cuánto falta y lo muestra en el widget, en "Mi carrera" y en la barra de notificaciones.
+  // Cada 20 s se repinta el estado (para que "detenido hace X min" avance aunque la moto no mande ubicación).
+  setInterval(() => { if (rutaActual === "carrera" && seguimiento.alMover) refrescarVivo(); }, 20000);
   function refrescarVivo() {
     const c = carreraActual();
     const w = $("#widget");
