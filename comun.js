@@ -570,6 +570,27 @@ export function botonInstalar() {
   return b;
 }
 
+// ---------- Sonido de alerta ----------
+// El navegador solo deja sonar después de que la persona toca la pantalla: el primer toque prepara el sonido.
+let ctxSonido = null;
+addEventListener("pointerdown", () => {
+  try { ctxSonido = ctxSonido || new (window.AudioContext || window.webkitAudioContext)(); ctxSonido.resume(); } catch {}
+}, { capture: true });
+export function sonarAlerta() {
+  if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
+  if (!ctxSonido) return;
+  try {
+    ctxSonido.resume();
+    const t = ctxSonido.currentTime;
+    [[0, 880], [0.22, 1175], [0.44, 1568]].forEach(([d, f]) => {
+      const o = ctxSonido.createOscillator(), g = ctxSonido.createGain();
+      o.frequency.value = f; o.connect(g); g.connect(ctxSonido.destination);
+      g.gain.setValueAtTime(0.5, t + d); g.gain.exponentialRampToValueAtTime(0.001, t + d + 0.3);
+      o.start(t + d); o.stop(t + d + 0.3);
+    });
+  } catch {}
+}
+
 // ---------- Avisos en la barra de notificaciones (sin servidor) ----------
 export const avisosPosibles = () => "Notification" in window && "serviceWorker" in navigator;
 export async function pedirPermisoAvisos() {

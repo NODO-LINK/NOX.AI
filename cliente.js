@@ -9,6 +9,7 @@ import {
 import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
+  sonarAlerta,
 } from "./comun.js?v=32";
 
 if (!avisoSinConfigurar()) iniciar();
@@ -165,7 +166,6 @@ function iniciar() {
       if (ahora && antes && ahora.id === antes.id && ahora.llegoEn && !antes.llegoEn && !ahora.recogido) {
         const quien = (ahora.motoNombre || "Tu motorizado").split(" ")[0];
         aviso(`¡${quien} llegó! Está afuera esperándote`);
-        if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
         notificarCarrera(`¡${quien} llegó!`, "Está afuera esperándote en el punto A", { sonar: true });
       }
       if (ahora && antes && antes.estado !== ahora.estado) {
@@ -704,14 +704,16 @@ function iniciar() {
 
   const notificarCarrera = (...a) => notificar(...a);
   async function notificar(titulo, cuerpo, { sonar = false } = {}) {
+    if (sonar) sonarAlerta();
     if (!avisosPosibles() || Notification.permission !== "granted") return;
     const reg = (await registroSw) || (await navigator.serviceWorker.ready.catch(() => null));
     if (!reg) return;
     const clave = titulo + cuerpo;
     if (clave === seguimiento.ultimoAviso && !sonar) return;
-    seguimiento.ultimoAviso = clave;
+    if (!sonar) seguimiento.ultimoAviso = clave;
+    // Las alertas (aceptó, llegó, terminó, mensaje) van aparte para que la actualización silenciosa del recorrido no las tape.
     reg.showNotification(titulo, {
-      body: cuerpo, tag: "whereapp-carrera", renotify: sonar, silent: !sonar,
+      body: cuerpo, tag: sonar ? "whereapp-alerta" : "whereapp-carrera", renotify: sonar, silent: !sonar, requireInteraction: sonar,
       icon: "icono-192.png", badge: "icono-192.png", data: { url: location.href.split("#")[0] },
       vibrate: sonar ? [200, 100, 200] : undefined,
     }).catch(() => {});
@@ -749,7 +751,8 @@ function iniciar() {
           else if (!$(".chat")) aviso(`${c.motoNombre.split(" ")[0]}: ${ult.texto}`);
         }
       });
-      notificar(`¡${c.motoNombre.split(" ")[0]} aceptó tu carrera!`, `${c.motoMoto || "Moto"}${c.motoPlaca ? ` · Placa ${c.motoPlaca}` : ""}`, { sonar: true });
+      // Solo suena si se vio el cambio en vivo (no cada vez que se abre la app con la carrera ya aceptada).
+      if (antes && antes.id === c.id && antes.estado === "esperando") notificar(`¡${c.motoNombre.split(" ")[0]} aceptó tu carrera!`, `${c.motoMoto || "Moto"}${c.motoPlaca ? ` · Placa ${c.motoPlaca}` : ""}`, { sonar: true });
     }
     if (c && c.estado === "terminada" && antes && antes.estado === "aceptada") {
       notificar("¡Llegaste a tu destino!", `Toca para calificar a ${c.motoNombre.split(" ")[0]}`, { sonar: true });
