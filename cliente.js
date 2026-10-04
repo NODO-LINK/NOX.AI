@@ -10,7 +10,7 @@ import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
   sonarAlerta,
-} from "./comun.js?v=33";
+} from "./comun.js?v=34";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -294,25 +294,83 @@ function iniciar() {
     pedido.km = r.km; pedido.linea = r.linea;
   }
 
-  // Lugares favoritos del cliente (Casa, Trabajo…), guardados en este teléfono.
+  // Mis lugares (Mi casa, Trabajo, casa de un amigo…), guardados en este teléfono.
+  const TIPOS_MIOS = {
+    casa: { nombre: "Mi casa", icono: "casa", color: "#7c3aed", sugerido: "Mi casa" },
+    trabajo: { nombre: "Trabajo", icono: "trabajo", color: "#0ea5e9", sugerido: "Trabajo" },
+    amigo: { nombre: "Familia o amigo", icono: "amigos", color: "#ec4899", sugerido: "Casa de " },
+    otro: { nombre: "Otro", icono: "favorito", color: "#f59e0b", sugerido: "" },
+  };
+  const tipoMio = (f) => TIPOS_MIOS[f.tipo] || TIPOS_MIOS.otro;
   const favoritos = {
     leer() { try { return JSON.parse(localStorage.getItem("whereapp.favoritos")) || []; } catch { return []; } },
-    guardar(l) { try { localStorage.setItem("whereapp.favoritos", JSON.stringify(l.slice(0, 10))); } catch {} },
+    guardar(l) { try { localStorage.setItem("whereapp.favoritos", JSON.stringify(l.slice(0, 20))); } catch {} },
   };
-  const esFavorito = (p) => favoritos.leer().some((f) => Math.abs(f.lat - p.lat) < 1e-5 && Math.abs(f.lng - p.lng) < 1e-5);
-  function alternarFavorito(i) {
+  const mismoSitio = (f, p) => Math.abs(f.lat - p.lat) < 1e-5 && Math.abs(f.lng - p.lng) < 1e-5;
+  const esFavorito = (p) => favoritos.leer().some((f) => mismoSitio(f, p));
+  const iconoMio = (f) => L.divIcon({ className: "", html: `<div class="mi-lugar" style="background:${tipoMio(f).color}">${icono(tipoMio(f).icono)}</div>`, iconSize: [32, 32], iconAnchor: [16, 34] });
+
+  // Ventana para guardar un lugar: se elige el tipo y se le pone nombre.
+  function guardarLugar(p, sugerido = "") {
+    return new Promise((resolver) => {
+      const fondo = document.createElement("div");
+      fondo.className = "modal";
+      let tipo = "casa";
+      fondo.innerHTML = `<div class="ventana"><h2>Guardar en mis lugares</h2>
+        <div class="tipos-lugar">${Object.entries(TIPOS_MIOS).map(([k, t]) => `<button class="tipo-lugar ${k === tipo ? "on" : ""}" data-tipo="${k}"><span style="background:${t.color}">${icono(t.icono)}</span>${esc(t.nombre)}</button>`).join("")}</div>
+        <input id="nombre-lugar" maxlength="40" placeholder="Nombre del lugar">
+        <button class="boton" data-ok>Guardar</button>
+        <button class="boton secundario" data-no>Cancelar</button></div>`;
+      document.body.append(fondo);
+      const campo = $("#nombre-lugar", fondo);
+      const usados = new Set(Object.values(TIPOS_MIOS).map((t) => t.sugerido));
+      campo.value = sugerido && !usados.has(sugerido) ? sugerido : TIPOS_MIOS.casa.sugerido;
+      $$("[data-tipo]", fondo).forEach((b) => (b.onclick = () => {
+        tipo = b.dataset.tipo;
+        $$("[data-tipo]", fondo).forEach((x) => x.classList.toggle("on", x === b));
+        if (!campo.value.trim() || usados.has(campo.value)) campo.value = TIPOS_MIOS[tipo].sugerido;
+        campo.focus();
+        campo.setSelectionRange(campo.value.length, campo.value.length);
+      }));
+      const cerrar = (v) => { fondo.remove(); resolver(v); };
+      $("[data-no]", fondo).onclick = () => cerrar(null);
+      $("[data-ok]", fondo).onclick = () => {
+        const n = campo.value.trim();
+        if (!n || n === "Casa de") return aviso("Escribe el nombre del lugar");
+        const lugar = { n: n.slice(0, 40), tipo, lat: p.lat, lng: p.lng };
+        favoritos.guardar([lugar, ...favoritos.leer().filter((f) => !mismoSitio(f, p))]);
+        aviso(`«${lugar.n}» guardado en tus lugares`);
+        cerrar(lugar);
+      };
+    });
+  }
+
+  // Ventana para ver y borrar los lugares guardados.
+  function editarLugares(alCambiar) {
+    const fondo = document.createElement("div");
+    fondo.className = "modal";
+    const pintar = () => {
+      const lista = favoritos.leer();
+      fondo.innerHTML = `<div class="ventana"><h2>Mis lugares</h2>
+        <div class="lista-mis-lugares">${lista.map((f, i) => `<div class="fila-mi-lugar"><span class="punto-tipo" style="background:${tipoMio(f).color}">${icono(tipoMio(f).icono)}</span><b>${esc(f.n)}</b>
+          <button class="quitar" data-borrar="${i}" aria-label="Borrar">${icono("basura")}</button></div>`).join("") || `<p class="nota">No tienes lugares guardados.</p>`}</div>
+        <button class="boton" data-no>Listo</button></div>`;
+      $("[data-no]", fondo).onclick = () => { fondo.remove(); alCambiar(); };
+      $$("[data-borrar]", fondo).forEach((b) => (b.onclick = () => {
+        const l = favoritos.leer(); const [quitado] = l.splice(Number(b.dataset.borrar), 1);
+        favoritos.guardar(l); aviso(`«${quitado.n}» borrado`); pintar();
+      }));
+    };
+    document.body.append(fondo);
+    pintar();
+  }
+
+  async function alternarFavorito(i) {
     const p = pedido.puntos[i];
-    let lista = favoritos.leer();
     if (esFavorito(p)) {
-      lista = lista.filter((f) => !(Math.abs(f.lat - p.lat) < 1e-5 && Math.abs(f.lng - p.lng) < 1e-5));
+      favoritos.guardar(favoritos.leer().filter((f) => !mismoSitio(f, p)));
       aviso("Quitado de tus lugares");
-    } else {
-      const nombre = prompt("¿Cómo quieres llamar este lugar? (Casa, Trabajo, Casa de mamá…)", pedido.refs[i] || "");
-      if (!nombre || !nombre.trim()) return;
-      lista.unshift({ n: nombre.trim().slice(0, 40), lat: p.lat, lng: p.lng });
-      aviso("Guardado en tus lugares");
-    }
-    favoritos.guardar(lista);
+    } else await guardarLugar(p, pedido.refs[i] || "");
   }
 
   // Lista de puntos con su referencia escrita (se puede quitar cada uno menos A).
@@ -326,7 +384,7 @@ function iniciar() {
         ${i > 0 ? `<button class="quitar" data-quitar="${i}" aria-label="Quitar punto">${icono("cerrar")}</button>` : ""}
       </div>`).join("");
     $$("[data-ref]").forEach((el) => el.addEventListener("input", () => { pedido.refs[Number(el.dataset.ref)] = el.value; }));
-    $$("[data-fav]").forEach((b) => (b.onclick = () => { alternarFavorito(Number(b.dataset.fav)); b.classList.toggle("on", esFavorito(pedido.puntos[Number(b.dataset.fav)])); }));
+    $$("[data-fav]").forEach((b) => (b.onclick = async () => { await alternarFavorito(Number(b.dataset.fav)); b.classList.toggle("on", esFavorito(pedido.puntos[Number(b.dataset.fav)])); }));
     $$("[data-quitar]").forEach((b) => (b.onclick = async () => {
       const i = Number(b.dataset.quitar);
       pedido.puntos.splice(i, 1); pedido.refs.splice(i, 1);
@@ -361,14 +419,30 @@ function iniciar() {
     document.body.append(caja);
     document.body.classList.add("con-selector");
     const m = nuevoMapa("mapa-sel", "libre");
+    const capaMios = L.layerGroup().addTo(m);
     const capa = L.layerGroup().addTo(m);
     encuadrar(m);
     setTimeout(() => m.invalidateSize(), 50);
+    let guardando = false;   // modo "Guardar lugar": el próximo toque en el mapa se guarda en Mis lugares
+    const ir = (p, z) => m.flyTo(p, Math.max(z, m.getZoom()), { duration: 0.6 });
+
+    // Mis lugares en el mapa: tocarlos los usa como punto.
+    const pintarMios = () => {
+      capaMios.eachLayer((x) => x.unbindTooltip());
+      capaMios.clearLayers();
+      favoritos.leer().forEach((f) => {
+        const mk = L.marker([f.lat, f.lng], { icon: iconoMio(f), zIndexOffset: 500 }).addTo(capaMios);
+        mk.bindTooltip(esc(f.n), { permanent: true, direction: "top", offset: [0, -34], className: "nombre-mio" });
+        mk.on("click", () => { if (guardando) return; poner(L.latLng(f.lat, f.lng), f.n); });
+      });
+    };
 
     const pintar = () => {
       const n = pedido.puntos.length;
       dibujarRecorrido(m, capa, true, cambiar);
-      $("#guia", caja).innerHTML = n === 0
+      $("#guia", caja).innerHTML = guardando
+        ? `${icono("favorito")}<span>Toca en el mapa el lugar que quieres guardar</span><button class="boton secundario chico" id="guardar-aqui">${icono("ubicarme")} Aquí estoy</button>`
+        : n === 0
         ? `<i class="letra-a">A</i><span>Toca el mapa o un lugar donde te buscamos</span>`
         : n === 1
         ? `<i class="letra-b">B</i><span>Ahora toca a dónde vas</span>`
@@ -378,8 +452,21 @@ function iniciar() {
       $("#chips", caja).innerHTML = pedido.puntos.map((_, i) => `<span class="chip-punto"><i class="${clasePunto(i, n)}">${letraPunto(i, n)}</i>${esc(pedido.refs[i] || "Punto marcado")}</span>`).join("")
         || `<span class="nota">Puedes buscar un lugar arriba o tocar el mapa.</span>`;
       const favs = favoritos.leer();
-      $("#favoritos", caja).innerHTML = favs.length ? favs.map((f, i) => `<button class="chip-fav" data-favi="${i}">${icono("casa")} ${esc(f.n)}</button>`).join("") : "";
-      $$("[data-favi]", caja).forEach((b) => (b.onclick = () => { const f = favs[Number(b.dataset.favi)]; m.setView([f.lat, f.lng], 16, { animate: false }); poner(L.latLng(f.lat, f.lng), f.n); }));
+      $("#favoritos", caja).innerHTML = `<button class="chip-fav nuevo ${guardando ? "activo" : ""}" id="nuevo-lugar">${icono(guardando ? "cerrar" : "mas")} ${guardando ? "Cancelar" : "Guardar lugar"}</button>`
+        + favs.map((f, i) => `<button class="chip-fav" data-favi="${i}"><span class="punto-tipo" style="background:${tipoMio(f).color}">${icono(tipoMio(f).icono)}</span>${esc(f.n)}</button>`).join("")
+        + (favs.length ? `<button class="chip-fav editar" id="editar-lugares">${icono("basura")} Editar</button>` : "");
+      $$("[data-favi]", caja).forEach((b) => (b.onclick = () => { const f = favs[Number(b.dataset.favi)]; guardando = false; ir([f.lat, f.lng], 16); poner(L.latLng(f.lat, f.lng), f.n); }));
+      $("#nuevo-lugar", caja).onclick = () => { guardando = !guardando; pintar(); };
+      if ($("#editar-lugares", caja)) $("#editar-lugares", caja).onclick = () => editarLugares(() => { pintarMios(); pintar(); });
+      if ($("#guardar-aqui", caja)) $("#guardar-aqui", caja).onclick = () => {
+        if (!navigator.geolocation) return aviso("Tu teléfono no permite usar la ubicación");
+        aviso("Buscando tu ubicación…");
+        navigator.geolocation.getCurrentPosition(
+          (p) => { const aqui = L.latLng(p.coords.latitude, p.coords.longitude); ir(aqui, 17); guardarAqui(aqui); },
+          () => aviso("No se pudo obtener tu ubicación. Activa el GPS y da permiso."),
+          { enableHighAccuracy: true, timeout: 15000 }
+        );
+      };
       const agregarBtn = $("#sel-agregar", caja);
       agregarBtn.disabled = n < 2 || n >= MAX_PUNTOS;
       agregarBtn.classList.toggle("activo", pedido.agregando);
@@ -396,10 +483,20 @@ function iniciar() {
       if (pedido.puntos.length === 2) encuadrar(m);
       cambiar();
     };
-    m.on("click", (e) => poner(e.latlng));
+    const guardarAqui = async (latlng) => {
+      const marca = L.marker(latlng, { icon: iconoMio({ tipo: "otro" }) }).addTo(m);
+      const lugar = await guardarLugar(latlng);
+      m.removeLayer(marca);
+      guardando = false;
+      if (!document.body.contains(caja)) return;
+      pintarMios(); pintar();
+      if (lugar && pedido.puntos.length < 2) poner(L.latLng(lugar.lat, lugar.lng), lugar.n);
+    };
+    m.on("click", (e) => (guardando ? guardarAqui(e.latlng) : poner(e.latlng)));
+    pintarMios();
 
     // Lugares de El Moján: se ven al acercarse; tocar uno lo usa como punto con su nombre.
-    mostrarLugares(m, (l) => poner(L.latLng(l.lat, l.lng), l.n)).listo
+    mostrarLugares(m, (l) => (guardando ? guardarAqui(L.latLng(l.lat, l.lng)) : poner(L.latLng(l.lat, l.lng), l.n))).listo
       .then((l) => { lugares = l; })
       .catch(() => aviso("No se pudieron cargar los lugares. Puedes tocar el mapa igual."));
 
@@ -419,7 +516,7 @@ function iniciar() {
       $$("[data-i]", res).forEach((b) => (b.onclick = () => {
         const l = hallados[Number(b.dataset.i)];
         res.hidden = true; buscar.value = ""; buscar.blur();
-        m.setView([l.lat, l.lng], 17, { animate: false });
+        ir([l.lat, l.lng], 17);
         poner(L.latLng(l.lat, l.lng), l.n);
       }));
     });
@@ -433,7 +530,7 @@ function iniciar() {
           const aqui = L.latLng(p.coords.latitude, p.coords.longitude);
           if (pedido.puntos.length) { pedido.puntos[0] = aqui; pedido.refs[0] = pedido.refs[0] || "Mi ubicación actual"; }
           else { pedido.puntos.push(aqui); pedido.refs.push("Mi ubicación actual"); }
-          m.setView(aqui, 16, { animate: false });
+          ir(aqui, 16);
           cambiar();
         },
         () => aviso("No se pudo obtener tu ubicación. Activa el GPS y da permiso."),
@@ -441,7 +538,7 @@ function iniciar() {
       );
     };
     const cerrar = () => {
-      m.remove(); caja.remove();
+      m.stop(); m.remove(); caja.remove();
       document.body.classList.remove("con-selector");
       pedido.agregando = false;
       if (rutaActual === "pedir") vistaPedir();

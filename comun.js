@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=33";
-import { icono, pintarIconos } from "./iconos.js?v=33";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=34";
+import { icono, pintarIconos } from "./iconos.js?v=34";
 
 export { icono };
 pintarIconos();
@@ -178,25 +178,51 @@ const LIMITES = [[CENTRO[0] - 0.15, CENTRO[1] - 0.15], [CENTRO[0] + 0.15, CENTRO
 // con + / − o pellizcando con dos dedos. Los puntos se marcan tocando y se ajustan arrastrándolos.
 // modo "libre": pantalla completa, se mueve con el dedo (no hay scroll que estorbe).
 // modo "mini": vista previa quieta, sin botones; tocarla abre el mapa completo.
+// Fondo del mapa: satelital (por defecto) o de calles. Se recuerda en el teléfono.
+const CLAVE_FONDO = "whereapp.fondo";
+const leerFondo = () => { try { return localStorage.getItem(CLAVE_FONDO) || "satelite"; } catch { return "satelite"; } };
+const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/";
+function ponerFondo(m, fondo) {
+  const L = window.L;
+  if (m._fondo) m._fondo.forEach((c) => m.removeLayer(c));
+  const op = { maxZoom: 19, keepBuffer: 4, updateWhenZooming: false };
+  m._fondo = fondo === "satelite"
+    ? [
+        L.tileLayer(ESRI + "World_Imagery/MapServer/tile/{z}/{y}/{x}", { ...op, maxNativeZoom: 18, attribution: "Imágenes © Esri, Maxar" }),
+        L.tileLayer(ESRI + "Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}", { ...op, maxNativeZoom: 18, opacity: 0.75 }),
+        L.tileLayer(ESRI + "Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", { ...op, maxNativeZoom: 18 }),
+      ]
+    : [L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { ...op, attribution: "© OpenStreetMap" })];
+  m._fondo.forEach((c) => c.addTo(m));
+  m.getContainer().classList.toggle("satelital", fondo === "satelite");
+}
+
 export function nuevoMapa(id, modo = "") {
   const L = window.L;
   const libre = modo === "libre", mini = modo === "mini";
   const m = L.map(id, {
     zoomControl: false, dragging: libre, scrollWheelZoom: libre, doubleClickZoom: false, boxZoom: false, keyboard: false,
     touchZoom: !mini, attributionControl: !mini,
-    maxBounds: LIMITES, maxBoundsViscosity: 1, minZoom: 12,
+    maxBounds: LIMITES, maxBoundsViscosity: 0.85, minZoom: 12,
+    // Movimiento más suave: zoom sin saltos bruscos al pellizcar y deslizamiento con inercia.
+    zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 100, inertiaDeceleration: 2600, bounceAtZoomLimits: false,
   }).setView(CENTRO, 14);
-  if (mini) {
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(m);
-    return m;
-  }
+  ponerFondo(m, leerFondo());
+  if (mini) return m;
   L.control.zoom({ position: "bottomleft" }).addTo(m);
   const Controles = L.Control.extend({
     options: { position: "bottomleft" },
     onAdd() {
       const caja = L.DomUtil.create("div", "leaflet-bar controles-mapa");
-      caja.innerHTML = `${libre ? "" : `<a href="#" role="button" data-mover title="Mover el mapa">${icono("mano")}</a>`}<a href="#" role="button" data-centro title="Volver al centro de El Moján">${icono("centro")}</a>`;
+      caja.innerHTML = `<a href="#" role="button" data-fondo title="Cambiar entre satélite y calles">${icono("capas")}</a>${libre ? "" : `<a href="#" role="button" data-mover title="Mover el mapa">${icono("mano")}</a>`}<a href="#" role="button" data-centro title="Volver al centro de El Moján">${icono("centro")}</a>`;
       L.DomEvent.disableClickPropagation(caja);
+      caja.querySelector("[data-fondo]").onclick = (e) => {
+        e.preventDefault();
+        const nuevo = leerFondo() === "satelite" ? "calles" : "satelite";
+        try { localStorage.setItem(CLAVE_FONDO, nuevo); } catch {}
+        ponerFondo(m, nuevo);
+        aviso(nuevo === "satelite" ? "Vista satelital" : "Vista de calles");
+      };
       if (!libre) caja.querySelector("[data-mover]").onclick = (e) => {
         e.preventDefault();
         const activo = !m.dragging.enabled();
@@ -204,12 +230,11 @@ export function nuevoMapa(id, modo = "") {
         e.currentTarget.classList.toggle("activo", activo);
         aviso(activo ? "Ahora puedes mover el mapa con el dedo" : "Mapa fijo");
       };
-      caja.querySelector("[data-centro]").onclick = (e) => { e.preventDefault(); m.setView(CENTRO, 14, { animate: false }); };
+      caja.querySelector("[data-centro]").onclick = (e) => { e.preventDefault(); m.flyTo(CENTRO, 14, { duration: 0.6 }); };
       return caja;
     },
   });
   new Controles().addTo(m);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(m);
   return m;
 }
 
@@ -482,20 +507,25 @@ export function iconoLugar(l) {
 export function mostrarLugares(m, alTocar) {
   const L = window.L;
   const capa = L.layerGroup().addTo(m);
+  const marcas = new Map();
   let lista = null;
+  const quitar = (k) => { const mk = marcas.get(k); mk.unbindTooltip(); capa.removeLayer(mk); marcas.delete(k); };
+  // Solo agrega o quita los lugares que entran o salen de la vista: así el mapa no parpadea al moverse.
   const pintar = () => {
-    capa.eachLayer((x) => x.unbindTooltip());
-    capa.clearLayers();
-    m.getContainer().classList.toggle("sin-nombres", m.getZoom() < 17);
-    if (!lista || m.getZoom() < 15) return;
-    const vista = m.getBounds().pad(0.2);
-    lista.filter((l) => vista.contains([l.lat, l.lng])).forEach((l) => {
+    m.getContainer().classList.toggle("sin-nombres", m.getZoom() < 16.5);
+    if (!lista) return;
+    if (m.getZoom() < 15) { [...marcas.keys()].forEach(quitar); return; }
+    const vista = m.getBounds().pad(0.6);
+    [...marcas.keys()].forEach((k) => { if (!vista.contains(marcas.get(k).getLatLng())) quitar(k); });
+    lista.forEach((l, k) => {
+      if (marcas.has(k) || !vista.contains([l.lat, l.lng])) return;
       const mk = L.marker([l.lat, l.lng], { icon: iconoLugar(l) }).addTo(capa);
       mk.bindTooltip(esc(l.n), { permanent: true, direction: "top", offset: [0, -12], className: "nombre-lugar" });
       if (alTocar) mk.on("click", () => alTocar(l));
+      marcas.set(k, mk);
     });
   };
-  m.on("moveend", pintar);
+  m.on("moveend zoomend", pintar);
   const listo = cargarLugares().then((l) => { lista = l; pintar(); return l; });
   return { capa, listo };
 }

@@ -3,7 +3,7 @@
 
 import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { auth, db, NOMBRE, $, esc, icono, ICONOS, nuevoMapa, marcarRecorrido, filasRecorrido, progreso, afinarEta, transicion, avisoSinConfigurar } from "./comun.js?v=33";
+import { auth, db, NOMBRE, $, esc, icono, ICONOS, nuevoMapa, marcarRecorrido, filasRecorrido, progreso, afinarEta, transicion, avisoSinConfigurar } from "./comun.js?v=34";
 
 if (!avisoSinConfigurar()) iniciar();
 

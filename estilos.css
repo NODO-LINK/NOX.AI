@@ -331,7 +331,7 @@ textarea { resize: vertical; min-height: 70px; }
 
 /* ---------- Ventana (hoja que sube) ---------- */
 .modal {
-  position: fixed; inset: 0; z-index: 1000; display: grid; place-items: end center; padding: 12px;
+  position: fixed; inset: 0; z-index: 1075; display: grid; place-items: end center; padding: 12px;
   background: rgba(28, 21, 48, .38); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
   animation: aparecer-fondo .3s ease both;
 }
@@ -573,6 +573,7 @@ body.con-selector { overflow: hidden; }
 }
 [data-tema="oscuro"] body::before { opacity: .55; }
 [data-tema="oscuro"] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.88) saturate(.55); }
+[data-tema="oscuro"] .satelital .leaflet-tile-pane { filter: none; }
 [data-tema="oscuro"] .leaflet-container { background: #1c1a24; }
 [data-tema="oscuro"] .leaflet-popup-content-wrapper, [data-tema="oscuro"] .leaflet-popup-tip { background: var(--superficie); color: var(--texto); }
 [data-tema="oscuro"] .leaflet-control-attribution { background: rgba(27, 23, 38, .7) !important; color: var(--texto-2); }
@@ -645,3 +646,30 @@ body.con-selector { overflow: hidden; }
 .pildora.cerca { background: var(--marca-suave); color: var(--marca); }
 [data-tema="oscuro"] .pildora.cerca { color: var(--marca-clara); }
 .pildora.cerca .ico { width: 13px; height: 13px; }
+
+/* ---------- Mapa satelital y Mis lugares ---------- */
+.leaflet-container.satelital { background: #2b2f33; }
+.satelital .leaflet-tooltip.nombre-lugar { background: rgba(255, 255, 255, .92); color: #1b1726; }
+.leaflet-fade-anim .leaflet-tile { transition: opacity .25s linear; }
+.mi-lugar { width: 32px; height: 32px; border-radius: 50% 50% 50% 4px; transform: rotate(-45deg); display: grid; place-items: center; color: #fff; border: 2.5px solid #fff; box-shadow: 0 3px 10px rgba(0, 0, 0, .35); }
+.mi-lugar .ico { transform: rotate(45deg); width: 16px; height: 16px; }
+.leaflet-tooltip.nombre-mio { background: #fff; color: #1b1726; border: 0; border-radius: 10px; box-shadow: var(--sombra-1); font: 800 11px "Nunito", system-ui, sans-serif; padding: 2px 8px; }
+.leaflet-tooltip.nombre-mio::before { display: none; }
+.chip-fav.nuevo { background: var(--degradado); color: #fff !important; border-color: transparent; }
+.chip-fav.editar { background: var(--superficie); color: var(--texto-suave, var(--texto)); }
+.chip-fav .punto-tipo { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; color: #fff; }
+.chip-fav .punto-tipo .ico { width: 11px; height: 11px; }
+.tipos-lugar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+.tipo-lugar { display: grid; justify-items: center; gap: 6px; padding: 10px 4px; border-radius: 16px; border: 2px solid var(--borde); background: var(--superficie); color: var(--texto); font: 800 .72rem "Nunito", system-ui, sans-serif; cursor: pointer; }
+.tipo-lugar span { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: #fff; }
+.tipo-lugar .ico { width: 17px; height: 17px; }
+.tipo-lugar.on { border-color: var(--marca); background: var(--marca-suave); }
+.lista-mis-lugares { display: grid; gap: 8px; margin-bottom: 14px; max-height: 50vh; overflow-y: auto; }
+.fila-mi-lugar { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 16px; background: var(--marca-suave); }
+.fila-mi-lugar b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fila-mi-lugar .punto-tipo { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #fff; flex: 0 0 auto; }
+.fila-mi-lugar .punto-tipo .ico { width: 15px; height: 15px; }
+.guia .boton.chico { margin-left: auto; flex: 0 0 auto; }
+/* En el mapa completo, los botones van a la derecha para que la hoja de abajo no los tape. */
+.mapa-sel .leaflet-bottom.leaflet-left { left: auto; right: 0; bottom: auto; top: 30%; }
+.mapa-sel .leaflet-bottom.leaflet-left .leaflet-control { margin: 0 10px 10px 0; clear: right; float: right; }
