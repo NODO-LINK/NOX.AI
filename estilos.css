@@ -761,3 +761,21 @@ body.con-selector { overflow: hidden; }
 .cobro { color: var(--marca); }
 .cobro .ico { width: 15px; height: 15px; vertical-align: -2px; }
 .fila.cobrar b { color: var(--marca); }
+/* ---------- Privacidad y cookies ---------- */
+.enlace, .acepto a, .aviso-cookies a, .legal a:not(.boton) { color: var(--marca); font-weight: 700; }
+.pie-legal { text-align: center; margin: 22px 0 8px; }
+.acepto { margin-top: 12px; align-items: flex-start; }
+.acepto span { font-size: .85rem; line-height: 1.35; }
+.acepto.falta { animation: sacudir .4s; box-shadow: 0 0 0 2px #fca5a5; }
+.aviso-cookies { position: fixed; left: 12px; right: 12px; bottom: calc(100px + env(safe-area-inset-bottom)); z-index: 1060; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 22px; background: var(--vidrio-fuerte); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: var(--sombra-3); border: 1px solid var(--borde); animation: entrar .4s var(--suave) both; transition: opacity .3s, transform .3s; }
+.sin-barra .aviso-cookies, body:not(:has(.barra:not([hidden]))) .aviso-cookies { bottom: calc(14px + env(safe-area-inset-bottom)); }
+.aviso-cookies.fuera { opacity: 0; transform: translateY(20px); }
+.aviso-cookies p { flex: 1; display: flex; gap: 8px; font-size: .8rem; line-height: 1.35; color: var(--texto); }
+.aviso-cookies p .ico { flex: 0 0 auto; width: 18px; height: 18px; color: var(--marca); }
+.aviso-cookies .boton { flex: 0 0 auto; }
+.legal { padding-bottom: 30px; }
+.legal .subtitulo { font-size: 1rem; font-weight: 800; margin: 18px 4px 8px; }
+.legal .caja p + p, .legal .caja p + ul, .legal .caja ul + p { margin-top: 10px; }
+.legal ul { padding-left: 20px; display: grid; gap: 6px; line-height: 1.45; }
+.legal .caja p { line-height: 1.5; }
+.legal .tabla { margin: 12px 0; }

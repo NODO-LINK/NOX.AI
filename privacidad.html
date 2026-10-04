@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>Whereapp — Privacidad y cookies</title>
+  <meta name="description" content="Política de privacidad y de cookies de Whereapp, mototaxi en El Moján." />
+  <link rel="icon" href="icono.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="estilos.css?v=41" />
+  <script>
+    // Mismo modo claro/oscuro que la app.
+    try {
+      const t = localStorage.getItem("whereapp.tema") || (matchMedia("(prefers-color-scheme: dark)").matches ? "oscuro" : "claro");
+      document.documentElement.dataset.tema = t;
+    } catch {}
+  </script>
+</head>
+<body class="sin-barra">
+  <main class="vista legal">
+    <a class="boton secundario chico" href="./" onclick="if (history.length > 1) { history.back(); return false; }" style="margin-top:16px;display:inline-flex">← Volver a Whereapp</a>
+    <h1 class="titulo">Política de privacidad</h1>
+    <p class="nota">Última actualización: 4 de octubre de 2026</p>
+
+    <div class="caja">
+      <p>Whereapp es una aplicación para pedir mototaxi en El Moján (estado Zulia, Venezuela). Conecta a clientes con motorizados independientes. Esta política explica qué datos usamos, para qué, con quién se comparten y cómo puedes pedir que se borren.</p>
+      <p>Si tienes preguntas o quieres ejercer tus derechos, escríbenos a <a href="mailto:braian150609@gmail.com">braian150609@gmail.com</a>.</p>
+    </div>
+
+    <h2 class="subtitulo">1. Datos que usamos</h2>
+    <div class="caja">
+      <p><b>Si eres cliente:</b></p>
+      <ul>
+        <li>Nombre completo, cédula y número de teléfono, que escribes al entrar.</li>
+        <li>Los puntos de cada carrera: dónde te buscan, las paradas y a dónde vas, con las referencias que escribes.</li>
+        <li>Tu ubicación, solo cuando la app está abierta y tú das permiso: para poner el punto A automáticamente, mostrarte en el mapa y ordenar a los motorizados por cercanía.</li>
+        <li>Tus carreras: fecha, distancia, precio, forma de pago y su estado.</li>
+        <li>Las calificaciones y comentarios que haces, incluidos los reportes de seguridad.</li>
+        <li>Los mensajes del chat con el motorizado de tu carrera.</li>
+        <li>Los lugares que guardas (Mi casa, Trabajo, etc.). Se guardan solo en tu teléfono.</li>
+      </ul>
+      <p><b>Si eres motorizado:</b></p>
+      <ul>
+        <li>Nombre, teléfono, moto y placa, que registra el administrador.</li>
+        <li>Tu ubicación mientras estás de turno o en una carrera, para que los clientes vean quién está cerca y por dónde vienes.</li>
+        <li>Tus datos de pago móvil (banco, teléfono y cédula), si decides registrarlos.</li>
+        <li>Tus carreras, ganancias, pagos de la cuota y las calificaciones que recibes.</li>
+      </ul>
+      <p><b>Datos de uso:</b> un conteo de visitas por día (sin identificarte) y cuántas veces se llama a cada motorizado.</p>
+    </div>
+
+    <h2 class="subtitulo">2. Para qué los usamos</h2>
+    <div class="caja">
+      <ul>
+        <li>Para que puedas pedir una carrera y el motorizado sepa a quién buscar, dónde y cuánto cobrar.</li>
+        <li>Para mostrar el seguimiento en vivo y avisarte cuando te aceptan, llegan o termina el viaje.</li>
+        <li>Para la seguridad de todos: calificaciones, reportes, y bloquear a clientes o motorizados que abusen del servicio.</li>
+        <li>Para administrar a los motorizados: activarlos, controlar el pago de la cuota y ver estadísticas.</li>
+      </ul>
+      <p>No vendemos tus datos ni los usamos para publicidad.</p>
+    </div>
+
+    <h2 class="subtitulo">3. Quién ve tus datos</h2>
+    <div class="caja">
+      <ul>
+        <li><b>El motorizado de tu carrera</b> ve tu nombre, tu teléfono, los puntos del viaje y el chat. Si la publicas para todos, los motorizados de turno ven los puntos y el precio antes de aceptar.</li>
+        <li><b>Los clientes</b> ven el nombre, la moto, la placa, el teléfono, la calificación y la ubicación de los motorizados de turno. Si el cliente paga por pago móvil, ve los datos de pago móvil del motorizado.</li>
+        <li><b>Las personas con quienes compartes el enlace de seguimiento</b> ven en vivo tu carrera, tu nombre y el del motorizado.</li>
+        <li><b>El administrador de Whereapp</b> ve los datos necesarios para operar el servicio y atender reportes.</li>
+      </ul>
+      <p><b>Servicios que usamos para funcionar:</b></p>
+      <ul>
+        <li><b>Google Firebase:</b> base de datos e inicio de sesión. Los datos se guardan en sus servidores.</li>
+        <li><b>Mapas y rutas:</b> OpenStreetMap, CARTO, Esri y OSRM, para las imágenes del mapa y para calcular distancias. Reciben las coordenadas necesarias y tu dirección de internet (IP), como cualquier página web.</li>
+        <li><b>Google Fonts:</b> el tipo de letra de la app.</li>
+      </ul>
+    </div>
+
+    <h2 class="subtitulo">4. Cuánto tiempo los guardamos</h2>
+    <div class="caja">
+      <p>Guardamos tus datos mientras uses Whereapp y el tiempo razonable para atender reclamos o reportes de seguridad. Puedes pedir que se borren en cualquier momento (punto 6).</p>
+      <p>Los datos guardados en tu teléfono (tus datos para entrar rápido y tus lugares) se borran si borras los datos de la app o del navegador.</p>
+    </div>
+
+    <h2 class="subtitulo">5. Seguridad</h2>
+    <div class="caja">
+      <p>Usamos conexiones cifradas (HTTPS) y reglas de acceso para que cada persona vea solo lo que le corresponde. Ningún sistema es 100% seguro; si detectamos un problema que afecte tus datos, te avisaremos.</p>
+    </div>
+
+    <h2 class="subtitulo">6. Tus derechos</h2>
+    <div class="caja">
+      <p>Conforme a la Constitución de Venezuela (artículos 28 y 60, habeas data), puedes:</p>
+      <ul>
+        <li>Saber qué datos tuyos tenemos.</li>
+        <li>Corregirlos si están mal.</li>
+        <li>Pedir que se borren.</li>
+        <li>Quitar el permiso de ubicación o de notificaciones cuando quieras, desde los ajustes de tu teléfono.</li>
+      </ul>
+      <p>Para pedirlo, escribe a <a href="mailto:braian150609@gmail.com">braian150609@gmail.com</a> con tu nombre y tu cédula. Te responderemos en un máximo de 30 días.</p>
+    </div>
+
+    <h2 class="subtitulo">7. Menores de edad</h2>
+    <div class="caja">
+      <p>Whereapp es para mayores de 18 años. Un menor solo debe usarla con permiso y acompañamiento de su representante.</p>
+    </div>
+
+    <h2 class="subtitulo">8. Cambios a esta política</h2>
+    <div class="caja">
+      <p>Si cambiamos esta política, actualizaremos la fecha de arriba. Si el cambio es importante, te lo pediremos aceptar de nuevo en la app.</p>
+    </div>
+
+    <h1 class="titulo" id="cookies">Política de cookies</h1>
+    <div class="caja">
+      <p>Las «cookies» son pequeños archivos que las páginas web guardan en tu teléfono. Whereapp <b>no usa cookies de publicidad ni de rastreo</b>.</p>
+      <p>Para funcionar, la app sí guarda información en tu teléfono, en el almacenamiento del navegador (almacenamiento local e IndexedDB, que funcionan parecido a las cookies):</p>
+      <table class="tabla">
+        <tr><th>Qué se guarda</th><th>Para qué</th></tr>
+        <tr><td>Tu sesión (Firebase)</td><td>Que no tengas que entrar cada vez.</td></tr>
+        <tr><td>Tu nombre, cédula y teléfono</td><td>Entrar con un toque la próxima vez.</td></tr>
+        <tr><td>Tus lugares guardados</td><td>Casa, Trabajo y los que agregues.</td></tr>
+        <tr><td>Lugares del mapa (7 días)</td><td>Que el mapa cargue más rápido.</td></tr>
+        <tr><td>Modo claro/oscuro, tipo de mapa y forma de pago</td><td>Recordar tus preferencias.</td></tr>
+        <tr><td>Copia de la app (service worker)</td><td>Que abra aunque haya poca señal.</td></tr>
+        <tr><td>Que aceptaste esta política</td><td>No volver a preguntarte.</td></tr>
+      </table>
+      <p>Los servicios de mapas y de letras (punto 3) pueden recibir tu dirección IP al cargar sus imágenes o archivos.</p>
+      <p>Puedes borrar todo esto desde los ajustes de tu teléfono (Apps → Whereapp → Almacenamiento → Borrar datos) o del navegador. Si lo haces, tendrás que escribir tus datos otra vez.</p>
+    </div>
+    <p class="nota" style="text-align:center;margin:24px 0">Whereapp · El Moján, Zulia, Venezuela · <a href="mailto:braian150609@gmail.com">braian150609@gmail.com</a></p>
+  </main>
+</body>
+</html>

@@ -9,8 +9,8 @@ import {
 import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
-  sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
-} from "./comun.js?v=40";
+  politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
+} from "./comun.js?v=41";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -57,7 +57,16 @@ function iniciar() {
     $("#cabecera").hidden = true; $("#barra").hidden = true; $("#widget").hidden = true; document.body.classList.add("sin-barra");
     document.body.classList.remove("con-widget");
     const guardados = forzarFormulario ? null : recordados.leer();
-    const pie = `<p class="nota" style="text-align:center;margin-top:18px">¿Eres motorizado? <a href="moto.html" style="color:var(--marca);font-weight:700">Entra aquí</a></p>`;
+    const pie = `<p class="nota" style="text-align:center;margin-top:18px">¿Eres motorizado? <a href="moto.html" style="color:var(--marca);font-weight:700">Entra aquí</a></p>
+      <p class="nota" style="text-align:center">${ENLACE_POLITICAS}</p>`;
+    // Casilla para aceptar la política (solo si no la ha aceptado en este teléfono).
+    const casilla = politicasAceptadas() ? "" : `<label class="opcion acepto"><input type="checkbox" id="acepto"><span>Acepto la <a href="privacidad.html" target="_blank">política de privacidad y de cookies</a></span></label>`;
+    const falta = () => {
+      if (!$("#acepto") || $("#acepto").checked) return false;
+      aviso("Para entrar, acepta la política de privacidad y de cookies");
+      const l = $(".acepto"); l.classList.remove("falta"); void l.offsetWidth; l.classList.add("falta");
+      return true;
+    };
     const cabeza = `<div class="logo">${NOMBRE}</div><div class="logo-sub">${SERVICIOS.length > 1 ? "Delivery y mototaxi" : "Mototaxi"} en El Moján</div>`;
 
     if (guardados) {
@@ -67,11 +76,12 @@ function iniciar() {
           <div class="avatar" style="margin:4px auto 12px;width:64px;height:64px;font-size:1.3rem">${esc(iniciales)}</div>
           <h2>¡Hola de nuevo, ${esc(guardados.nombre.split(" ")[0])}!</h2>
           <p class="nota">${esc(guardados.nombre)} · C.I. ${esc(guardados.cedula)} · ${esc(telBonito(guardados.telefono))}</p>
+          ${casilla}
           <button class="boton" id="continuar">Entrar como ${esc(guardados.nombre.split(" ")[0])}</button>
           <button class="boton secundario" id="otros">No soy yo / cambiar datos</button>
         </div>${pie}</div>`;
       transicion();
-      $("#continuar").onclick = () => entrar(guardados, $("#continuar"));
+      $("#continuar").onclick = () => { if (!falta()) entrar(guardados, $("#continuar")); };
       $("#otros").onclick = () => pantallaEntrada(true);
       return;
     }
@@ -89,6 +99,7 @@ function iniciar() {
         </div>
         <label for="tel">Teléfono</label>
         <input id="tel" type="tel" inputmode="tel" placeholder="0414-1234567" autocomplete="tel" value="${esc(telBonito(previos.telefono))}" required>
+        ${casilla}
         <button class="boton">Entrar</button>
         <p class="nota">Tus datos quedan guardados en este teléfono para que la próxima vez entres con un toque.</p>
       </form>${pie}</div>`;
@@ -101,6 +112,7 @@ function iniciar() {
       if (nombre.split(" ").length < 2) return aviso("Escribe tu nombre y apellido");
       if (numero.length < 6 || numero.length > 9) return aviso("Escribe una cédula válida");
       if (!telefono) return aviso("Escribe un teléfono válido, ej. 0414-1234567");
+      if (falta()) return;
       entrar({ nombre, cedula: `${$("#nacionalidad").value}-${numero}`, telefono }, $("#registro button"));
     };
   }
@@ -111,7 +123,8 @@ function iniciar() {
     try {
       const cred = usuario ? { user: usuario } : await signInAnonymously(auth);
       usuario = cred.user;
-      cliente = { ...datos, creado: serverTimestamp() };
+      aceptarPoliticas();
+      cliente = { ...datos, creado: serverTimestamp(), politicas: VERSION_POLITICAS };
       await setDoc(doc(db, "clientes", usuario.uid), cliente);
       recordados.guardar(datos);
       registrando = false;
@@ -859,6 +872,7 @@ function iniciar() {
           </div>
         </article>`).join("") : `<div class="vacio">${icono("moto")}<b>No hay motorizados de turno ahora.</b><br>Intenta en un rato; esta lista se actualiza sola.</div>`}
       </div>`;
+    $("#vista").insertAdjacentHTML("beforeend", `<p class="nota pie-legal">${ENLACE_POLITICAS}</p>`);
     $$("[data-llamar]").forEach((a) => a.addEventListener("click", () => {
       setDoc(doc(db, "llamadas", a.dataset.llamar), { n: increment(1) }, { merge: true }).catch(() => {});
     }));

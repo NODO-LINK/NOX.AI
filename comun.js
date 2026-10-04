@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=40";
-import { icono, pintarIconos } from "./iconos.js?v=40";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=41";
+import { icono, pintarIconos } from "./iconos.js?v=41";
 
 export { icono };
 pintarIconos();
@@ -715,6 +715,25 @@ export function botonInstalar() {
   };
   return b;
 }
+
+// ---------- Política de privacidad y cookies ----------
+// Si la política cambia, sube la versión para que todos la acepten de nuevo.
+export const VERSION_POLITICAS = "2026-10-04";
+const CLAVE_POLITICAS = "whereapp.politicas";
+export const politicasAceptadas = () => { try { return localStorage.getItem(CLAVE_POLITICAS) === VERSION_POLITICAS; } catch { return false; } };
+export const aceptarPoliticas = () => { try { localStorage.setItem(CLAVE_POLITICAS, VERSION_POLITICAS); } catch {} };
+export const ENLACE_POLITICAS = `<a href="privacidad.html" class="enlace">Política de privacidad y cookies</a>`;
+// Aviso de cookies abajo (motorizados, panel y seguimiento; el cliente acepta al entrar).
+export function avisoCookies() {
+  if (politicasAceptadas() || $("#aviso-cookies")) return;
+  const a = document.createElement("div");
+  a.id = "aviso-cookies"; a.className = "aviso-cookies";
+  a.innerHTML = `<p>${icono("escudo")} <span>Whereapp guarda tu sesión y preferencias en este teléfono para funcionar. No usamos cookies de publicidad ni de rastreo. <a href="privacidad.html#cookies">Más información</a></span></p>
+    <button class="boton chico">Entendido</button>`;
+  $("button", a).onclick = () => { aceptarPoliticas(); a.classList.add("fuera"); setTimeout(() => a.remove(), 300); };
+  document.body.append(a);
+}
+if (ROL !== "cliente" || /seguir\.html$/.test(location.pathname)) setTimeout(avisoCookies, 1500);
 
 // ---------- Sonido de alerta: corneta de moto ----------
 // El navegador solo deja sonar después de que la persona toca la pantalla: el primer toque prepara el sonido

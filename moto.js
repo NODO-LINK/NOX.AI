@@ -5,9 +5,9 @@ import {
   doc, addDoc, onSnapshot, updateDoc, collection, query, where, runTransaction, serverTimestamp, arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  sonarAlerta, ASPECTOS, insigniasSeguridad, textoCobro, FORMAS_PAGO, bs, auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
+  ENLACE_POLITICAS, sonarAlerta, ASPECTOS, insigniasSeguridad, textoCobro, FORMAS_PAGO, bs, auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar,
-} from "./comun.js?v=40";
+} from "./comun.js?v=41";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -52,7 +52,8 @@ function iniciar() {
         <label for="usuario">Usuario</label><input id="usuario" autocomplete="username" autocapitalize="none">
         <label for="clave">Clave</label><input id="clave" type="password" autocomplete="current-password">
         <button class="boton">Entrar</button>
-        <p class="nota">El usuario y la clave te los da el administrador.</p></form></div>`;
+        <p class="nota">El usuario y la clave te los da el administrador.</p>
+        <p class="nota">Al entrar aceptas la ${ENLACE_POLITICAS.replace("Política", "política")}.</p></form></div>`;
     $("#login").onsubmit = async (e) => {
       e.preventDefault();
       try { await signInWithEmailAndPassword(auth, correoDe($("#usuario").value), $("#clave").value); }
