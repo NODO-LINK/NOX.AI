@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=43";
-import { icono, pintarIconos } from "./iconos.js?v=43";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=44";
+import { icono, pintarIconos } from "./iconos.js?v=44";
 
 export { icono };
 pintarIconos();
@@ -100,6 +100,30 @@ export const ASPECTOS = {
 };
 // % de viajes en que el cliente dijo que se sintió seguro (null si nadie ha respondido).
 export const pctSeguro = (m) => (m.seguroN ? Math.round((100 * (m.seguroSi || 0)) / m.seguroN) : null);
+// Copia pública de una reseña aprobada (sin datos privados del cliente ni los reportes).
+export function opinionPublica(r) {
+  const partes = String(r.clienteNombre || "Cliente").trim().split(/\s+/);
+  return {
+    estrellas: r.estrellas, comentario: r.comentario || "", fecha: r.fecha || new Date(),
+    nombre: partes[0] + (partes[1] ? ` ${partes[1][0]}.` : ""),
+    seguro: typeof r.seguro === "boolean" ? r.seguro : null, buenos: r.buenos || [],
+  };
+}
+// Lista de opiniones: muestra pocas y el resto con "Ver más" (para que no sea una lista enorme).
+export function listaOpiniones(ops, visibles = 3) {
+  if (!ops.length) return `<p class="nota">Todavía no tiene opiniones.</p>`;
+  const una = (o) => `<div class="opinion">
+    <div class="opinion-cabeza"><b>${esc(o.nombre)}</b><span class="rating">${[1, 2, 3, 4, 5].map((n) => icono("estrella", n <= o.estrellas ? "" : "apagada")).join("")}</span></div>
+    ${o.seguro || (o.buenos || []).length ? `<div class="etiquetas">${o.seguro ? `<span class="pildora seguro mini">${icono("escudo")} Viaje seguro</span>` : ""}${(o.buenos || []).slice(0, 3).map((k) => `<span class="pildora insignia mini">${esc((ASPECTOS.buenos.find((a) => a.k === k) || { c: k }).c)}</span>`).join("")}</div>` : ""}
+    ${o.comentario ? `<p>“${esc(o.comentario)}”</p>` : ""}
+    <small class="nota">${fechaTexto(o.fecha)}</small></div>`;
+  return ops.slice(0, visibles).map(una).join("")
+    + (ops.length > visibles ? `<details class="mas-opiniones"><summary>Ver ${ops.length - visibles} opiniones más</summary>${ops.slice(visibles).map(una).join("")}</details>` : "");
+}
+export async function leerOpiniones(motoId) {
+  const s = await getDocs(collection(db, "motorizados", motoId, "opiniones"));
+  return s.docs.map((d) => d.data()).sort((a, b) => (fecha(b.fecha) || 0) - (fecha(a.fecha) || 0));
+}
 // Insignias para la tarjeta del motorizado: % seguro y lo que más destacan los clientes.
 export function insigniasSeguridad(m, cuantas = 2) {
   const pct = pctSeguro(m);

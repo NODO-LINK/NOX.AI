@@ -9,8 +9,8 @@ import {
 import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
-  coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
-} from "./comun.js?v=43";
+  leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
+} from "./comun.js?v=44";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -255,20 +255,20 @@ function iniciar() {
       ${n >= 3 && !pedido.paradaPendiente ? `<p class="nota ayuda-orden">${icono("agarrar")} Mantén y arrastra la letra de una parada para cambiar el orden de la ruta.</p>` : ""}
       ${n >= 4 && !pedido.paradaPendiente ? `<button class="boton secundario chico" id="ordenar">${icono("ruta")} Ordenar por la ruta más corta</button>` : ""}
       <div class="precio-caja" id="precio"></div>
-      ${pub ? `<div class="oferta" id="caja-oferta">
-        <label for="oferta">¿Cuánto quieres pagar?</label>
-        <div class="campo-oferta">
-          <button class="boton secundario chico" data-sumar="-0.25" aria-label="Bajar">−</button>
-          <span>$</span><input id="oferta" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00">
-          <button class="boton secundario chico" data-sumar="0.25" aria-label="Subir">+</button>
-        </div>
-        <small class="nota" id="nota-oferta"></small>
-      </div>` : ""}
       <div class="caja-pago">
         <label>¿Cómo vas a pagar?</label>
         <div class="formas-pago">${Object.entries(FORMAS_PAGO).map(([k, f]) => `<button type="button" data-pago="${k}" class="${pedido.formaPago === k ? "on" : ""}">${icono(f.icono)}<span>${f.t}</span></button>`).join("")}</div>
         <small class="nota" id="nota-pago"></small>
       </div>
+      ${pub ? `<div class="oferta" id="caja-oferta">
+        <label for="oferta">¿Cuánto quieres pagar?</label>
+        <div class="campo-oferta">
+          <button class="boton secundario chico" data-sumar="-0.25" aria-label="Bajar">−</button>
+          <span id="moneda-oferta">$</span><input id="oferta" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00">
+          <button class="boton secundario chico" data-sumar="0.25" aria-label="Subir">+</button>
+        </div>
+        <small class="nota" id="nota-oferta"></small>
+      </div>` : ""}
       <div id="caja-nota"><label for="nota">¿Qué hay que llevar?</label>
       <textarea id="nota" placeholder="Ej.: una pizza de la pizzería…, un sobre, unas compras">${esc(pedido.nota)}</textarea></div>
       <button class="boton" id="pedir" ${activa ? "disabled" : ""}>${pedido.para ? `Pedir a ${esc(pedido.para.nombre)}` : "Pedir a todos los motorizados"}</button>
@@ -339,29 +339,51 @@ function iniciar() {
       pedido.formaPago = b.dataset.pago;
       try { localStorage.setItem("whereapp.pago", pedido.formaPago); } catch {}
       $$("[data-pago]").forEach((x) => x.classList.toggle("on", x === b));
-      pintarPago();
+      if (pub) vistaPedir(); else pintarPago();
     }));
     pintarPago();
     if (pub) {
       // Precio que pone el cliente: arranca con el sugerido por distancia y se puede cambiar libremente.
+      // Si paga en Bs o Pago móvil (y hay tasa), lo escribe directamente en bolívares.
+      const tasa = tarifas.tasa > 0 ? tarifas.tasa : 0;
+      const enBs = !!tasa && (pedido.formaPago === "bs" || pedido.formaPago === "pagomovil");
+      const moneda = (v) => (enBs ? bs(v) : usd(v));
+      const paso = enBs ? Math.max(1, Math.round(tasa * 0.25)) : 0.25;
+      $("#moneda-oferta").textContent = enBs ? "Bs" : "$";
+      $("label[for=oferta]").textContent = enBs ? "¿Cuántos bolívares quieres pagar?" : "¿Cuánto quieres pagar?";
       const sugerido = n >= 2 && pedido.km != null ? precio(tarifas, pedido.tipo, pedido.km) : null;
       const campo = $("#oferta");
-      const valor = () => { const v = parseFloat(String(campo.value).replace(",", ".")); return Number.isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : null; };
+      // Acepta "1.500,50", "1500,50" o "37.23".
+      const valor = () => {
+        const t = String(campo.value).trim().replace(/[^\d.,]/g, "");
+        const v = t.includes(",") ? parseFloat(t.replace(/\./g, "").replace(",", ".")) : /^\d+\.\d{1,2}$/.test(t) ? parseFloat(t) : parseFloat(t.replace(/\./g, ""));
+        return Number.isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : null;
+      };
+      const escribir = (v) => (v == null ? "" : enBs ? v.toFixed(2).replace(".", ",") : v.toFixed(2));
+      // pedido.oferta siempre en $; pedido.ofertaBs guarda el monto exacto si se escribió en Bs.
+      const fijar = (v) => {
+        if (enBs) { pedido.ofertaBs = v; pedido.oferta = v ? Math.round((v / tasa) * 100) / 100 : null; }
+        else { pedido.oferta = v; pedido.ofertaBs = null; }
+      };
+      const mostrado = () => (enBs ? pedido.ofertaBs ?? (pedido.oferta != null ? aBs(pedido.oferta, tasa) : null) : pedido.oferta);
       const pintarOferta = () => {
         const v = valor();
         const b = $("#pedir");
-        if (b) b.innerHTML = v ? `${icono("dinero")} Publicar por ${usd(v)}` : "Publicar carrera";
-        $("#nota-oferta").textContent = (v && tarifas.tasa > 0 ? `Son ${bs(aBs(v, tarifas.tasa))}. ` : "") + (sugerido == null ? "Marca A y B para ver el precio sugerido."
-          : `Precio sugerido por distancia: ${usd(sugerido)}.${v && v < sugerido ? " Con menos dinero puede tardar más en aceptarse." : ""}`);
+        if (b) b.innerHTML = v ? `${icono("dinero")} Publicar por ${moneda(v)}` : "Publicar carrera";
+        const equivale = v ? (enBs ? `Son ${usd(pedido.oferta)}. ` : tasa ? `Son ${bs(aBs(v, tasa))}. ` : "") : "";
+        $("#nota-oferta").textContent = equivale + (sugerido == null ? "Marca A y B para ver el precio sugerido."
+          : `Precio sugerido por distancia: ${enBs ? bs(aBs(sugerido, tasa)) : usd(sugerido)}.${pedido.oferta && pedido.oferta < sugerido ? " Con menos dinero puede tardar más en aceptarse." : ""}`);
         if ($("#nota-pago")) pintarPago();
       };
-      if (!pedido.ofertaTocada && sugerido != null) pedido.oferta = sugerido;
-      campo.value = pedido.oferta != null ? pedido.oferta.toFixed(2) : "";
-      campo.addEventListener("input", () => { pedido.oferta = valor(); pedido.ofertaTocada = true; pintarOferta(); });
+      if (!pedido.ofertaTocada && sugerido != null) { pedido.oferta = sugerido; pedido.ofertaBs = null; }
+      const inicial = mostrado();
+      campo.value = escribir(inicial);
+      campo.addEventListener("input", () => { fijar(valor()); pedido.ofertaTocada = true; pintarOferta(); });
       $$("[data-sumar]").forEach((b) => (b.onclick = () => {
         pedido.ofertaTocada = true;
-        pedido.oferta = Math.max(0.25, Math.round(((valor() || 0) + Number(b.dataset.sumar)) * 100) / 100);
-        campo.value = pedido.oferta.toFixed(2); pintarOferta();
+        const sube = Number(b.dataset.sumar) > 0 ? paso : -paso;
+        fijar(Math.max(paso, Math.round(((valor() || 0) + sube) * 100) / 100));
+        campo.value = escribir(mostrado()); pintarOferta();
       }));
       pintarOferta();
     }
@@ -908,7 +930,7 @@ function iniciar() {
         ...(pub ? { ofertaCliente: true, precioSugerido: precio(tarifas, pedido.tipo, pedido.km) } : {}),
         formaPago: pedido.formaPago,
         tasa: tarifas.tasa > 0 ? tarifas.tasa : null,
-        precioBs: aBs(pub ? pedido.oferta : precio(tarifas, pedido.tipo, pedido.km), tarifas.tasa),
+        precioBs: pub && pedido.ofertaBs && (pedido.formaPago === "bs" || pedido.formaPago === "pagomovil") ? pedido.ofertaBs : aBs(pub ? pedido.oferta : precio(tarifas, pedido.tipo, pedido.km), tarifas.tasa),
         estado: "esperando",
         paraMoto: pedido.para ? pedido.para.id : null,
         paraMotoNombre: pedido.para ? pedido.para.nombre : null,
@@ -917,7 +939,7 @@ function iniciar() {
         cancelaciones: [],
         creada: serverTimestamp(),
       });
-      Object.assign(pedido, { puntos: [], refs: [], retorno: false, agregando: false, km: null, linea: null, nota: "", para: null, oferta: null, ofertaTocada: false, paradaPendiente: false, yoIntentado: false });
+      Object.assign(pedido, { puntos: [], refs: [], retorno: false, agregando: false, km: null, linea: null, nota: "", para: null, oferta: null, ofertaBs: null, ofertaTocada: false, paradaPendiente: false, yoIntentado: false });
       ir("carrera");
     } catch (e) {
       console.error(e);
@@ -963,6 +985,7 @@ function iniciar() {
           <div class="avatar">${esc(iniciales(m.nombre))}</div>
           <div class="info"><h3>${esc(m.nombre)}</h3>
             <p>${icono("moto")} ${esc(m.moto || "")}${m.placa ? ` · Placa ${esc(m.placa)}` : ""}</p>
+            <button class="ver-perfil" data-perfil="${m.id}">${icono("estrella")} Ver perfil y opiniones</button>
             <div class="etiquetas">${m.enCarrera ? `<span class="pildora ocupado">${icono("ruta")} Carrera en curso</span>` : `<span class="pildora ok">Disponible</span>`}
             ${cerca ? `<span class="pildora cerca">${icono("pin")} a ${cerca.min} min</span>` : ""}
             <span class="rating">${estrellas(m)}</span>${insigniasSeguridad(m)}</div></div>
@@ -973,6 +996,7 @@ function iniciar() {
         </article>`).join("") : `<div class="vacio">${icono("moto")}<b>No hay motorizados de turno ahora.</b><br>Intenta en un rato; esta lista se actualiza sola.</div>`}
       </div>`;
     $("#vista").insertAdjacentHTML("beforeend", `<p class="nota pie-legal">${ENLACE_POLITICAS}</p>`);
+    $$("[data-perfil]").forEach((b) => (b.onclick = () => verPerfil(motos.find((x) => x.id === b.dataset.perfil))));
     $$("[data-llamar]").forEach((a) => a.addEventListener("click", () => {
       setDoc(doc(db, "llamadas", a.dataset.llamar), { n: increment(1) }, { merge: true }).catch(() => {});
     }));
@@ -1001,6 +1025,27 @@ function iniciar() {
     if (!b) return;
     try { await navigator.clipboard.writeText(b.dataset.copiar); aviso("Copiado"); } catch { aviso(b.dataset.copiar); }
   });
+
+  // Perfil del motorizado: datos, seguridad y opiniones de otros clientes.
+  async function verPerfil(m) {
+    if (!m) return;
+    const fondo = document.createElement("div");
+    fondo.className = "modal";
+    fondo.innerHTML = `<div class="ventana perfil-moto">
+      <div class="perfil-cabeza"><div class="avatar">${esc(iniciales(m.nombre))}</div>
+        <div><h2>${esc(m.nombre)}</h2><p class="nota">${icono("moto")} ${esc(m.moto || "")}${m.placa ? ` · Placa ${esc(m.placa)}` : ""}</p>
+        <span class="rating">${estrellas(m)}</span></div></div>
+      ${insigniasSeguridad(m, 6) ? `<div class="etiquetas">${insigniasSeguridad(m, 6)}</div>` : ""}
+      <h3 class="subtitulo-perfil">Opiniones de clientes</h3>
+      <div class="opiniones" id="opiniones"><p class="nota">Cargando…</p></div>
+      <button class="boton secundario" data-no>Cerrar</button></div>`;
+    document.body.append(fondo);
+    const cerrar = () => fondo.remove();
+    $("[data-no]", fondo).onclick = cerrar;
+    fondo.addEventListener("click", (e) => { if (e.target === fondo) cerrar(); });
+    try { $("#opiniones", fondo).innerHTML = listaOpiniones(await leerOpiniones(m.id)); }
+    catch (e) { console.error(e); $("#opiniones", fondo).innerHTML = `<p class="nota">No se pudieron cargar las opiniones.</p>`; }
+  }
 
   // ---------- Mi carrera ----------
   function vistaCarrera() {
@@ -1176,8 +1221,9 @@ function iniciar() {
         <div class="estrellas" id="estrellas">${[1, 2, 3, 4, 5].map((n) => `<button data-n="${n}" aria-label="${n} estrellas">${icono("estrella")}</button>`).join("")}</div>
         <label>¿Qué hizo bien ${quien}?</label>
         <div class="chips-calif" id="buenos">${ASPECTOS.buenos.map((a) => `<button data-k="${a.k}">${icono("check")} ${esc(a.t)}</button>`).join("")}</div>
-        <label id="titulo-malos">¿Algo que reportar? <small class="nota">(lo ve solo el administrador)</small></label>
-        <div class="chips-calif malos" id="malos">${ASPECTOS.malos.map((a) => `<button data-k="${a.k}">${icono("alerta")} ${esc(a.t)}</button>`).join("")}</div>
+        <button type="button" class="boton secundario chico" id="abrir-reporte">${icono("alerta")} Reportar un problema</button>
+        <label id="titulo-malos" hidden>¿Algo que reportar? <small class="nota">(lo ve solo el administrador)</small></label>
+        <div class="chips-calif malos" id="malos" hidden>${ASPECTOS.malos.map((a) => `<button data-k="${a.k}">${icono("alerta")} ${esc(a.t)}</button>`).join("")}</div>
         <label for="comentario">Comentario (opcional)</label>
         <textarea id="comentario" placeholder="Cuéntanos cómo te fue"></textarea>
         <button class="boton" id="calificar">Enviar calificación</button>
@@ -1197,8 +1243,11 @@ function iniciar() {
       $$("#seguro button").forEach((x) => x.classList.toggle("on", x === b));
       // Si no se sintió seguro, se resalta la parte de reportar.
       $("#malos").classList.toggle("resaltar", !seguro);
+      if (!seguro) abrirReporte();
       if (!seguro) { if (puntos > 3) { puntos = 2; pintar(); } $("#titulo-malos").scrollIntoView({ behavior: "smooth", block: "center" }); }
     }));
+    const abrirReporte = () => { $("#malos").hidden = false; $("#titulo-malos").hidden = false; $("#abrir-reporte").hidden = true; };
+    $("#abrir-reporte").onclick = abrirReporte;
     const alternar = (caja, conjunto) => $$(`#${caja} button`).forEach((b) => (b.onclick = () => {
       conjunto.has(b.dataset.k) ? conjunto.delete(b.dataset.k) : conjunto.add(b.dataset.k);
       b.classList.toggle("on", conjunto.has(b.dataset.k));

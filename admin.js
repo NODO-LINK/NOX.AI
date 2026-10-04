@@ -9,8 +9,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   auth, authSecundaria, db, NOMBRE, botonTema, botonInstalar, nuevoMapa, ICONOS, recargos, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
-  leerTarifas, aviso, avisoSinConfigurar, mostrarLugares, tipoLugar, TIPOS_PARA_AGREGAR, ASPECTOS, insigniasSeguridad,
-} from "./comun.js?v=43";
+  leerTarifas, aviso, avisoSinConfigurar, mostrarLugares, tipoLugar, TIPOS_PARA_AGREGAR, ASPECTOS, insigniasSeguridad, opinionPublica,
+} from "./comun.js?v=44";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -60,11 +60,12 @@ function iniciar() {
     escuchar(collection(db, "motorizados"), (s) => {
       const antes = sinUbicacion(motos);
       motos = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.nombre.localeCompare(b.nombre));
+      publicarAprobadasViejas();
       moverMapaVivo();
       return sinUbicacion(motos) !== antes;
     });
     escuchar(query(collection(db, "carreras"), orderBy("creada", "desc"), limit(100)), (s) => { carreras = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
-    escuchar(query(collection(db, "resenas"), orderBy("fecha", "desc"), limit(100)), (s) => { resenas = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
+    escuchar(query(collection(db, "resenas"), orderBy("fecha", "desc"), limit(100)), (s) => { resenas = s.docs.map((d) => ({ id: d.id, ...d.data() })); publicarAprobadasViejas(); });
     escuchar(query(collection(db, "pagos"), orderBy("fecha", "desc"), limit(500)), (s) => { pagos = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
     escuchar(collection(db, "llamadas"), (s) => { llamadas = Object.fromEntries(s.docs.map((d) => [d.id, d.data().n || 0])); });
     escuchar(collection(db, "clientes"), (s) => {
@@ -367,7 +368,20 @@ function iniciar() {
     }));
   }
 
+  // Una sola vez: las reseñas aprobadas antes de existir los perfiles también se publican.
+  let yaPublicadas = false;
+  async function publicarAprobadasViejas() {
+    if (yaPublicadas || !motos.length || !resenas.length) return;
+    yaPublicadas = true;
+    try { if (localStorage.getItem("whereapp.opiniones.v1")) return; } catch {}
+    const lote = writeBatch(db);
+    let n = 0;
+    resenas.filter((r) => r.aprobada && motos.some((m) => m.id === r.motoUid)).forEach((r) => { lote.set(doc(db, "motorizados", r.motoUid, "opiniones", r.id), opinionPublica(r)); n++; });
+    try { if (n) await lote.commit(); localStorage.setItem("whereapp.opiniones.v1", "1"); } catch (e) { console.error(e); yaPublicadas = false; }
+  }
+
   // ---------- Reseñas ----------
+  let resenasAbiertas = false;   // las aprobadas van plegadas: son muchas
   function vistaResenas() {
     const grave = (r) => (r.seguro === false ? 2 : 0) + ((r.malos || []).length ? 1 : 0);
     const pendientes = resenas.filter((r) => !r.aprobada).sort((a, b) => grave(b) - grave(a)), aprobadas = resenas.filter((r) => r.aprobada);
@@ -382,11 +396,12 @@ function iniciar() {
     $("#vista").innerHTML = `
       <h1 class="titulo">Por aprobar (${pendientes.length})</h1>
       <p class="nota">Las estrellas y lo de seguridad cuentan para el motorizado solo cuando apruebas la reseña. Los reportes de seguridad salen en rojo.</p>
-      <div class="lista">${pendientes.map((r) => tarjeta(r, `<div class="acciones">
+      <div class="lista compacta">${pendientes.map((r) => tarjeta(r, `<div class="acciones">
         <button class="boton verde" data-aprobar="${r.id}">Aprobar</button><button class="boton peligro" data-rechazar="${r.id}">Rechazar</button></div>`)).join("")
         || `<div class="vacio">${icono("estrella")}No hay reseñas pendientes.</div>`}</div>
-      <h1 class="titulo">Aprobadas</h1>
-      <div class="lista">${aprobadas.map((r) => tarjeta(r, "")).join("") || `<p class="nota">Ninguna todavía.</p>`}</div>`;
+      <details class="caja plegable" ${resenasAbiertas ? "open" : ""} id="aprobadas"><summary>${icono("estrella")} Aprobadas (${aprobadas.length})</summary>
+        <div class="lista compacta">${aprobadas.map((r) => tarjeta(r, "")).join("") || `<p class="nota">Ninguna todavía.</p>`}</div></details>`;
+    $("#aprobadas").addEventListener("toggle", (e) => { resenasAbiertas = e.target.open; });
     $$("[data-aprobar]").forEach((b) => (b.onclick = async () => {
       const r = resenas.find((x) => x.id === b.dataset.aprobar);
       const lote = writeBatch(db);
@@ -397,6 +412,8 @@ function iniciar() {
         (r.buenos || []).forEach((k) => { cambios[`buenos.${k}`] = increment(1); });
         (r.malos || []).forEach((k) => { cambios[`malos.${k}`] = increment(1); });
         lote.update(doc(db, "motorizados", r.motoUid), cambios);
+        // Copia pública para el perfil del motorizado.
+        lote.set(doc(db, "motorizados", r.motoUid, "opiniones", r.id), opinionPublica(r));
       }
       await lote.commit();
     }));

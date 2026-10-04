@@ -5,15 +5,16 @@ import {
   doc, addDoc, onSnapshot, updateDoc, collection, query, where, runTransaction, serverTimestamp, arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  ENLACE_POLITICAS, sonarAlerta, ASPECTOS, insigniasSeguridad, textoCobro, FORMAS_PAGO, bs, auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
+  leerOpiniones, listaOpiniones, ENLACE_POLITICAS, sonarAlerta, ASPECTOS, insigniasSeguridad, textoCobro, FORMAS_PAGO, bs, auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar,
-} from "./comun.js?v=43";
+} from "./comun.js?v=44";
 
 if (!avisoSinConfigurar()) iniciar();
 
 function iniciar() {
   const L = window.L;
   let yo = null, perfil = null, subs = [], subsCarreras = [];
+  const opiniones = { abiertas: false, html: "" };   // se recuerda si la lista está abierta al redibujar
   let disponibles = [], miCarrera = null, conocidas = new Set(), primeraCarga = true;
   let mapa = null, vigilaGps = null, sonido = null, ultimoModo = null;
   let terminadas = [], chat = { id: null, quitar: null, sinLeer: 0 }, bloqueoPantalla = null;
@@ -215,6 +216,7 @@ function iniciar() {
         <div class="caja">${insigniasSeguridad(perfil, 6) ? `<div class="etiquetas">${insigniasSeguridad(perfil, 6)}</div>` : `<p class="nota">Todavía no hay opiniones de seguridad.</p>`}
         ${malosMios.length ? `<p class="nota" style="margin-top:10px">Para mejorar:</p><div class="etiquetas">${malosMios.map(([k, n]) => `<span class="pildora riesgo">${icono("alerta")} ${esc((ASPECTOS.malos.find((a) => a.k === k) || { t: k }).t)} (${n})</span>`).join("")}</div>` : ""}
         <p class="nota" style="margin-top:10px">Maneja con prudencia y lleva casco para tu pasajero: los clientes lo ven en tu perfil.</p></div>`;
+      html += `<details class="caja opiniones-mias" id="mis-opiniones" ${opiniones.abiertas ? "open" : ""}><summary>${icono("estrella")} Lo que dicen tus clientes</summary><div id="lista-opiniones">${opiniones.html || `<p class="nota">Cargando…</p>`}</div></details>`;
       const pm = perfil.pagoMovil || {};
       html += `<h1 class="titulo">${icono("telefono")} Tu pago móvil</h1>
         <div class="caja">${pm.telefono
@@ -228,6 +230,14 @@ function iniciar() {
     if (modo !== ultimoModo) { ultimoModo = modo; transicion(); }
 
     if ($("#editar-pm")) $("#editar-pm").onclick = editarPagoMovil;
+    const ops = $("#mis-opiniones");
+    if (ops) ops.addEventListener("toggle", async () => {
+      opiniones.abiertas = ops.open;
+      if (!ops.open || opiniones.html) return;
+      try { opiniones.html = listaOpiniones(await leerOpiniones(yo.uid), 5); }
+      catch (e) { console.error(e); opiniones.html = `<p class="nota">No se pudieron cargar.</p>`; }
+      if ($("#lista-opiniones")) $("#lista-opiniones").innerHTML = opiniones.html;
+    });
     const s = $("#activar-sonido");
     if (s) s.onclick = () => { sonido = new (window.AudioContext || window.webkitAudioContext)(); sonar(); pedirPermisoAvisos(); pintar(); };
     const t = $("#turno");

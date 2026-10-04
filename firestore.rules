@@ -27,6 +27,12 @@ service cloud.firestore {
       allow update: if esAdmin() || (dentro() && request.auth.uid == uid && soloCambia(['ubicacion', 'enCarrera', 'deTurno', 'pagoMovil']));
     }
 
+    // Opiniones públicas en el perfil del motorizado (copia de las reseñas que aprueba el admin).
+    match /motorizados/{uid}/opiniones/{id} {
+      allow read: if dentro();
+      allow write: if esAdmin();
+    }
+
     match /clientes/{uid} {
       allow read: if dentro() && request.auth.uid == uid;
       allow write: if dentro() && request.auth.uid == uid
