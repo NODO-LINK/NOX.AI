@@ -5,9 +5,9 @@ import {
   doc, addDoc, onSnapshot, updateDoc, collection, query, where, runTransaction, serverTimestamp, arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  ASPECTOS, insigniasSeguridad, auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
+  ASPECTOS, insigniasSeguridad, textoCobro, FORMAS_PAGO, bs, auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar,
-} from "./comun.js?v=38";
+} from "./comun.js?v=39";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -94,7 +94,7 @@ function iniciar() {
         sonar(); aviso("¡Carrera nueva!");
         // Si la app está en segundo plano, aviso en la barra de notificaciones.
         const c = nuevas[0];
-        if (document.hidden) notificar("¡Carrera nueva!", `${usd(c.precio)} · ${c.km} km · ${c.origen.dir}`, { tag: "whereapp-moto" });
+        if (document.hidden) notificar("¡Carrera nueva!", `${textoCobro(c)} · ${c.km} km · ${c.origen.dir}`, { tag: "whereapp-moto" });
       }
       primeraCarga = false;
       pintar();
@@ -219,12 +219,19 @@ function iniciar() {
         <div class="caja">${insigniasSeguridad(perfil, 6) ? `<div class="etiquetas">${insigniasSeguridad(perfil, 6)}</div>` : `<p class="nota">Todavía no hay opiniones de seguridad.</p>`}
         ${malosMios.length ? `<p class="nota" style="margin-top:10px">Para mejorar:</p><div class="etiquetas">${malosMios.map(([k, n]) => `<span class="pildora riesgo">${icono("alerta")} ${esc((ASPECTOS.malos.find((a) => a.k === k) || { t: k }).t)} (${n})</span>`).join("")}</div>` : ""}
         <p class="nota" style="margin-top:10px">Maneja con prudencia y lleva casco para tu pasajero: los clientes lo ven en tu perfil.</p></div>`;
+      const pm = perfil.pagoMovil || {};
+      html += `<h1 class="titulo">${icono("telefono")} Tu pago móvil</h1>
+        <div class="caja">${pm.telefono
+          ? `<div class="fila"><span>Banco</span><b>${esc(pm.banco)}</b></div><div class="fila"><span>Teléfono</span><b>${esc(pm.telefono)}</b></div><div class="fila"><span>Cédula</span><b>${esc(pm.cedula)}</b></div>`
+          : `<p class="nota">Regístralo para que los clientes que pagan por Pago móvil vean tus datos.</p>`}
+          <button class="boton secundario" id="editar-pm" style="margin-top:10px">${icono("telefono")} ${pm.telefono ? "Cambiar datos" : "Registrar pago móvil"}</button></div>`;
     }
     $("#vista").innerHTML = html;
     // Animar la entrada solo cuando cambia lo que se muestra (lista, carrera o aviso de inactivo).
     const modo = `${ok}-${miCarrera ? miCarrera.id : "lista"}-${miCarrera ? !!miCarrera.recogido : ""}`;
     if (modo !== ultimoModo) { ultimoModo = modo; transicion(); }
 
+    if ($("#editar-pm")) $("#editar-pm").onclick = editarPagoMovil;
     const s = $("#activar-sonido");
     if (s) s.onclick = () => { sonido = new (window.AudioContext || window.webkitAudioContext)(); sonar(); pedirPermisoAvisos(); pintar(); };
     const t = $("#turno");
@@ -248,6 +255,7 @@ function iniciar() {
   const tarjetaCarrera = (c) => `
     <article class="tarjeta"><div class="info">
       <h3>${tipoTexto(c)} · ${usd(c.precio)} · ${c.km} km ${c.paraMoto ? `<span class="pildora">Para ti</span>` : ""}${c.ofertaCliente ? `<span class="pildora oferta-pill">Precio del cliente</span>` : ""}</h3>
+      <p class="cobro">${icono((FORMAS_PAGO[c.formaPago] || FORMAS_PAGO.usd).icono)} <b>Cobrar:</b> ${esc(textoCobro(c))}</p>
       <p><b>A:</b> ${esc(c.origen.dir)}</p>
       ${(c.paradas || []).map((p, i) => `<p><b>Parada ${i + 1}:</b> ${esc(p.dir)}</p>`).join("")}
       <p><b>B:</b> ${esc(c.destino.dir)}</p>
@@ -276,12 +284,43 @@ function iniciar() {
     }
   }
 
+  // Datos de pago móvil del motorizado (los ve el cliente que paga por Pago móvil).
+  const BANCOS = ["Banco de Venezuela", "Banesco", "Mercantil", "Provincial (BBVA)", "Bancamiga", "Banco Nacional de Crédito (BNC)", "Bicentenario", "Banco del Tesoro", "Banplus", "Exterior", "Venezolano de Crédito", "Sofitasa", "Bancaribe", "100% Banco", "Banco Activo", "Banco Plaza", "Banco Caroní", "Mi Banco", "Bancrecer", "Banco Fondo Común (BFC)"];
+  function editarPagoMovil() {
+    const pm = perfil.pagoMovil || {};
+    const fondo = document.createElement("div");
+    fondo.className = "modal";
+    fondo.innerHTML = `<form class="ventana"><h2>Tu pago móvil</h2>
+      <label>Banco<select name="banco" required><option value="">Elige tu banco</option>${BANCOS.map((b) => `<option ${pm.banco === b ? "selected" : ""}>${esc(b)}</option>`).join("")}</select></label>
+      <label>Teléfono<input name="telefono" inputmode="tel" required placeholder="0414-1234567" value="${esc(pm.telefono || "")}"></label>
+      <label>Cédula<input name="cedula" required placeholder="V-12345678" value="${esc(pm.cedula || "")}"></label>
+      <button class="boton">Guardar</button>
+      <button class="boton secundario" type="button" data-no>Cancelar</button></form>`;
+    document.body.append(fondo);
+    $("[data-no]", fondo).onclick = () => fondo.remove();
+    $("form", fondo).onsubmit = async (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const tel = String(f.get("telefono")).replace(/\D/g, "");
+      const ced = String(f.get("cedula")).toUpperCase().replace(/[^VEJ0-9]/g, "");
+      if (!/^0?4\d{9}$/.test(tel)) return aviso("Escribe un teléfono válido, ej. 0414-1234567");
+      if (!/^[VEJ]?\d{6,9}$/.test(ced)) return aviso("Escribe una cédula válida, ej. V-12345678");
+      const datos = { banco: f.get("banco"), telefono: (tel.startsWith("0") ? tel : "0" + tel).replace(/^(\d{4})(\d{7})$/, "$1-$2"), cedula: (/^[VEJ]/.test(ced) ? ced[0] + "-" + ced.slice(1) : "V-" + ced) };
+      try {
+        await updateDoc(doc(db, "motorizados", yo.uid), { pagoMovil: datos });
+        fondo.remove(); aviso("Pago móvil guardado");
+      } catch (err) {
+        console.error(err); aviso("No se pudo guardar. Avísale al administrador (faltan las reglas nuevas).");
+      }
+    };
+  }
+
   function vistaMiCarrera(c) {
     return `<h1 class="titulo">Tu carrera en curso</h1>
       <div class="caja">
         <div class="fila"><span>Servicio</span><b>${tipoTexto(c)}</b></div>
         <div class="fila"><span>Cliente</span><span>${esc(c.clienteNombre)}</span></div>
-        <div class="fila"><span>Cobrar</span><b>${usd(c.precio)}</b></div>
+        <div class="fila cobrar"><span>Cobrar</span><b>${esc(textoCobro(c))}</b></div>
         <div class="fila"><span>Distancia</span><span>${c.km} km</span></div>
         ${c.nota ? `<div class="fila"><span>Llevar</span><span>${esc(c.nota)}</span></div>` : ""}
       </div>

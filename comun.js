@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=38";
-import { icono, pintarIconos } from "./iconos.js?v=38";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=39";
+import { icono, pintarIconos } from "./iconos.js?v=39";
 
 export { icono };
 pintarIconos();
@@ -50,6 +50,26 @@ export const $ = (sel, raiz = document) => raiz.querySelector(sel);
 export const $$ = (sel, raiz = document) => [...raiz.querySelectorAll(sel)];
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 export const usd = (n) => "$" + Number(n || 0).toFixed(2);
+export const bs = (n) => "Bs " + Number(n || 0).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// ---------- Pago en bolívares ----------
+// La tasa (Bs por cada $) la pone el administrador en Más → Tarifas.
+export const FORMAS_PAGO = {
+  usd: { t: "Dólares", c: "Dólares en efectivo", icono: "dolar" },
+  bs: { t: "Bolívares", c: "Bolívares en efectivo", icono: "dinero" },
+  pagomovil: { t: "Pago móvil", c: "Pago móvil", icono: "telefono" },
+};
+export const aBs = (montoUsd, tasa) => (tasa > 0 ? Math.round(montoUsd * tasa * 100) / 100 : null);
+// Lo que hay que cobrar en una carrera, según cómo paga el cliente.
+export function textoCobro(c) {
+  const forma = FORMAS_PAGO[c.formaPago] || FORMAS_PAGO.usd;
+  if (c.formaPago === "bs" || c.formaPago === "pagomovil") {
+    return c.precioBs ? `${bs(c.precioBs)} · ${forma.c}` : `${usd(c.precio)} en Bs a la tasa del día · ${forma.c}`;
+  }
+  return `${usd(c.precio)} · ${forma.c}`;
+}
+// Precio en $ con su equivalente en Bs (si hay tasa).
+export const conBs = (montoUsd, tasa) => (tasa > 0 ? `${usd(montoUsd)} · ${bs(aBs(montoUsd, tasa))}` : usd(montoUsd));
 export const fecha = (t) => (t ? (t.toDate ? t.toDate() : new Date(t)) : null);
 export const fechaTexto = (t) => { const f = fecha(t); return f ? f.toLocaleString("es-VE", { dateStyle: "medium", timeStyle: "short" }) : "—"; };
 export const estrellas = (m) => {
@@ -105,6 +125,7 @@ export const TARIFAS_BASE = {
   // Recargos: el nocturno se aplica solo en su horario; el de lluvia, mientras el admin lo tenga encendido.
   nocturna: { activa: false, desde: "20:00", hasta: "05:00", extra: 0.5 },
   lluvia: { activa: false, extra: 0.5 },
+  tasa: 0,
 };
 const conBase = (d) => ({ ...TARIFAS_BASE, ...d, nocturna: { ...TARIFAS_BASE.nocturna, ...(d.nocturna || {}) }, lluvia: { ...TARIFAS_BASE.lluvia, ...(d.lluvia || {}) } });
 export async function leerTarifas() {

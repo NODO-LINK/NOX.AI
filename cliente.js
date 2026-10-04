@@ -9,8 +9,8 @@ import {
 import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
-  sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad,
-} from "./comun.js?v=38";
+  sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
+} from "./comun.js?v=39";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -21,7 +21,8 @@ function iniciar() {
   let motos = [], carreras = [], cancelarSubs = [];
   // Estado del formulario de pedido (se conserva al cambiar de pestaña).
   // puntos[0] = A (donde te buscan), los del medio = paradas, el último = B (destino).
-  const pedido = { tipo: SERVICIOS[0], puntos: [], refs: [], retorno: false, agregando: false, nota: "", para: null, km: null, linea: null, oferta: null, ofertaTocada: false };
+  const pedido = { tipo: SERVICIOS[0], puntos: [], refs: [], retorno: false, agregando: false, nota: "", para: null, km: null, linea: null, oferta: null, ofertaTocada: false,
+    formaPago: (() => { try { return localStorage.getItem("whereapp.pago") || "usd"; } catch { return "usd"; } })() };
   const MAX_PUNTOS = 6;
   let lugares = null;   // lugares de El Moján para el buscador y las sugerencias
 
@@ -245,6 +246,11 @@ function iniciar() {
         </div>
         <small class="nota" id="nota-oferta"></small>
       </div>` : ""}
+      <div class="caja-pago">
+        <label>¿Cómo vas a pagar?</label>
+        <div class="formas-pago">${Object.entries(FORMAS_PAGO).map(([k, f]) => `<button type="button" data-pago="${k}" class="${pedido.formaPago === k ? "on" : ""}">${icono(f.icono)}<span>${f.t}</span></button>`).join("")}</div>
+        <small class="nota" id="nota-pago"></small>
+      </div>
       <div id="caja-nota"><label for="nota">¿Qué hay que llevar?</label>
       <textarea id="nota" placeholder="Ej.: una pizza de la pizzería…, un sobre, unas compras">${esc(pedido.nota)}</textarea></div>
       <button class="boton" id="pedir" ${activa ? "disabled" : ""}>${pedido.para ? `Pedir a ${esc(pedido.para.nombre)}` : "Pedir a todos los motorizados"}</button>
@@ -258,7 +264,7 @@ function iniciar() {
     const t = tarifas[pedido.tipo];
     const extras = recargos(tarifas);
     $("#precio").innerHTML = (pedido.km != null && n >= 2
-      ? `<span>${resumenRecorrido()}</span><b>${usd(precio(tarifas, pedido.tipo, pedido.km))}</b>`
+      ? `<span>${resumenRecorrido()}</span><b>${usd(precio(tarifas, pedido.tipo, pedido.km))}${tarifas.tasa > 0 ? `<small class="en-bs">${bs(aBs(precio(tarifas, pedido.tipo, pedido.km), tarifas.tasa))}</small>` : ""}</b>`
       : `<span>${usd(t.base)} + ${usd(t.porKm)} por km</span><span class="nota">Marca A y B</span>`)
       + (extras.length ? `<small class="recargo">${icono(extras.some((x) => /lluvia/i.test(x.nombre)) ? "lluvia" : "luna")} Incluye ${extras.map((x) => `${x.nombre.toLowerCase()} (+${usd(x.monto)})`).join(" y ")}</small>` : "");
     if (pub) $("#precio").hidden = true;   // al publicar, el precio lo pone el cliente (abajo se muestra el sugerido)
@@ -276,6 +282,29 @@ function iniciar() {
     const nota = $("#nota");
     if (nota) nota.addEventListener("input", (e) => { pedido.nota = e.target.value; });
     if ($("#volver")) $("#volver").onclick = () => ir("motorizados");
+    // Forma de pago: se recuerda en el teléfono para la próxima vez.
+    const pintarPago = () => {
+      const monto = pub ? pedido.oferta : n >= 2 && pedido.km != null ? precio(tarifas, pedido.tipo, pedido.km) : null;
+      const f = pedido.formaPago;
+      const enBs = f === "bs" || f === "pagomovil";
+      let texto = !enBs ? "Pagas en dólares en efectivo al llegar."
+        : tarifas.tasa > 0 ? `${monto ? `Pagarás ${bs(aBs(monto, tarifas.tasa))}. ` : ""}Tasa: ${bs(tarifas.tasa)} por $1.`
+        : "El monto en Bs se calcula con la tasa del día.";
+      if (f === "pagomovil") {
+        const m = pedido.para && motos.find((x) => x.id === pedido.para.id);
+        texto += m && !(m.pagoMovil && m.pagoMovil.telefono)
+          ? " Este motorizado aún no registró su pago móvil: pídele los datos por el chat."
+          : " Cuando acepten tu carrera verás los datos del pago móvil del motorizado.";
+      }
+      $("#nota-pago").textContent = texto;
+    };
+    $$("[data-pago]").forEach((b) => (b.onclick = () => {
+      pedido.formaPago = b.dataset.pago;
+      try { localStorage.setItem("whereapp.pago", pedido.formaPago); } catch {}
+      $$("[data-pago]").forEach((x) => x.classList.toggle("on", x === b));
+      pintarPago();
+    }));
+    pintarPago();
     if (pub) {
       // Precio que pone el cliente: arranca con el sugerido por distancia y se puede cambiar libremente.
       const sugerido = n >= 2 && pedido.km != null ? precio(tarifas, pedido.tipo, pedido.km) : null;
@@ -285,8 +314,9 @@ function iniciar() {
         const v = valor();
         const b = $("#pedir");
         if (b) b.innerHTML = v ? `${icono("dinero")} Publicar por ${usd(v)}` : "Publicar carrera";
-        $("#nota-oferta").textContent = sugerido == null ? "Marca A y B para ver el precio sugerido."
-          : `Precio sugerido por distancia: ${usd(sugerido)}.${v && v < sugerido ? " Con menos dinero puede tardar más en aceptarse." : ""}`;
+        $("#nota-oferta").textContent = (v && tarifas.tasa > 0 ? `Son ${bs(aBs(v, tarifas.tasa))}. ` : "") + (sugerido == null ? "Marca A y B para ver el precio sugerido."
+          : `Precio sugerido por distancia: ${usd(sugerido)}.${v && v < sugerido ? " Con menos dinero puede tardar más en aceptarse." : ""}`);
+        if ($("#nota-pago")) pintarPago();
       };
       if (!pedido.ofertaTocada && sugerido != null) pedido.oferta = sugerido;
       campo.value = pedido.oferta != null ? pedido.oferta.toFixed(2) : "";
@@ -763,6 +793,9 @@ function iniciar() {
         precio: pub ? pedido.oferta : precio(tarifas, pedido.tipo, pedido.km),
         recargos: pub ? [] : recargos(tarifas),
         ...(pub ? { ofertaCliente: true, precioSugerido: precio(tarifas, pedido.tipo, pedido.km) } : {}),
+        formaPago: pedido.formaPago,
+        tasa: tarifas.tasa > 0 ? tarifas.tasa : null,
+        precioBs: aBs(pub ? pedido.oferta : precio(tarifas, pedido.tipo, pedido.km), tarifas.tasa),
         estado: "esperando",
         paraMoto: pedido.para ? pedido.para.id : null,
         paraMotoNombre: pedido.para ? pedido.para.nombre : null,
@@ -836,6 +869,25 @@ function iniciar() {
     }));
   }
 
+  // Datos del pago móvil del motorizado, con botones para copiarlos.
+  function tarjetaPagoMovil(c) {
+    const pm = (motos.find((x) => x.id === c.motoUid) || {}).pagoMovil || {};
+    const monto = c.precioBs ? bs(c.precioBs) : `${usd(c.precio)} en Bs`;
+    if (!pm.telefono) return `<div class="caja pago-movil"><h2>${icono("telefono")} Pago móvil · ${monto}</h2>
+      <p class="nota">${esc(String(c.motoNombre).split(" ")[0])} aún no registró sus datos de pago móvil. Pídeselos por el chat.</p></div>`;
+    const fila = (t, v) => `<div class="fila"><span>${t}</span><b>${esc(v)}</b><button class="quitar" data-copiar="${esc(v)}" aria-label="Copiar">${icono("copiar")}</button></div>`;
+    const todo = `${pm.banco}\n${pm.telefono}\n${pm.cedula}\n${c.precioBs ? Number(c.precioBs).toFixed(2).replace(".", ",") : ""}`;
+    return `<div class="caja pago-movil"><h2>${icono("telefono")} Pago móvil · ${monto}</h2>
+      ${fila("Banco", pm.banco)}${fila("Teléfono", pm.telefono)}${fila("Cédula", pm.cedula)}
+      ${c.precioBs ? fila("Monto", Number(c.precioBs).toFixed(2).replace(".", ",")) : ""}
+      <button class="boton secundario" data-copiar="${esc(todo)}">${icono("copiar")} Copiar todos los datos</button></div>`;
+  }
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-copiar]");
+    if (!b) return;
+    try { await navigator.clipboard.writeText(b.dataset.copiar); aviso("Copiado"); } catch { aviso(b.dataset.copiar); }
+  });
+
   // ---------- Mi carrera ----------
   function vistaCarrera() {
     const c = carreraActual();
@@ -863,7 +915,8 @@ function iniciar() {
         ${filasRecorrido(c)}
         ${c.nota ? `<div class="fila"><span>Llevar</span><span>${esc(c.nota)}</span></div>` : ""}
         <div class="fila"><span>Distancia</span><span>${c.km} km</span></div>
-        <div class="fila"><span>Precio</span><b>${usd(c.precio)}</b></div>
+        <div class="fila"><span>Precio</span><b>${usd(c.precio)}${c.precioBs ? ` · ${bs(c.precioBs)}` : ""}</b></div>
+        <div class="fila"><span>Pago</span><span>${esc((FORMAS_PAGO[c.formaPago] || FORMAS_PAGO.usd).c)}</span></div>
         <div class="fila"><span>Pedida</span><span>${fechaTexto(c.creada)}</span></div>
       </div>`;
     const botonesExtra = `
@@ -892,6 +945,7 @@ function iniciar() {
             ${m.ratingCount ? `<span class="rating">${estrellas(m)}</span>` : ""}</div>
           <div class="acciones"><a class="boton" href="tel:${esc(c.motoTel)}">${icono("telefono")} Llamar a ${esc(c.motoNombre.split(" ")[0])}</a></div>
         </article>
+        ${c.formaPago === "pagomovil" ? tarjetaPagoMovil(c) : ""}
         <div class="mapa-vivo-caja">
           <div class="mapa grande" id="mapa"></div>
           <div class="mapa-estado" id="mapa-estado"></div>

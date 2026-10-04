@@ -10,7 +10,7 @@ import {
 import {
   auth, authSecundaria, db, NOMBRE, botonTema, botonInstalar, nuevoMapa, ICONOS, recargos, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
   leerTarifas, aviso, avisoSinConfigurar, mostrarLugares, tipoLugar, TIPOS_PARA_AGREGAR, ASPECTOS, insigniasSeguridad,
-} from "./comun.js?v=38";
+} from "./comun.js?v=39";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -160,6 +160,7 @@ function iniciar() {
           <h3>${esc(m.nombre)} ${habilitado(m) ? `<span class="pildora ok">En la app</span>` : `<span class="pildora mal">No sale</span>`}${m.enCarrera ? ` <span class="pildora ocupado">Carrera en curso</span>` : m.deTurno === false ? ` <span class="pildora">Descansando</span>` : ""}</h3>
           <p>Usuario: <b>${esc(m.usuario)}</b> · ${icono("telefono")} ${esc(m.telefono)}</p>
           <p>${icono("moto")} ${esc(m.moto)} · Placa ${esc(m.placa)} · <span class="rating">${estrellas(m)}</span></p>
+          ${m.pagoMovil && m.pagoMovil.telefono ? `<p>${icono("telefono")} Pago móvil: ${esc(m.pagoMovil.banco)} · ${esc(m.pagoMovil.telefono)} · ${esc(m.pagoMovil.cedula)}</p>` : ""}
           ${insigniasSeguridad(m) || Object.keys(m.malos || {}).length ? `<div class="etiquetas">${insigniasSeguridad(m, 3)}${Object.entries(m.malos || {}).filter(([, n]) => n > 0).map(([k, n]) => `<span class="pildora riesgo">${icono("alerta")} ${esc((ASPECTOS.malos.find((a) => a.k === k) || { t: k }).t)} (${n})</span>`).join("")}</div>` : ""}
           <p>${estadoPago(m)} · ${llamadas[m.id] || 0} llamadas</p></div>
           <div class="acciones">
@@ -408,6 +409,9 @@ function iniciar() {
   function vistaTarifas() {
     const t = tarifas;
     $("#vista").innerHTML = `<form id="tarifas">
+      <div class="caja"><h2>${icono("dinero")} Tasa del dólar</h2>
+        <label>Bolívares por cada $1 (ej. tasa BCV del día)</label><input name="tasa" type="number" step="0.01" min="0" value="${t.tasa || ""}" placeholder="Ej.: 36.50">
+        <p class="nota">${t.tasa ? `Actualizada el ${fechaTexto(t.tasaFecha)} · Con esta tasa la app muestra los precios en Bs.` : "Escríbela para que los clientes puedan pagar en Bs y Pago móvil."} Actualízala cada día.</p></div>
       <h1 class="titulo">Tarifas por kilómetro</h1>
       <p class="nota">Precio = base + (precio por km × kilómetros). El cliente lo ve calculado en el mapa.</p>
       <div class="caja" ${SERVICIOS.includes("delivery") ? "" : "hidden"}><h2>${icono("paquete")} Delivery</h2><div class="dos">
@@ -438,6 +442,8 @@ function iniciar() {
         delivery: { base: num("db"), porKm: num("dk") }, mototaxi: { base: num("mb"), porKm: num("mk") }, cuota: num("cuota"), diasCuota: num("dias") || 15,
         nocturna: { activa: fd.get("nocheActiva") === "on", desde: fd.get("nocheDesde") || "20:00", hasta: fd.get("nocheHasta") || "05:00", extra: num("nocheExtra") },
         lluvia: { activa: fd.get("lluviaActiva") === "on", extra: num("lluviaExtra") },
+        tasa: num("tasa"),
+        tasaFecha: num("tasa") !== (t.tasa || 0) ? new Date() : (t.tasaFecha || new Date()),
       };
       await setDoc(doc(db, "config", "general"), tarifas);
       document.activeElement?.blur();

@@ -24,7 +24,7 @@ service cloud.firestore {
     match /motorizados/{uid} {
       allow read: if dentro();
       allow create, delete: if esAdmin();
-      allow update: if esAdmin() || (dentro() && request.auth.uid == uid && soloCambia(['ubicacion', 'enCarrera', 'deTurno']));
+      allow update: if esAdmin() || (dentro() && request.auth.uid == uid && soloCambia(['ubicacion', 'enCarrera', 'deTurno', 'pagoMovil']));
     }
 
     match /clientes/{uid} {
