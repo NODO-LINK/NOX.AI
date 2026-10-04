@@ -10,7 +10,7 @@ import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
   pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
-} from "./comun.js?v=48";
+} from "./comun.js?v=49";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -1015,8 +1015,8 @@ function iniciar() {
       <p class="nota">${miPos ? "Primero los disponibles y los más cerca de ti." : "Primero los disponibles, por calificación. Activa tu ubicación para ver quién está más cerca."}</p>
       <div class="lista">${motos.length ? lista.map(({ m, cerca, visto }) => `
         <article class="tarjeta">
-          <div class="avatar" data-foto-moto="${m.id}">${esc(iniciales(m.nombre))}</div>
-          <div class="info"><h3>${esc(m.nombre)}</h3>
+          <div class="avatar tocable" data-foto-moto="${m.id}" data-perfil="${m.id}">${esc(iniciales(m.nombre))}</div>
+          <div class="info"><h3 class="tocable" data-perfil="${m.id}">${esc(m.nombre)}</h3>
             <p>${icono("moto")} ${esc(m.moto || "")}${m.placa ? ` · Placa ${esc(m.placa)}` : ""}</p>
             <button class="ver-perfil" data-perfil="${m.id}">${icono("estrella")} Ver perfil y opiniones</button>
             <div class="etiquetas">${m.enCarrera ? `<span class="pildora ocupado">${icono("ruta")} Carrera en curso</span>` : `<span class="pildora ok">Disponible</span>`}
@@ -1180,18 +1180,26 @@ function iniciar() {
     if (!m) return;
     const fondo = document.createElement("div");
     fondo.className = "modal";
+    // Ficha del motorizado: foto del conductor y de la moto, nombre, modelo y placa.
     fondo.innerHTML = `<div class="ventana perfil-moto">
-      <div class="perfil-cabeza"><div class="avatar" data-foto-moto="${m.id}">${esc(iniciales(m.nombre))}</div>
-        <div><h2>${esc(m.nombre)}</h2><p class="nota">${icono("moto")} ${esc(m.moto || "")}${m.placa ? ` · Placa ${esc(m.placa)}` : ""}</p>
-        <span class="rating">${estrellas(m)}</span></div></div>
-      ${insigniasSeguridad(m, 6) ? `<div class="etiquetas">${insigniasSeguridad(m, 6)}</div>` : ""}
-      <div class="foto-moto-grande" data-foto-moto="${m.id}" data-cual="moto" hidden></div>
+      <div class="fotos-perfil">
+        <figure><div class="foto-perfil" data-foto-moto="${esc(m.id)}">${icono("usuario")}</div><figcaption>Conductor</figcaption></figure>
+        <figure><div class="foto-perfil" data-foto-moto="${esc(m.id)}" data-cual="moto">${icono("moto")}</div><figcaption>Moto</figcaption></figure>
+      </div>
+      <h2 class="perfil-nombre">${esc(m.nombre)}</h2>
+      <div class="rating" style="text-align:center">${estrellas(m)}</div>
+      <div class="ficha">
+        <div class="fila"><span>${icono("usuario")} Nombre</span><b>${esc(m.nombre)}</b></div>
+        <div class="fila"><span>${icono("moto")} Moto</span><b>${esc(m.moto || "—")}</b></div>
+        <div class="fila"><span>${icono("tarjeta")} Placa</span>${m.placa ? `<b class="placa">${esc(m.placa)}</b>` : "<b>—</b>"}</div>
+        <div class="fila"><span>${icono("ruta")} Estado</span><b>${m.enCarrera ? "En una carrera" : "Disponible"}</b></div>
+      </div>
+      ${insigniasSeguridad(m, 6) ? `<div class="etiquetas" style="justify-content:center">${insigniasSeguridad(m, 6)}</div>` : ""}
       <h3 class="subtitulo-perfil">Opiniones de clientes</h3>
       <div class="opiniones" id="opiniones"><p class="nota">Cargando…</p></div>
       <button class="boton secundario" data-no>Cerrar</button></div>`;
     document.body.append(fondo);
     pintarFotos(fondo);
-    fotosDe(m.id).then((f) => { if (f.moto) $(".foto-moto-grande", fondo).hidden = false; });
     const cerrar = () => fondo.remove();
     $("[data-no]", fondo).onclick = cerrar;
     fondo.addEventListener("click", (e) => { if (e.target === fondo) cerrar(); });
@@ -1256,7 +1264,8 @@ function iniciar() {
           <div class="foto-moto-mini" data-foto-moto="${c.motoUid}" data-cual="moto"></div>
           <div class="info"><h3>${esc(c.motoNombre)}</h3>
             <p>${icono("moto")} ${esc(c.motoMoto || "")}${c.motoPlaca ? ` · Placa <b>${esc(c.motoPlaca)}</b>` : ""}</p>
-            ${m.ratingCount ? `<span class="rating">${estrellas(m)}</span>` : ""}</div>
+            ${m.ratingCount ? `<span class="rating">${estrellas(m)}</span>` : ""}
+            <button class="ver-perfil" id="perfil-carrera">${icono("usuario")} Ver perfil, fotos y placa</button></div>
           <div class="acciones"><a class="boton" href="tel:${esc(c.motoTel)}">${icono("telefono")} Llamar a ${esc(c.motoNombre.split(" ")[0])}</a></div>
         </article>
         ${c.formaPago === "pagomovil" ? tarjetaPagoMovil(c) : ""}
@@ -1326,6 +1335,7 @@ function iniciar() {
       };
       seguimiento.alMover(seguimiento.info || progreso(c, null), seguimiento.ubic);
       pintarFotos($("#tarjeta-moto"));
+      if ($("#perfil-carrera")) $("#perfil-carrera").onclick = () => verPerfil({ nombre: c.motoNombre, moto: c.motoMoto, placa: c.motoPlaca, ...m, id: c.motoUid, enCarrera: true });
       $("#sos").onclick = () => abrirSos(c);
     }
     $("#compartir").onclick = () => compartirCarrera(c, cliente.nombre);

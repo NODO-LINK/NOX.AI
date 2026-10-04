@@ -10,7 +10,7 @@ import {
 import {
   auth, authSecundaria, db, NOMBRE, botonTema, botonInstalar, nuevoMapa, ICONOS, recargos, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
   leerTarifas, escucharTarifas, aviso, avisoSinConfigurar, bs, sonarAlerta, mostrarLugares, tipoLugar, TIPOS_PARA_AGREGAR, ASPECTOS, insigniasSeguridad, opinionPublica, fotosDe, olvidarFotos, achicarFoto, pintarFotos,
-} from "./comun.js?v=48";
+} from "./comun.js?v=49";
 
 if (!avisoSinConfigurar()) iniciar();
 

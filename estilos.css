@@ -871,3 +871,20 @@ body.con-selector { overflow: hidden; }
 .cuota .pildora { display: inline-flex; margin-bottom: 8px; }
 .cuota .fila { align-items: center; }
 .cuota .fila b { flex: 1; text-align: right; margin-right: 6px; }
+/* ---------- Ficha del motorizado ---------- */
+.fotos-perfil { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.fotos-perfil figure { display: grid; gap: 6px; text-align: center; margin: 0; min-width: 0; }
+.fotos-perfil .foto-perfil { width: 100%; }
+.fotos-perfil figcaption { font-size: .78rem; font-weight: 800; color: var(--texto-2); }
+.foto-perfil { aspect-ratio: 1; border-radius: 22px; background: var(--marca-suave) center / cover no-repeat; display: grid; place-items: center; color: var(--marca); box-shadow: var(--sombra-1); }
+.foto-perfil .ico { width: 46px; height: 46px; opacity: .6; }
+.foto-perfil.con-foto .ico { display: none; }
+.perfil-nombre { text-align: center; margin: 14px 0 2px; font-size: 1.35rem; }
+.ficha { margin-top: 12px; border-radius: 18px; background: var(--marca-suave); padding: 4px 14px; }
+.ficha .fila { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--borde); gap: 10px; }
+.ficha .fila:last-child { border-bottom: 0; }
+.ficha .fila span { display: flex; align-items: center; gap: 6px; color: var(--texto-2); font-weight: 700; font-size: .88rem; }
+.ficha .fila span .ico { width: 15px; height: 15px; }
+.ficha .fila b { text-align: right; }
+.placa { display: inline-block; padding: 3px 12px; border-radius: 8px; background: #fde68a; color: #1b1033; border: 2px solid #1b1033; font-family: ui-monospace, monospace; letter-spacing: 2px; font-weight: 900; }
+.tocable { cursor: pointer; }
