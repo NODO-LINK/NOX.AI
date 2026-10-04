@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=53";
-import { icono, pintarIconos } from "./iconos.js?v=53";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=54";
+import { icono, pintarIconos } from "./iconos.js?v=54";
 
 export { icono };
 pintarIconos();
@@ -787,6 +787,16 @@ addEventListener("beforeinstallprompt", (e) => {
 // iPhone/iPad: Safari no ofrece el aviso de instalar; se explica cómo agregarla a la pantalla de inicio.
 const esIos = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const instalada = navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+// ¿Abrió Whereapp desde la app instalada (APK o "Instalar")? La APK abre la página con referrer android-app://
+export const enApp = (() => {
+  let si = instalada || /^android-app:\/\//.test(document.referrer || "");
+  try { if (si) sessionStorage.setItem("whereapp.enApp", "1"); else si = sessionStorage.getItem("whereapp.enApp") === "1"; } catch {}
+  return () => si;
+})();
+// WhatsApp de Whereapp (para pedir la app, soporte…).
+export const WHATSAPP = "584123042896";
+export const enlaceWhatsapp = (numero, texto) => `https://wa.me/${String(numero).replace(/\D/g, "")}?text=${encodeURIComponent(texto)}`;
+export const ANUNCIO_PREDETERMINADO = "¡Ya salió la app de Whereapp para Android! Escríbenos por WhatsApp y te la enviamos gratis.";
 function guiaIos() {
   const fondo = document.createElement("div");
   fondo.className = "modal";

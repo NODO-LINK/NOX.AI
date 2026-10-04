@@ -12,7 +12,8 @@ import {
   auth, authSecundaria, db, NOMBRE, botonTema, botonInstalar, nuevoMapa, ICONOS, recargos, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
   leerTarifas, escucharTarifas, aviso, avisoSinConfigurar, bs, sonarAlerta, mostrarLugares, tipoLugar, TIPOS_PARA_AGREGAR, ASPECTOS, insigniasSeguridad, opinionPublica, fotosDe, olvidarFotos, achicarFoto, pintarFotos,
   hoyLocal,
-} from "./comun.js?v=53";
+  enlaceWhatsapp, ANUNCIO_PREDETERMINADO,
+} from "./comun.js?v=54";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -21,6 +22,7 @@ function iniciar() {
   let motos = [], carreras = [], resenas = [], pagos = [], llamadas = {}, visitas = {}, cedulas = {}, clientes = [], bloqueados = {}, notasClientes = {};
   let mapaVivo = null, marcasVivo = {}, filtroClientes = "";
   let lugaresPropios = [], mapaLugares = null, reportesPago = [];
+  let anuncio = null;
   const DIA = 864e5;
 
   onAuthStateChanged(auth, async (u) => {
@@ -70,6 +72,7 @@ function iniciar() {
     escuchar(query(collection(db, "resenas"), orderBy("fecha", "desc"), limit(100)), (s) => { resenas = s.docs.map((d) => ({ id: d.id, ...d.data() })); publicarAprobadasViejas(); });
     escuchar(query(collection(db, "pagos"), orderBy("fecha", "desc"), limit(500)), (s) => { pagos = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
     escuchar(collection(db, "llamadas"), (s) => { llamadas = Object.fromEntries(s.docs.map((d) => [d.id, Number(d.data().n) || 0])); return ruta === "mas"; });
+    escuchar(doc(db, "config", "anuncio"), (d) => { anuncio = d.exists() ? d.data() : null; });
     escuchar(collection(db, "clientes"), (s) => {
       clientes = s.docs.map((d) => ({ id: d.id, ...d.data() }));
       cedulas = Object.fromEntries(clientes.map((c) => [c.id, c.cedula]));
@@ -484,7 +487,20 @@ function iniciar() {
     const lista = clientes
       .filter((c) => !q || [c.nombre, c.cedula, c.telefono].join(" ").toLowerCase().includes(q))
       .sort((a, b) => (fecha(b.creado) || 0) - (fecha(a.creado) || 0));
+    const a = anuncio || {};
+    const textoWa = a.texto || ANUNCIO_PREDETERMINADO;
+    const conTel = clientes.filter((c) => /^\+58\d{10}$/.test(c.telefono || ""));
     $("#vista").innerHTML = `
+      <form class="caja" id="anuncio"><h2>${icono("descargar")} Anuncio para clientes</h2>
+        <p class="nota">Sale arriba en la lista de motorizados para quienes usan Whereapp desde la página web (no a quienes ya tienen la app instalada), con un botón para escribirte por WhatsApp.</p>
+        <label class="opcion"><input type="checkbox" name="activo" ${a.activo ? "checked" : ""}><span>Mostrar el anuncio</span></label>
+        <label>Mensaje</label><textarea name="texto" maxlength="200" placeholder="${esc(ANUNCIO_PREDETERMINADO)}">${esc(a.texto || "")}</textarea>
+        <label>Enlace para descargar la app (opcional)</label><input name="enlace" type="url" placeholder="https://…" value="${esc(a.enlace || "")}">
+        <p class="nota">Si pones un enlace (por ejemplo, de Google Drive), sale también el botón «Descargar la app».</p>
+        <button class="boton">Guardar anuncio</button></form>
+      <div class="caja"><h2>${icono("chat")} Avisar por WhatsApp</h2>
+        <p class="nota">WhatsApp no deja enviar a todos de una vez desde una página. Puedes: tocar «WhatsApp» en cada cliente (el mensaje ya va escrito), o copiar todos los números y crear una <b>lista de difusión</b> en WhatsApp (solo les llega a quienes te tienen guardado).</p>
+        <button class="boton secundario" id="copiar-numeros" ${conTel.length ? "" : "disabled"}>Copiar los ${conTel.length} números</button></div>
       <h1 class="titulo">Clientes (${clientes.length})</h1>
       <input id="filtro-clientes" type="search" placeholder="Buscar por nombre, cédula o teléfono" value="${esc(filtroClientes)}">
       <div class="lista" style="margin-top:12px">${lista.map((c) => {
@@ -496,10 +512,30 @@ function iniciar() {
           ${notasClientes[c.id] ? `<p><span class="rating">${icono("estrella")} ${(notasClientes[c.id].suma / notasClientes[c.id].cant).toFixed(1)} (${notasClientes[c.id].cant})</span> según los motorizados${notasClientes[c.id].ultimo ? ` · “${esc(notasClientes[c.id].ultimo.comentario)}” — ${esc(notasClientes[c.id].ultimo.motoNombre)}` : ""}</p>` : `<p>Sin calificaciones de motorizados</p>`}</div>
           <div class="acciones">
             <a class="boton secundario" href="tel:${esc(c.telefono)}">${icono("telefono")} Llamar</a>
+            ${/^\+58\d{10}$/.test(c.telefono || "") ? `<a class="boton verde" target="_blank" rel="noopener" href="${esc(enlaceWhatsapp(c.telefono, `Hola ${String(c.nombre || "").split(" ")[0]}, te escribe Whereapp. ${textoWa}`))}">${icono("chat")} WhatsApp</a>` : ""}
             <button class="boton ${b ? "verde" : "peligro"}" data-bloquear="${esc(c.cedula)}" data-nombre="${esc(c.nombre)}">${b ? "Desbloquear" : "Bloquear"}</button></div>
         </article>`;
       }).join("") || `<div class="vacio">${icono("usuario")}${q ? "Nadie coincide con la búsqueda." : "Aún no hay clientes."}</div>`}</div>
       <p class="nota">Bloquear usa la cédula: aunque el cliente vuelva a registrarse con la misma cédula, no podrá pedir carreras.</p>`;
+    $("#anuncio").onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const enlace = String(fd.get("enlace") || "").trim();
+      if (enlace && !/^https:\/\//.test(enlace)) return aviso("El enlace debe empezar con https://");
+      const bt = $("button", e.target); bt.disabled = true;
+      try {
+        await setDoc(doc(db, "config", "anuncio"), { activo: fd.get("activo") === "on", texto: String(fd.get("texto") || "").trim().slice(0, 200), enlace, actualizado: serverTimestamp() });
+        document.activeElement?.blur();
+        aviso("Anuncio guardado. Los clientes lo ven al instante.");
+      } catch (err) { console.error(err); aviso("No se pudo guardar el anuncio"); }
+      bt.disabled = false;
+    };
+    $("#copiar-numeros").onclick = async () => {
+      // En formato 0412-1234567, uno por línea (fácil de guardar en contactos).
+      const lista = conTel.map((c) => `${c.nombre}: 0${c.telefono.slice(3, 6)}-${c.telefono.slice(6)}`).join("\n");
+      try { await navigator.clipboard.writeText(lista); aviso(`${conTel.length} números copiados`); }
+      catch { prompt("Copia los números:", lista); }
+    };
     const f = $("#filtro-clientes");
     f.oninput = () => { filtroClientes = f.value; const pos = f.selectionStart; vistaClientes(); const n = $("#filtro-clientes"); n.focus(); n.setSelectionRange(pos, pos); };
     $$("[data-bloquear]").forEach((b) => (b.onclick = async () => {

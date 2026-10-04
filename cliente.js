@@ -11,7 +11,8 @@ import {
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
   pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
   hoyLocal,
-} from "./comun.js?v=53";
+  enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO,
+} from "./comun.js?v=54";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -185,6 +186,11 @@ function iniciar() {
       else vistaPedir();
     }));
     contarVisita();
+    // Anuncio del administrador (ej.: "pide la app por WhatsApp"): solo para quien usa la página web.
+    if (!enApp()) cancelarSubs.push(onSnapshot(doc(db, "config", "anuncio"), (d) => {
+      anuncio = d.exists() ? d.data() : null;
+      if (rutaActual === "motorizados") vistaMotorizados();
+    }, () => {}));
     // Cédula bloqueada por el administrador: no puede pedir.
     bloqueado = await getDoc(doc(db, "bloqueados", cliente.cedula || "-")).then((x) => x.exists()).catch(() => false);
 
@@ -235,6 +241,19 @@ function iniciar() {
 
   // "pedir" (a un motorizado) y "publicar" (a todos, con el precio que pone el cliente) usan la misma pantalla.
   let cerrarSelector = null;
+  let anuncio = null;
+  const claveAnuncio = () => "whereapp.anuncio." + String((anuncio && anuncio.texto) || "").length + ":" + String((anuncio && anuncio.texto) || "").slice(0, 30);
+  function htmlAnuncio() {
+    if (!anuncio || !anuncio.activo || enApp()) return "";
+    try { if (localStorage.getItem(claveAnuncio()) === "x") return ""; } catch {}
+    const texto = anuncio.texto || ANUNCIO_PREDETERMINADO;
+    const wa = enlaceWhatsapp(WHATSAPP, `Hola, soy ${cliente.nombre}. Quiero la app de Whereapp para mi teléfono.`);
+    return `<div class="anuncio"><button class="quitar" id="cerrar-anuncio" aria-label="Cerrar">${icono("cerrar")}</button>
+      <div class="anuncio-ico">${icono("descargar")}</div>
+      <p>${esc(texto)}</p>
+      <div class="botones">${anuncio.enlace && /^https:\/\//.test(anuncio.enlace) ? `<a class="boton" href="${esc(anuncio.enlace)}" target="_blank" rel="noopener">${icono("descargar")} Descargar la app</a>` : ""}
+        <a class="boton verde" href="${esc(wa)}" target="_blank" rel="noopener">${icono("chat")} Pedirla por WhatsApp</a></div></div>`;
+  }
   function enPedido() { return rutaActual === "pedir" || rutaActual === "publicar"; }
   const publicando = () => rutaActual === "publicar";
 
@@ -1122,7 +1141,7 @@ function iniciar() {
       || (a.cerca ? a.cerca.km : 1e9) - (b.cerca ? b.cerca.km : 1e9)
       || promedio(b.m) - promedio(a.m));
     const libres = motos.filter((m) => !m.enCarrera).length;
-    $("#vista").innerHTML = `<h1 class="titulo">Motorizados activos</h1>
+    $("#vista").innerHTML = `${htmlAnuncio()}<h1 class="titulo">Motorizados activos</h1>
       ${motos.length && !libres ? `<div class="banner-aviso">${icono("reloj")}<span><b>Todos están ocupados ahora mismo.</b> Puedes pedirle a uno y tu carrera le llega apenas termine la que tiene.</span></div>` : ""}
       <p class="nota">${miPos ? "Primero los disponibles y los más cerca de ti." : "Primero los disponibles, por calificación. Activa tu ubicación para ver quién está más cerca."}</p>
       <div class="lista">${motos.length ? lista.map(({ m, cerca, visto }) => `
@@ -1144,6 +1163,7 @@ function iniciar() {
     $("#vista").insertAdjacentHTML("beforeend", `<p class="nota pie-legal">${ENLACE_POLITICAS}</p>`);
     $$("[data-perfil]").forEach((b) => (b.onclick = () => verPerfil(motos.find((x) => x.id === b.dataset.perfil))));
     pintarFotos($("#vista"));
+    if ($("#cerrar-anuncio")) $("#cerrar-anuncio").onclick = () => { try { localStorage.setItem(claveAnuncio(), "x"); } catch {} $(".anuncio").remove(); };
     $$("[data-llamar]").forEach((a) => a.addEventListener("click", () => {
       setDoc(doc(db, "llamadas", a.dataset.llamar), { n: increment(1) }, { merge: true }).catch(() => {});
     }));
