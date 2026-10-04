@@ -87,6 +87,7 @@ service cloud.firestore {
             && request.resource.data.estado == 'aceptada'
             && exists(/databases/$(database)/documents/carreras/$(id)/ofertas/$(request.resource.data.motoUid))
             && request.resource.data.precio == get(/databases/$(database)/documents/carreras/$(id)/ofertas/$(request.resource.data.motoUid)).data.precio
+            && get(/databases/$(database)/documents/motorizados/$(request.resource.data.motoUid)).data.get('enCarrera', false) != true
             && soloCambia(['estado', 'motoUid', 'motoNombre', 'motoTel', 'motoMoto', 'motoPlaca', 'aceptada', 'precio', 'precioBs', 'contraoferta']))
         // …avisa una emergencia (SOS) durante el viaje…
         || (dentro() && resource.data.clienteUid == request.auth.uid
@@ -108,8 +109,12 @@ service cloud.firestore {
             && ((request.resource.data.estado == 'aceptada' && request.resource.data.recogido == true && soloCambia(['recogido', 'recogidoEn']))
              || (request.resource.data.estado == 'aceptada' && soloCambia(['llegoEn']))
              || (request.resource.data.estado == 'terminada' && soloCambia(['estado', 'terminada']))
+             // Cancelar: solo antes de recoger; vuelve al precio original del cliente (si hubo contraoferta).
              || (request.resource.data.estado == 'esperando' && request.resource.data.motoUid == null
-                 && soloCambia(['estado', 'motoUid', 'paraMoto', 'paraMotoNombre', 'cancelaciones', 'recogido', 'llegoEn']))));
+                 && resource.data.get('recogido', false) != true
+                 && request.resource.data.get('precio', 0) == resource.data.get('precioCliente', resource.data.get('precio', 0))
+                 && soloCambia(['estado', 'motoUid', 'paraMoto', 'paraMotoNombre', 'cancelaciones', 'recogido', 'llegoEn',
+                                'motoNombre', 'motoTel', 'motoMoto', 'motoPlaca', 'precio', 'precioBs', 'contraoferta']))));
     }
 
     // Contraofertas: cada motorizado propone su precio en una carrera publicada por el cliente.

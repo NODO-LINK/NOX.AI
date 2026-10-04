@@ -2,12 +2,12 @@
 
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  doc, getDoc, setDoc, deleteDoc, addDoc, onSnapshot, updateDoc, collection, query, where, runTransaction, serverTimestamp, arrayUnion,
+  doc, getDoc, setDoc, deleteDoc, addDoc, writeBatch, onSnapshot, updateDoc, collection, query, where, runTransaction, serverTimestamp, arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   leerOpiniones, listaOpiniones, ENLACE_POLITICAS, sonarAlerta, ASPECTOS, insigniasSeguridad, textoCobro, FORMAS_PAGO, bs, auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar, escucharTarifas, aBs,
-} from "./comun.js?v=45";
+} from "./comun.js?v=46";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -27,6 +27,13 @@ function iniciar() {
   onAuthStateChanged(auth, (u) => {
     subs.forEach((f) => f()); subs = [];
     pararCarreras(); pararGps();
+    // Si cambia la cuenta en este teléfono, no debe quedar nada del motorizado anterior.
+    if (chat.quitar) chat.quitar();
+    chat = { id: null, quitar: null, sinLeer: 0 };
+    misOfertas.clear(); aceptadasPorMi.clear(); revisadas.clear(); conocidas = new Set();
+    Object.assign(opiniones, { abiertas: false, html: "" });
+    terminadas = []; reportes = []; tarifas = null; primeraCarga = true;
+    $$(".modal").forEach((m) => m.remove());
     yo = u; perfil = null; miCarrera = null; disponibles = []; ultimoModo = null;
     if (!u) return pantallaEntrada();
     subs.push(onSnapshot(doc(db, "motorizados", u.uid), (s) => {
@@ -77,7 +84,11 @@ function iniciar() {
     // Su carrera aceptada (aunque lo hayan desactivado, debe poder terminarla).
     subsCarreras.push(onSnapshot(query(collection(db, "carreras"), where("motoUid", "==", yo.uid), where("estado", "==", "aceptada")), (s) => {
       const antes = miCarrera;
-      miCarrera = s.docs.length ? { id: s.docs[0].id, ...s.docs[0].data() } : null;
+      // Si por algo tuviera dos, se muestra primero la más antigua (al terminarla aparece la otra).
+      const lista = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (fecha(a.aceptada) || new Date()) - (fecha(b.aceptada) || new Date()));
+      miCarrera = lista[0] || null;
+      if (lista.length > 1 && (!antes || antes.id !== miCarrera.id)) aviso(`Tienes ${lista.length} carreras aceptadas: termina esta y luego verás la otra.`);
+      if (miCarrera) retirarOtrasOfertas(miCarrera.id);
       // Si la carrera llegó sin que él la aceptara, es que el cliente aceptó su contraoferta.
       if (miCarrera && (!antes || antes.id !== miCarrera.id) && misOfertas.has(miCarrera.id) && !aceptadasPorMi.has(miCarrera.id)) {
         sonar(); aviso(`¡${miCarrera.clienteNombre.split(" ")[0]} aceptó tu oferta de ${usd(miCarrera.precio)}!`);
@@ -106,16 +117,26 @@ function iniciar() {
         .sort((a, b) => (fecha(a.creada) || 0) - (fecha(b.creada) || 0));
       const nuevas = disponibles.filter((c) => !conocidas.has(c.id));
       nuevas.forEach((c) => conocidas.add(c.id));
-      if (nuevas.length && !primeraCarga) {
+      if (nuevas.length && !primeraCarga && !miCarrera) {
         sonar(); aviso("¡Carrera nueva!");
         // Si la app está en segundo plano, aviso en la barra de notificaciones.
         const c = nuevas[0];
-        if (document.hidden) notificar("¡Carrera nueva!", `${textoCobro(c)} · ${c.km} km · ${c.origen.dir}`, { tag: "whereapp-moto" });
+        if (document.hidden) notificar("¡Carrera nueva!", `${textoCobro(c)} · ${esc(c.km)} km · ${c.origen.dir}`, { tag: "whereapp-moto" });
       }
       primeraCarga = false;
-      pintar();
+      // Con una carrera en curso no se redibuja (si no, el mapa se reinicia a cada rato).
+      if (!miCarrera) pintar();
     }, () => {}));
   }
+
+  // La cuota vence con el reloj (sin que cambie nada en la base de datos): se revisa cada minuto.
+  let habilitadoAntes = null;
+  setInterval(() => {
+    if (!perfil) return;
+    const ahora = habilitado(perfil);
+    if (habilitadoAntes !== null && ahora !== habilitadoAntes) { escucharCarreras(); gpsSegunEstado(); pintar(); }
+    habilitadoAntes = ahora;
+  }, 60000);
 
   // ---------- Chat con el cliente ----------
   function seguirChat() {
@@ -188,7 +209,8 @@ function iniciar() {
       e.preventDefault();
       const f = new FormData(e.target);
       const ref = String(f.get("ref")).replace(/\D/g, "");
-      const monto = parseFloat(String(f.get("monto")).replace(/\./g, (m, i, t) => (t.includes(",") ? "" : ".")).replace(",", "."));
+      const t = String(f.get("monto")).trim().replace(/[^\d.,]/g, "");
+      const monto = t.includes(",") ? parseFloat(t.replace(/\./g, "").replace(",", ".")) : /^\d+\.\d{1,2}$/.test(t) ? parseFloat(t) : parseFloat(t.replace(/\./g, ""));
       if (ref.length < 4) return aviso("Escribe el número de referencia (al menos 4 números)");
       if (!(monto > 0)) return aviso("Escribe el monto que pagaste");
       try {
@@ -256,13 +278,17 @@ function iniciar() {
   }
 
   // ---------- Pantalla encendida (para no perder carreras) ----------
+  let pidiendoPantalla = false;
   async function aplicarPantalla() {
+    if (pidiendoPantalla) return;
+    pidiendoPantalla = true;
     try {
       if (pantallaFija && "wakeLock" in navigator && !bloqueoPantalla && document.visibilityState === "visible") {
-        bloqueoPantalla = await navigator.wakeLock.request("screen");
-        bloqueoPantalla.addEventListener("release", () => (bloqueoPantalla = null));
-      } else if (!pantallaFija && bloqueoPantalla) { await bloqueoPantalla.release(); bloqueoPantalla = null; }
-    } catch {}
+        const b = await navigator.wakeLock.request("screen");
+        bloqueoPantalla = b;
+        b.addEventListener("release", () => { if (bloqueoPantalla === b) bloqueoPantalla = null; });
+      } else if (!pantallaFija && bloqueoPantalla) { const b = bloqueoPantalla; bloqueoPantalla = null; await b.release(); }
+    } catch {} finally { pidiendoPantalla = false; }
   }
   document.addEventListener("visibilitychange", aplicarPantalla);
 
@@ -301,12 +327,16 @@ function iniciar() {
     $("#cabecera").innerHTML = `<div class="dentro"><div><div class="logo">${NOMBRE}</div><div class="logo-sub">${esc(perfil.nombre)} · ${estrellas(perfil)}</div></div>
       <div class="derecha"><span class="pildora ${ok ? "ok" : "mal"}">${ok ? "Activo" : "Inactivo"}</span>
       <button class="boton secundario chico" id="salir">Salir</button></div></div>`;
-    $("#salir").onclick = () => signOut(auth);
+    // Al salir deja de estar de turno: así no sale como disponible con el teléfono apagado.
+    $("#salir").onclick = async () => {
+      if (!miCarrera) await updateDoc(doc(db, "motorizados", yo.uid), { deTurno: false }).catch(() => {});
+      signOut(auth);
+    };
     $("#cabecera .derecha").prepend(botonInstalar(), botonTema());
 
     let html = "";
     if (!perfil.activo) html += `<div class="caja"><h2>Estás inactivo</h2><p class="nota">El administrador debe activarte para que recibas carreras y salgas en la app.</p></div>`;
-    else if (!ok) html += `<div class="caja"><h2>Quincena vencida</h2><p class="nota">Tu pago venció el ${fechaTexto(vence)}. Paga la cuota al administrador para volver a salir en la app.</p></div>`;
+    else if (!ok) html += `<div class="caja"><h2>${vence ? "Quincena vencida" : "Falta tu primera cuota"}</h2><p class="nota">${vence ? `Tu pago venció el ${fechaTexto(vence)}.` : "Todavía no tienes una cuota pagada."} Paga la cuota y repórtala abajo en «Tu cuota» para volver a salir en la app.</p></div>`;
     else if (vence && vence - new Date() < 3 * 864e5) html += `<p class="pildora alerta" style="display:inline-block;margin-top:12px">Tu quincena vence el ${fechaTexto(vence)}</p>`;
 
     const deTurno = perfil.deTurno !== false;
@@ -366,7 +396,7 @@ function iniciar() {
     const t = $("#turno");
     if (t) t.onclick = async () => {
       t.disabled = true;
-      await updateDoc(doc(db, "motorizados", yo.uid), { deTurno: !deTurno }).catch(() => aviso("No se pudo cambiar el turno"));
+      await updateDoc(doc(db, "motorizados", yo.uid), { deTurno: !deTurno }).catch(() => { t.disabled = false; aviso("No se pudo cambiar el turno"); });
     };
     const pf = $("#pantalla");
     if (pf) pf.onclick = () => {
@@ -386,7 +416,7 @@ function iniciar() {
   const tipoTexto = (c) => (c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`);
   const tarjetaCarrera = (c) => `
     <article class="tarjeta"><div class="info">
-      <h3>${tipoTexto(c)} · ${usd(c.precio)} · ${c.km} km ${c.paraMoto ? `<span class="pildora">Para ti</span>` : ""}${c.ofertaCliente ? `<span class="pildora oferta-pill">Precio del cliente</span>` : ""}</h3>
+      <h3>${tipoTexto(c)} · ${usd(c.precio)} · ${esc(c.km)} km ${c.paraMoto ? `<span class="pildora">Para ti</span>` : ""}${c.ofertaCliente ? `<span class="pildora oferta-pill">Precio del cliente</span>` : ""}</h3>
       <p class="cobro">${icono((FORMAS_PAGO[c.formaPago] || FORMAS_PAGO.usd).icono)} <b>Cobrar:</b> ${esc(textoCobro(c))}</p>
       <p><b>A:</b> ${esc(c.origen.dir)}</p>
       ${(c.paradas || []).map((p, i) => `<p><b>Parada ${i + 1}:</b> ${esc(p.dir)}</p>`).join("")}
@@ -418,7 +448,7 @@ function iniciar() {
     const fondo = document.createElement("div");
     fondo.className = "modal";
     fondo.innerHTML = `<form class="ventana"><h2>Ofrecer otro precio</h2>
-      <p class="nota">El cliente ofrece ${esc(textoCobro(c))} por ${c.km} km. Escribe tu precio en dólares; el cliente decide.</p>
+      <p class="nota">El cliente ofrece ${esc(textoCobro(c))} por ${esc(c.km)} km. Escribe tu precio en dólares; el cliente decide.</p>
       <label>Tu precio ($)</label><input name="precio" inputmode="decimal" required value="${(Math.round((c.precioSugerido || c.precio) * 4) / 4).toFixed(2)}">
       <p class="nota" id="equiv"></p>
       <button class="boton">Enviar oferta</button><button class="boton secundario" type="button" data-no>Cancelar</button></form>`;
@@ -450,6 +480,7 @@ function iniciar() {
   }
 
   async function aceptar(id) {
+    if (miCarrera) return aviso("Ya tienes una carrera en curso");
     aceptadasPorMi.add(id);
     try {
       await runTransaction(db, async (tx) => {
@@ -462,9 +493,20 @@ function iniciar() {
         });
       });
       aviso("¡Carrera aceptada!");
-    } catch {
-      aviso("Otro motorizado ya la aceptó");
+      retirarOtrasOfertas(id);
+    } catch (e) {
+      aceptadasPorMi.delete(id);
+      aviso(e && e.message === "tomada" ? "Otro motorizado ya la aceptó"
+        : e && e.code === "permission-denied" ? "No puedes aceptar ahora: revisa que estés activo y con la cuota al día"
+        : "No se pudo aceptar. Revisa tu internet e intenta de nuevo.");
     }
+  }
+  // Cuando ya tiene una carrera, quita sus ofertas en otras (para que no le acepten dos a la vez).
+  function retirarOtrasOfertas(excepto) {
+    [...misOfertas.keys()].filter((id) => id !== excepto).forEach((id) => {
+      deleteDoc(doc(db, "carreras", id, "ofertas", yo.uid)).catch(() => {});
+      misOfertas.delete(id);
+    });
   }
 
   // Datos de pago móvil del motorizado (los ve el cliente que paga por Pago móvil).
@@ -499,7 +541,7 @@ function iniciar() {
   }
 
   // Botones para navegar con Waze o Google Maps al próximo punto (A antes de recoger; luego paradas y B).
-  const waze = (p) => `https://waze.com/ul?ll=${p.lat},${p.lng}&navigate=yes`;
+  const waze = (p) => `https://waze.com/ul?ll=${Number(p.lat)},${Number(p.lng)}&navigate=yes`;
   function navegar(c) {
     const ir = (letra, p, grande) => `<div class="navegar-fila ${grande ? "principal" : ""}">
       <div><small>${grande ? "Próximo destino" : "Parada"}</small><b><i class="${letra === "A" ? "letra-a" : letra === "B" ? "letra-b" : "letra-p"}">${letra}</i> ${esc(p.dir)}</b></div>
@@ -522,7 +564,7 @@ function iniciar() {
         <div class="fila"><span>Servicio</span><b>${tipoTexto(c)}</b></div>
         <div class="fila"><span>Cliente</span><span>${esc(c.clienteNombre)}</span></div>
         <div class="fila cobrar"><span>Cobrar</span><b>${esc(textoCobro(c))}</b></div>
-        <div class="fila"><span>Distancia</span><span>${c.km} km</span></div>
+        <div class="fila"><span>Distancia</span><span>${esc(c.km)} km</span></div>
         ${c.nota ? `<div class="fila"><span>Llevar</span><span>${esc(c.nota)}</span></div>` : ""}
       </div>
       <div class="mapa" id="mapa"></div>
@@ -540,7 +582,7 @@ function iniciar() {
       ${c.recogido
         ? `<button class="boton verde" id="termine">${icono("listo")} Terminé: ya llegamos a B</button>`
         : `<button class="boton verde" id="recogi">${icono("check")} Ya ${c.tipo === "mototaxi" ? "lo recogí" : "busqué el pedido"} (salgo hacia B)</button>`}
-      <button class="boton peligro" id="cancelar">Cancelar carrera</button>
+      ${c.recogido ? `<p class="nota">Si ya recogiste y hay un problema, llama al cliente o al administrador.</p>` : `<button class="boton peligro" id="cancelar">Cancelar carrera</button>`}
       <p class="nota">Mientras tengas una carrera, tu ubicación se comparte con el cliente.</p>`;
   }
 
@@ -559,12 +601,15 @@ function iniciar() {
     pintarE();
     fondo.querySelector("[data-no]").onclick = () => fondo.remove();
     fondo.querySelector("[data-ok]").onclick = async () => {
-      await addDoc(collection(db, "calificacionesClientes"), {
-        carreraId: c.id, motoUid: yo.uid, motoNombre: perfil.nombre, clienteUid: c.clienteUid, clienteNombre: c.clienteNombre,
-        estrellas: puntos, comentario: fondo.querySelector("#nota-cliente").value.trim().slice(0, 300), fecha: serverTimestamp(),
-      }).catch(() => aviso("No se pudo guardar la calificación"));
+      fondo.querySelector("[data-ok]").disabled = true;
+      try {
+        await addDoc(collection(db, "calificacionesClientes"), {
+          carreraId: c.id, motoUid: yo.uid, motoNombre: perfil.nombre, clienteUid: c.clienteUid, clienteNombre: c.clienteNombre,
+          estrellas: puntos, comentario: fondo.querySelector("#nota-cliente").value.trim().slice(0, 300), fecha: serverTimestamp(),
+        });
+        aviso("¡Gracias!");
+      } catch { aviso("No se pudo guardar la calificación"); }
       fondo.remove();
-      aviso("¡Gracias!");
     };
   }
 
@@ -577,31 +622,50 @@ function iniciar() {
     const llegue = $("#llegue");
     if (llegue) llegue.onclick = async () => {
       llegue.disabled = true;
-      await updateDoc(doc(db, "carreras", c.id), { llegoEn: serverTimestamp() }).catch(() => { llegue.disabled = false; aviso("No se pudo avisar"); });
-      aviso("Le avisamos al cliente que llegaste");
+      try { await updateDoc(doc(db, "carreras", c.id), { llegoEn: serverTimestamp() }); aviso("Le avisamos al cliente que llegaste"); }
+      catch { llegue.disabled = false; aviso("No se pudo avisar. Revisa tu internet."); }
     };
     const recogi = $("#recogi");
     if (recogi) recogi.onclick = async () => {
       recogi.disabled = true;
-      await updateDoc(doc(db, "carreras", c.id), { recogido: true, recogidoEn: serverTimestamp() });
-      aviso("¡Vamos hacia el punto B!");
+      try { await updateDoc(doc(db, "carreras", c.id), { recogido: true, recogidoEn: serverTimestamp() }); aviso("¡Vamos hacia el punto B!"); }
+      catch { recogi.disabled = false; aviso("No se pudo guardar. Puede que el cliente haya cancelado; revisa tu internet."); }
     };
     const termine = $("#termine");
     if (termine) termine.onclick = async () => {
       if (!confirm("¿Entregaste y cobraste la carrera?")) return;
-      await updateDoc(doc(db, "carreras", c.id), { estado: "terminada", terminada: serverTimestamp() });
+      termine.disabled = true;
+      // Sin esperar al servidor (con mala señal tarda): se guarda en cuanto haya conexión.
+      updateDoc(doc(db, "carreras", c.id), { estado: "terminada", terminada: serverTimestamp() })
+        .catch(() => aviso("No se pudo terminar: puede que el cliente la haya cancelado."));
       aviso("¡Carrera terminada!");
       calificarCliente(c);
     };
-    $("#cancelar").onclick = async () => {
+    const cancelar = $("#cancelar");
+    if (cancelar) cancelar.onclick = async () => {
       const motivo = await elegirMotivo("¿Por qué cancelas?", MOTIVOS_MOTO);
       if (!motivo) return;
-      // La carrera vuelve a quedar disponible para los demás motorizados.
-      await updateDoc(doc(db, "carreras", c.id), {
+      // La carrera vuelve a quedar disponible para los demás motorizados, con el precio que puso el cliente
+      // (si había aceptado una contraoferta) y sin los datos de este motorizado. Su oferta se borra.
+      const lote = writeBatch(db);
+      lote.update(doc(db, "carreras", c.id), {
         estado: "esperando", motoUid: null, paraMoto: null, paraMotoNombre: null, recogido: false, llegoEn: null,
+        motoNombre: null, motoTel: null, motoMoto: null, motoPlaca: null,
+        precio: c.precioCliente ?? c.precio, precioBs: c.precioBsCliente ?? c.precioBs ?? null, contraoferta: false,
         cancelaciones: arrayUnion({ por: "motorizado", motoUid: yo.uid, motoNombre: perfil.nombre, motivo, fecha: new Date() }),
       });
-      aviso("Cancelaste la carrera");
+      if (c.ofertaCliente) lote.delete(doc(db, "carreras", c.id, "ofertas", yo.uid));
+      const base = {
+        estado: "esperando", motoUid: null, paraMoto: null, paraMotoNombre: null, recogido: false, llegoEn: null,
+        cancelaciones: arrayUnion({ por: "motorizado", motoUid: yo.uid, motoNombre: perfil.nombre, motivo, fecha: new Date() }),
+      };
+      try { await lote.commit(); }
+      catch (e) {
+        // Reglas viejas (sin restaurar precio): se cancela como antes.
+        if (e.code !== "permission-denied") return aviso("No se pudo cancelar. Revisa tu internet e intenta de nuevo.");
+        try { await updateDoc(doc(db, "carreras", c.id), base); } catch { return aviso("No se pudo cancelar."); }
+      }
+      misOfertas.delete(c.id); aviso("Cancelaste la carrera");
     };
   }
 }

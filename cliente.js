@@ -10,7 +10,7 @@ import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
   pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
-} from "./comun.js?v=45";
+} from "./comun.js?v=46";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -929,9 +929,12 @@ function iniciar() {
         precio: pub ? pedido.oferta : precio(tarifas, pedido.tipo, pedido.km),
         recargos: pub ? [] : recargos(tarifas),
         ...(pub ? { ofertaCliente: true, precioSugerido: precio(tarifas, pedido.tipo, pedido.km) } : {}),
+        // Precio original del cliente: si un motorizado cancela después de una contraoferta, vuelve a este.
+        precioCliente: pub ? pedido.oferta : precio(tarifas, pedido.tipo, pedido.km),
         formaPago: pedido.formaPago,
         tasa: tarifas.tasa > 0 ? tarifas.tasa : null,
         precioBs: pub && pedido.ofertaBs && (pedido.formaPago === "bs" || pedido.formaPago === "pagomovil") ? pedido.ofertaBs : aBs(pub ? pedido.oferta : precio(tarifas, pedido.tipo, pedido.km), tarifas.tasa),
+        precioBsCliente: pub && pedido.ofertaBs && (pedido.formaPago === "bs" || pedido.formaPago === "pagomovil") ? pedido.ofertaBs : aBs(pub ? pedido.oferta : precio(tarifas, pedido.tipo, pedido.km), tarifas.tasa),
         estado: "esperando",
         paraMoto: pedido.para ? pedido.para.id : null,
         paraMotoNombre: pedido.para ? pedido.para.nombre : null,

@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=45";
-import { icono, pintarIconos } from "./iconos.js?v=45";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=46";
+import { icono, pintarIconos } from "./iconos.js?v=46";
 
 export { icono };
 pintarIconos();
@@ -235,7 +235,7 @@ export async function ruta(...args) {
   }
 }
 
-export const mapsLink = (p) => `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
+export const mapsLink = (p) => `https://www.google.com/maps/dir/?api=1&destination=${Number(p.lat)},${Number(p.lng)}`;
 
 // Todos los puntos de una carrera en orden: A, paradas, B y, si es ida y vuelta, A otra vez.
 export const puntosCarrera = (c) => [c.origen, ...(c.paradas || []), c.destino, ...(c.retorno ? [c.origen] : [])];
@@ -243,7 +243,7 @@ export const puntosCarrera = (c) => [c.origen, ...(c.paradas || []), c.destino, 
 // Ruta completa en Google Maps (con las paradas como puntos intermedios).
 export function mapsRuta(c) {
   const pts = puntosCarrera(c);
-  const txt = (p) => `${p.lat},${p.lng}`;
+  const txt = (p) => `${Number(p.lat)},${Number(p.lng)}`;
   const medio = pts.slice(1, -1).map(txt).join("|");
   return `https://www.google.com/maps/dir/?api=1&origin=${txt(pts[0])}&destination=${txt(pts[pts.length - 1])}${medio ? `&waypoints=${encodeURIComponent(medio)}` : ""}&travelmode=driving`;
 }
