@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=31";
-import { icono, pintarIconos } from "./iconos.js?v=31";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=32";
+import { icono, pintarIconos } from "./iconos.js?v=32";
 
 export { icono };
 pintarIconos();
@@ -537,14 +537,31 @@ addEventListener("beforeinstallprompt", (e) => {
   pedidoInstalar = e;
   document.querySelectorAll("[data-instalar]").forEach((b) => (b.hidden = false));
 });
+// iPhone/iPad: Safari no ofrece el aviso de instalar; se explica cómo agregarla a la pantalla de inicio.
+const esIos = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const instalada = navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+function guiaIos() {
+  const fondo = document.createElement("div");
+  fondo.className = "modal";
+  fondo.innerHTML = `<div class="ventana"><h2>Instalar en iPhone</h2>
+    <ol class="guia-ios">
+      <li>Abre esta página en <b>Safari</b>.</li>
+      <li>Toca el botón <b>Compartir</b> (el cuadrito con la flecha hacia arriba).</li>
+      <li>Baja y toca <b>Agregar a pantalla de inicio</b>.</li>
+      <li>Toca <b>Agregar</b>. El ícono de ${esc(NOMBRE)} queda junto a tus apps.</li>
+    </ol>
+    <button class="boton" data-no>Entendido</button></div>`;
+  document.body.append(fondo);
+  $("[data-no]", fondo).onclick = () => fondo.remove();
+}
 export function botonInstalar() {
   const b = document.createElement("button");
   b.className = "boton secundario chico";
   b.dataset.instalar = "";
-  b.hidden = !pedidoInstalar;
+  b.hidden = !pedidoInstalar && !(esIos && !instalada);
   b.innerHTML = `${icono("descargar")} Instalar`;
   b.onclick = async () => {
-    if (!pedidoInstalar) return;
+    if (!pedidoInstalar) { if (esIos) guiaIos(); return; }
     pedidoInstalar.prompt();
     await pedidoInstalar.userChoice.catch(() => {});
     pedidoInstalar = null;

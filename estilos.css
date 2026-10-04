@@ -342,6 +342,7 @@ textarea { resize: vertical; min-height: 70px; }
 }
 .ventana::before { content: ""; display: block; width: 42px; height: 5px; border-radius: 9px; background: var(--apagado); margin: -8px auto 14px; }
 .ventana h2 { font-size: 1.1rem; font-weight: 800; margin-bottom: 12px; }
+.guia-ios { margin: 0 0 16px; padding-left: 22px; display: grid; gap: 8px; line-height: 1.4; }
 .ventana textarea { margin-top: 10px; }
 @keyframes aparecer-fondo { from { opacity: 0; } }
 @keyframes subir-hoja { from { transform: translateY(70%); opacity: 0; } }
