@@ -889,3 +889,11 @@ body.con-selector { overflow: hidden; }
 .placa { display: inline-block; padding: 3px 12px; border-radius: 8px; background: #fde68a; color: #1b1033; border: 2px solid #1b1033; font-family: ui-monospace, monospace; letter-spacing: 2px; font-weight: 900; }
 .tocable { cursor: pointer; }
 .avisos-ok { display: inline-flex; align-items: center; gap: 6px; padding: 10px 14px; }
+/* ---------- Mira fija para guardar lugares con precisión ---------- */
+.mira { position: absolute; left: 50%; top: 50%; z-index: 650; pointer-events: none; display: none; }
+.mira .pin { position: absolute; left: -16px; top: -38px; animation: none; background: #ec4899; }
+.mira i { position: absolute; left: -5px; top: -5px; width: 10px; height: 10px; border-radius: 50%; background: #ec4899; border: 2px solid #fff; box-shadow: 0 0 0 4px rgba(236, 72, 153, .3); }
+.con-mira .mira { display: block; }
+.guardar-mira { display: none; position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(240px + env(safe-area-inset-bottom)); z-index: 1001; width: auto; padding: 14px 26px; box-shadow: var(--sombra-3); }
+.con-mira .guardar-mira { display: inline-flex; }
+.guia b { font-weight: 900; }

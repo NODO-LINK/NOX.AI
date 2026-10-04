@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=50";
-import { icono, pintarIconos } from "./iconos.js?v=50";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=51";
+import { icono, pintarIconos } from "./iconos.js?v=51";
 
 export { icono };
 pintarIconos();
@@ -273,7 +273,8 @@ export function marcarRecorrido(mapa, c) {
 const pin = (color, letra) => window.L.divIcon({
   className: "",
   html: `<div class="pin" style="background:${color}"><span>${letra}</span></div>`,
-  iconSize: [30, 30], iconAnchor: [15, 30],
+  // La punta del pin (cuadrado de 32 px girado 45°) queda 22,6 px bajo su centro: ahí está el punto exacto.
+  iconSize: [32, 32], iconAnchor: [16, 38],
 });
 export const ICONOS = {
   get origen() { return pin("#16a34a", "A"); },

@@ -10,7 +10,7 @@ import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
   pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
-} from "./comun.js?v=50";
+} from "./comun.js?v=51";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -473,7 +473,7 @@ function iniciar() {
   };
   const mismoSitio = (f, p) => Math.abs(f.lat - p.lat) < 1e-5 && Math.abs(f.lng - p.lng) < 1e-5;
   const esFavorito = (p) => favoritos.leer().some((f) => mismoSitio(f, p));
-  const iconoMio = (f) => L.divIcon({ className: "", html: `<div class="mi-lugar" style="background:${tipoMio(f).color}">${icono(tipoMio(f).icono)}</div>`, iconSize: [32, 32], iconAnchor: [16, 34] });
+  const iconoMio = (f) => L.divIcon({ className: "", html: `<div class="mi-lugar" style="background:${tipoMio(f).color}">${icono(tipoMio(f).icono)}</div>`, iconSize: [32, 32], iconAnchor: [16, 37] });
 
   // Ventana para guardar un lugar: se elige el tipo y se le pone nombre.
   function guardarLugar(p, sugerido = "") {
@@ -511,16 +511,18 @@ function iniciar() {
   }
 
   // Ventana para ver y borrar los lugares guardados.
-  function editarLugares(alCambiar) {
+  function editarLugares(alCambiar, alMover) {
     const fondo = document.createElement("div");
     fondo.className = "modal";
     const pintar = () => {
       const lista = favoritos.leer();
       fondo.innerHTML = `<div class="ventana"><h2>Mis lugares</h2>
         <div class="lista-mis-lugares">${lista.map((f, i) => `<div class="fila-mi-lugar"><span class="punto-tipo" style="background:${tipoMio(f).color}">${icono(tipoMio(f).icono)}</span><b>${esc(f.n)}</b>
+          ${alMover ? `<button class="quitar" data-mover="${i}" aria-label="Ajustar ubicación">${icono("pin")}</button>` : ""}
           <button class="quitar" data-borrar="${i}" aria-label="Borrar">${icono("basura")}</button></div>`).join("") || `<p class="nota">No tienes lugares guardados.</p>`}</div>
         <button class="boton" data-no>Listo</button></div>`;
       $("[data-no]", fondo).onclick = () => { fondo.remove(); alCambiar(); };
+      $$("[data-mover]", fondo).forEach((b) => (b.onclick = () => { fondo.remove(); alMover(Number(b.dataset.mover)); }));
       $$("[data-borrar]", fondo).forEach((b) => (b.onclick = () => {
         const l = favoritos.leer(); const [quitado] = l.splice(Number(b.dataset.borrar), 1);
         favoritos.guardar(l); aviso(`«${quitado.n}» borrado`); pintar();
@@ -783,6 +785,7 @@ function iniciar() {
     encuadrar(m);
     setTimeout(() => m.invalidateSize(), 50);
     let guardando = false;
+    let moviendo = null;   // índice del lugar guardado que se está reubicando (null = lugar nuevo)
     let buscandoYo = false;   // mientras se busca tu ubicación para ponerla como A   // modo "Guardar lugar": el próximo toque en el mapa se guarda en Mis lugares
     const ir = (p, z) => m.flyTo(p, Math.max(z, m.getZoom()), { duration: 0.6 });
 
@@ -793,15 +796,16 @@ function iniciar() {
       favoritos.leer().forEach((f) => {
         const mk = L.marker([f.lat, f.lng], { icon: iconoMio(f), zIndexOffset: 500 }).addTo(capaMios);
         mk.bindTooltip(esc(f.n), { permanent: true, direction: "top", offset: [0, -34], className: "nombre-mio" });
-        mk.on("click", () => { if (guardando) return; poner(L.latLng(f.lat, f.lng), f.n); });
+        mk.on("click", () => { if (guardando) return m.flyTo([f.lat, f.lng], Math.max(m.getZoom(), 17), { duration: 0.4 }); poner(L.latLng(f.lat, f.lng), f.n); });
       });
     };
 
     const pintar = () => {
       const n = pedido.puntos.length;
       dibujarRecorrido(m, capa, true, cambiar);
+      caja.classList.toggle("con-mira", guardando);
       $("#guia", caja).innerHTML = guardando
-        ? `${icono("favorito")}<span>Toca en el mapa el lugar que quieres guardar</span><button class="boton secundario chico" id="guardar-aqui">${icono("ubicarme")} Aquí estoy</button>`
+        ? `${icono("pin")}<span>Mueve el mapa hasta que la <b>punta del pin</b> quede justo en ${moviendo != null ? `«${esc(favoritos.leer()[moviendo]?.n || "el lugar")}»` : "el lugar"}. Acerca con dos dedos.</span><button class="boton secundario chico" id="guardar-aqui">${icono("ubicarme")} Aquí estoy</button>`
         : n === 0 && buscandoYo
         ? `${icono("ubicarme")}<span>Buscando tu ubicación… También puedes tocar el mapa.</span>`
         : n === 0
@@ -818,16 +822,35 @@ function iniciar() {
         + favs.map((f, i) => `<button class="chip-fav" data-favi="${i}"><span class="punto-tipo" style="background:${tipoMio(f).color}">${icono(tipoMio(f).icono)}</span>${esc(f.n)}</button>`).join("")
         + (favs.length ? `<button class="chip-fav editar" id="editar-lugares">${icono("basura")} Editar</button>` : "");
       $$("[data-favi]", caja).forEach((b) => (b.onclick = () => { const f = favs[Number(b.dataset.favi)]; guardando = false; ir([f.lat, f.lng], 16); poner(L.latLng(f.lat, f.lng), f.n); }));
-      $("#nuevo-lugar", caja).onclick = () => { guardando = !guardando; pintar(); };
-      if ($("#editar-lugares", caja)) $("#editar-lugares", caja).onclick = () => editarLugares(() => { pintarMios(); pintar(); });
+      $("#nuevo-lugar", caja).onclick = () => {
+        guardando = !guardando; moviendo = null;
+        if (guardando && m.getZoom() < 17) m.flyTo(m.getCenter(), 17, { duration: 0.5 });
+        pintar();
+      };
+      if ($("#editar-lugares", caja)) $("#editar-lugares", caja).onclick = () => editarLugares(() => { pintarMios(); pintar(); }, (i) => {
+        const f = favoritos.leer()[i]; if (!f) return;
+        guardando = true; moviendo = i;
+        m.flyTo([f.lat, f.lng], 18, { duration: 0.6 });
+        pintar();
+      });
       if ($("#guardar-aqui", caja)) $("#guardar-aqui", caja).onclick = () => {
         if (!navigator.geolocation) return aviso("Tu teléfono no permite usar la ubicación");
-        aviso("Buscando tu ubicación…");
-        navigator.geolocation.getCurrentPosition(
-          (p) => { const aqui = L.latLng(p.coords.latitude, p.coords.longitude); ir(aqui, 17); guardarAqui(aqui); },
-          () => aviso("No se pudo obtener tu ubicación. Activa el GPS y da permiso."),
-          { enableHighAccuracy: true, timeout: 15000 }
-        );
+        // Espera la mejor lectura del GPS (hasta 8 s o ±15 m) y centra la mira ahí; la persona ajusta y confirma.
+        aviso("Buscando tu ubicación exacta…");
+        let mejor = null;
+        const id = navigator.geolocation.watchPosition((p) => {
+          if (!mejor || p.coords.accuracy < mejor.coords.accuracy) mejor = p;
+          if (p.coords.accuracy <= 15) listo();
+        }, () => { navigator.geolocation.clearWatch(id); aviso("No se pudo obtener tu ubicación. Activa el GPS y da permiso."); },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+        const fin = setTimeout(() => listo(), 8000);
+        function listo() {
+          clearTimeout(fin); navigator.geolocation.clearWatch(id);
+          if (!mejor) return;
+          m.flyTo([mejor.coords.latitude, mejor.coords.longitude], 18, { duration: 0.6 });
+          aviso(`Te ubicamos (±${Math.round(mejor.coords.accuracy)} m). Ajusta la mira si hace falta y toca «Guardar este punto».`);
+          mejor = null;
+        }
       };
       const agregarBtn = $("#sel-agregar", caja);
       agregarBtn.disabled = n < 2 || n >= MAX_PUNTOS;
@@ -846,6 +869,13 @@ function iniciar() {
       cambiar();
     };
     const guardarAqui = async (latlng) => {
+      // Reubicar un lugar ya guardado: solo cambia su punto.
+      if (moviendo != null) {
+        const lista = favoritos.leer();
+        if (lista[moviendo]) { lista[moviendo] = { ...lista[moviendo], lat: latlng.lat, lng: latlng.lng }; favoritos.guardar(lista); aviso(`«${lista[moviendo].n}» quedó en el punto nuevo`); }
+        guardando = false; moviendo = null; pintarMios(); pintar();
+        return;
+      }
       const marca = L.marker(latlng, { icon: iconoMio({ tipo: "otro" }) }).addTo(m);
       const lugar = await guardarLugar(latlng);
       m.removeLayer(marca);
@@ -854,7 +884,16 @@ function iniciar() {
       pintarMios(); pintar();
       if (lugar && pedido.puntos.length < 2) poner(L.latLng(lugar.lat, lugar.lng), lugar.n);
     };
-    m.on("click", (e) => (guardando ? guardarAqui(e.latlng) : poner(e.latlng)));
+    m.on("click", (e) => {
+      if (guardando) return m.flyTo(e.latlng, Math.max(m.getZoom(), 17), { duration: 0.4 });
+      poner(e.latlng);
+      // Lejos, un toque cae impreciso: se acerca para que puedas arrastrar el pin al sitio exacto.
+      if (m.getZoom() < 16) { m.flyTo(e.latlng, 17, { duration: 0.5 }); aviso("Si no quedó justo, arrastra el pin al sitio exacto"); }
+    });
+    // Mira fija en el centro (modo Guardar lugar) y su botón para confirmar.
+    $(".mapa-sel", caja).insertAdjacentHTML("beforeend", `<div class="mira"><div class="pin" style="background:#ec4899"><span>${icono("favorito")}</span></div><i></i></div>`);
+    caja.insertAdjacentHTML("beforeend", `<button class="boton guardar-mira" id="guardar-mira">${icono("check")} Guardar este punto</button>`);
+    $("#guardar-mira", caja).onclick = () => guardarAqui(m.getCenter());
     pintarMios();
 
     // Tu ubicación se pone sola como punto A (si todavía no marcaste nada).
@@ -872,7 +911,7 @@ function iniciar() {
     });
 
     // Lugares de El Moján: se ven al acercarse; tocar uno lo usa como punto con su nombre.
-    mostrarLugares(m, (l) => (guardando ? guardarAqui(L.latLng(l.lat, l.lng)) : poner(L.latLng(l.lat, l.lng), l.n))).listo
+    mostrarLugares(m, (l) => (guardando ? m.flyTo([l.lat, l.lng], Math.max(m.getZoom(), 17), { duration: 0.4 }) : poner(L.latLng(l.lat, l.lng), l.n))).listo
       .then((l) => { lugares = l; })
       .catch(() => aviso("No se pudieron cargar los lugares. Puedes tocar el mapa igual."));
 
