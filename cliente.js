@@ -10,7 +10,7 @@ import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
   sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
-} from "./comun.js?v=39";
+} from "./comun.js?v=40";
 
 if (!avisoSinConfigurar()) iniciar();
 

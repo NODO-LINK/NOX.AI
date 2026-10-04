@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=39";
-import { icono, pintarIconos } from "./iconos.js?v=39";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=40";
+import { icono, pintarIconos } from "./iconos.js?v=40";
 
 export { icono };
 pintarIconos();
@@ -716,24 +716,40 @@ export function botonInstalar() {
   return b;
 }
 
-// ---------- Sonido de alerta ----------
-// El navegador solo deja sonar después de que la persona toca la pantalla: el primer toque prepara el sonido.
-let ctxSonido = null;
+// ---------- Sonido de alerta: corneta de moto ----------
+// El navegador solo deja sonar después de que la persona toca la pantalla: el primer toque prepara el sonido
+// y carga la corneta (corneta.mp3). Si el archivo no cargó, se imita con dos tonos.
+let ctxSonido = null, corneta = null;
 addEventListener("pointerdown", () => {
-  try { ctxSonido = ctxSonido || new (window.AudioContext || window.webkitAudioContext)(); ctxSonido.resume(); } catch {}
+  try {
+    ctxSonido = ctxSonido || new (window.AudioContext || window.webkitAudioContext)();
+    ctxSonido.resume();
+    if (!corneta) {
+      corneta = fetch("corneta.mp3").then((r) => r.arrayBuffer()).then((b) => ctxSonido.decodeAudioData(b)).catch(() => (corneta = null));
+    }
+  } catch {}
 }, { capture: true });
-export function sonarAlerta() {
-  if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
+export async function sonarAlerta() {
+  if (navigator.vibrate) navigator.vibrate([150, 80, 400]);
   if (!ctxSonido) return;
   try {
     ctxSonido.resume();
+    const buf = corneta && (await corneta);
+    if (buf && buf.duration) {
+      const fuente = ctxSonido.createBufferSource(), vol = ctxSonido.createGain();
+      vol.gain.value = 0.9;
+      fuente.buffer = buf; fuente.connect(vol); vol.connect(ctxSonido.destination); fuente.start();
+      return;
+    }
+    // Respaldo: "pi-piii" con dos tonos de bocina.
     const t = ctxSonido.currentTime;
-    [[0, 880], [0.22, 1175], [0.44, 1568]].forEach(([d, f]) => {
+    [[0, 0.16], [0.23, 0.42]].forEach(([d, largo]) => [415, 498].forEach((f) => {
       const o = ctxSonido.createOscillator(), g = ctxSonido.createGain();
-      o.frequency.value = f; o.connect(g); g.connect(ctxSonido.destination);
-      g.gain.setValueAtTime(0.5, t + d); g.gain.exponentialRampToValueAtTime(0.001, t + d + 0.3);
-      o.start(t + d); o.stop(t + d + 0.3);
-    });
+      o.type = "square"; o.frequency.value = f; o.connect(g); g.connect(ctxSonido.destination);
+      g.gain.setValueAtTime(0.0001, t + d); g.gain.exponentialRampToValueAtTime(0.18, t + d + 0.01);
+      g.gain.setValueAtTime(0.18, t + d + largo - 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + d + largo);
+      o.start(t + d); o.stop(t + d + largo);
+    }));
   } catch {}
 }
 

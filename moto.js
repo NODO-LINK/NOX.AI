@@ -5,9 +5,9 @@ import {
   doc, addDoc, onSnapshot, updateDoc, collection, query, where, runTransaction, serverTimestamp, arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  ASPECTOS, insigniasSeguridad, textoCobro, FORMAS_PAGO, bs, auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
+  sonarAlerta, ASPECTOS, insigniasSeguridad, textoCobro, FORMAS_PAGO, bs, auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar,
-} from "./comun.js?v=39";
+} from "./comun.js?v=40";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -146,17 +146,12 @@ function iniciar() {
   document.addEventListener("visibilitychange", aplicarPantalla);
 
   // ---------- Sonido ----------
+  // Corneta de moto (la misma de la app del cliente); solo después de tocar "Activar sonido".
   function sonar() {
     if (!sonido) return;
-    const t = sonido.currentTime;
-    [0, 0.25, 0.5].forEach((d) => {
-      const o = sonido.createOscillator(), g = sonido.createGain();
-      o.frequency.value = 880; o.connect(g); g.connect(sonido.destination);
-      g.gain.setValueAtTime(0.4, t + d); g.gain.exponentialRampToValueAtTime(0.001, t + d + 0.2);
-      o.start(t + d); o.stop(t + d + 0.2);
-    });
-    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    sonarAlerta();
   }
+
 
   // ---------- Ubicación en vivo ----------
   // Con carrera: cada 8 s (el cliente lo sigue). De turno sin carrera: cada 30 s (para "a X min de ti").
