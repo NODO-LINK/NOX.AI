@@ -7,7 +7,7 @@ import {
 import {
   auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar,
-} from "./comun.js?v=35";
+} from "./comun.js?v=36";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -328,7 +328,7 @@ function iniciar() {
 
   function activarMiCarrera(c) {
     $("#chat").onclick = () => abrirChat(c.id, yo.uid, perfil.nombre, c.clienteNombre.split(" ")[0]);
-    mapa = nuevoMapa("mapa");
+    mapa = nuevoMapa("mapa", "", { yo: true });
     mapa.fitBounds(marcarRecorrido(mapa, c).pad(0.3), { animate: false });
     // Lugares de El Moján (escuelas, mercados, playas…) para ubicarse mejor.
     mostrarLugares(mapa).listo.catch(() => {});

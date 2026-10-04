@@ -10,7 +10,7 @@ import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
   sonarAlerta,
-} from "./comun.js?v=35";
+} from "./comun.js?v=36";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -458,12 +458,13 @@ function iniciar() {
       </div>`;
     document.body.append(caja);
     document.body.classList.add("con-selector");
-    const m = nuevoMapa("mapa-sel", "libre");
+    const m = nuevoMapa("mapa-sel", "libre", { yo: true });
     const capaMios = L.layerGroup().addTo(m);
     const capa = L.layerGroup().addTo(m);
     encuadrar(m);
     setTimeout(() => m.invalidateSize(), 50);
-    let guardando = false;   // modo "Guardar lugar": el próximo toque en el mapa se guarda en Mis lugares
+    let guardando = false;
+    let buscandoYo = false;   // mientras se busca tu ubicación para ponerla como A   // modo "Guardar lugar": el próximo toque en el mapa se guarda en Mis lugares
     const ir = (p, z) => m.flyTo(p, Math.max(z, m.getZoom()), { duration: 0.6 });
 
     // Mis lugares en el mapa: tocarlos los usa como punto.
@@ -482,6 +483,8 @@ function iniciar() {
       dibujarRecorrido(m, capa, true, cambiar);
       $("#guia", caja).innerHTML = guardando
         ? `${icono("favorito")}<span>Toca en el mapa el lugar que quieres guardar</span><button class="boton secundario chico" id="guardar-aqui">${icono("ubicarme")} Aquí estoy</button>`
+        : n === 0 && buscandoYo
+        ? `${icono("ubicarme")}<span>Buscando tu ubicación… También puedes tocar el mapa.</span>`
         : n === 0
         ? `<i class="letra-a">A</i><span>Toca el mapa o un lugar donde te buscamos</span>`
         : n === 1
@@ -535,6 +538,20 @@ function iniciar() {
     m.on("click", (e) => (guardando ? guardarAqui(e.latlng) : poner(e.latlng)));
     pintarMios();
 
+    // Tu ubicación se pone sola como punto A (si todavía no marcaste nada).
+    const vacio = pedido.puntos.length === 0;
+    buscandoYo = vacio;
+    m.miUbicacion.then((aqui) => {
+      buscandoYo = false;
+      if (!document.body.contains(caja) || !vacio || pedido.puntos.length) return pintar();
+      if (!aqui) { pintar(); return aviso("Activa el GPS para ponerte en el mapa automáticamente"); }
+      if (!L.latLngBounds(m.options.maxBounds).contains(aqui)) { pintar(); return aviso("Estás fuera de El Moján: marca el punto A en el mapa"); }
+      pedido.puntos.push(aqui); pedido.refs.push("Mi ubicación actual");
+      ir(aqui, 17);
+      cambiar();
+      aviso("Te ubicamos: el punto A es donde estás. Ahora toca a dónde vas.");
+    });
+
     // Lugares de El Moján: se ven al acercarse; tocar uno lo usa como punto con su nombre.
     mostrarLugares(m, (l) => (guardando ? guardarAqui(L.latLng(l.lat, l.lng)) : poner(L.latLng(l.lat, l.lng), l.n))).listo
       .then((l) => { lugares = l; })
@@ -564,15 +581,16 @@ function iniciar() {
     $("#sel-agregar", caja).onclick = () => { pedido.agregando = !pedido.agregando; pintar(); };
     $("#sel-ubicacion", caja).onclick = () => {
       if (!navigator.geolocation) return aviso("Tu teléfono no permite usar la ubicación");
+      const usar = (aqui) => {
+        if (pedido.puntos.length) { pedido.puntos[0] = aqui; pedido.refs[0] = pedido.refs[0] || "Mi ubicación actual"; }
+        else { pedido.puntos.push(aqui); pedido.refs.push("Mi ubicación actual"); }
+        ir(aqui, 16);
+        cambiar();
+      };
+      if (m._yo) return usar(m._yo);
       aviso("Buscando tu ubicación…");
       navigator.geolocation.getCurrentPosition(
-        (p) => {
-          const aqui = L.latLng(p.coords.latitude, p.coords.longitude);
-          if (pedido.puntos.length) { pedido.puntos[0] = aqui; pedido.refs[0] = pedido.refs[0] || "Mi ubicación actual"; }
-          else { pedido.puntos.push(aqui); pedido.refs.push("Mi ubicación actual"); }
-          ir(aqui, 16);
-          cambiar();
-        },
+        (p) => usar(L.latLng(p.coords.latitude, p.coords.longitude)),
         () => aviso("No se pudo obtener tu ubicación. Activa el GPS y da permiso."),
         { enableHighAccuracy: true, timeout: 15000 }
       );
@@ -751,7 +769,7 @@ function iniciar() {
         <div class="mapa" id="mapa"></div>
         ${resumen}
         <button class="boton peligro" id="cancelar">Cancelar carrera</button>`;
-      mapa = nuevoMapa("mapa");
+      mapa = nuevoMapa("mapa", "", { yo: true });
       const limites = marcarRecorrido(mapa, c);
       mapa.fitBounds(limites.pad(0.3), { animate: false });
       let marcaMoto = null, centrado = false;

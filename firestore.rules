@@ -42,6 +42,12 @@ service cloud.firestore {
       allow list, write: if esAdmin();
     }
 
+    // Puntos de referencia del mapa: los agrega el administrador y los ven todos.
+    match /lugares/{id} {
+      allow read: if dentro();
+      allow write: if esAdmin();
+    }
+
     match /carreras/{id} {
       // Una carrera sola se puede abrir con su id (enlace de seguimiento que el cliente comparte).
       allow get: if dentro();

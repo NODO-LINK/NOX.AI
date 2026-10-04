@@ -681,3 +681,13 @@ body.con-selector { overflow: hidden; }
 .campo-oferta input { flex: 1; min-width: 0; font-size: 1.6rem; font-weight: 800; color: var(--marca); text-align: center; padding: 8px; }
 .campo-oferta .boton.chico { width: 44px; height: 44px; padding: 0; font-size: 1.4rem; flex: 0 0 auto; }
 .pildora.oferta-pill { background: #fef3c7; color: #92400e; }
+/* ---------- Orientarse: tu ubicación, sectores y puntos de referencia ---------- */
+.yo-punto { width: 22px; height: 22px; border-radius: 50%; background: #2563eb; border: 3px solid #fff; box-shadow: 0 0 0 0 rgba(37, 99, 235, .5), 0 2px 6px rgba(0, 0, 0, .35); animation: pulso-yo 2s ease-out infinite; }
+@keyframes pulso-yo { 0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, .55), 0 2px 6px rgba(0, 0, 0, .35); } 100% { box-shadow: 0 0 0 18px rgba(37, 99, 235, 0), 0 2px 6px rgba(0, 0, 0, .35); } }
+.nombre-sector { transform: translate(-50%, -50%); width: max-content; max-width: 160px; text-align: center; font: 900 13px/1.1 "Nunito", system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .9), 0 0 8px rgba(0, 0, 0, .6); pointer-events: auto; }
+.leaflet-container:not(.satelital) .nombre-sector { color: #334155; text-shadow: 0 0 3px #fff, 0 0 6px #fff; }
+.leaflet-tooltip.nombre-lugar.propio { background: #db2777; color: #fff; }
+.segmento.tres::before { width: calc((100% - 10px) / 3); }
+.segmento.tres[data-pos="1"]::before { transform: translateX(100%); }
+.segmento.tres[data-pos="2"]::before { transform: translateX(200%); }
+.fila-mi-lugar small { color: var(--texto-2); font-size: .75rem; flex: 0 0 auto; }

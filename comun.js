@@ -3,10 +3,10 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, connectFirestoreEmulator, doc, getDoc, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
+  getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=35";
-import { icono, pintarIconos } from "./iconos.js?v=35";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=36";
+import { icono, pintarIconos } from "./iconos.js?v=36";
 
 export { icono };
 pintarIconos();
@@ -190,14 +190,35 @@ function ponerFondo(m, fondo) {
     ? [
         L.tileLayer(ESRI + "World_Imagery/MapServer/tile/{z}/{y}/{x}", { ...op, maxNativeZoom: 18, attribution: "Imágenes © Esri, Maxar" }),
         L.tileLayer(ESRI + "Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}", { ...op, maxNativeZoom: 18, opacity: 0.75 }),
-        L.tileLayer(ESRI + "Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", { ...op, maxNativeZoom: 18 }),
+        // Nombres de calles y sectores (de OpenStreetMap) encima de la foto.
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png", { ...op, subdomains: "abcd", attribution: "© OpenStreetMap, © CARTO" }),
       ]
     : [L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { ...op, attribution: "© OpenStreetMap" })];
   m._fondo.forEach((c) => c.addTo(m));
   m.getContainer().classList.toggle("satelital", fondo === "satelite");
 }
 
-export function nuevoMapa(id, modo = "") {
+// Punto azul con tu ubicación en vivo (como en Google Maps). Devuelve una promesa con la primera posición.
+function seguirMiUbicacion(m) {
+  const L = window.L;
+  if (!navigator.geolocation) return Promise.resolve(null);
+  let punto = null, aro = null, primera;
+  const lista = new Promise((r) => (primera = r));
+  const id = navigator.geolocation.watchPosition((p) => {
+    const ll = [p.coords.latitude, p.coords.longitude];
+    m._yo = L.latLng(ll);
+    if (!m._loaded) return;
+    if (!punto) {
+      aro = L.circle(ll, { radius: Math.min(p.coords.accuracy, 300), color: "#2563eb", weight: 1, fillOpacity: 0.12, interactive: false }).addTo(m);
+      punto = L.marker(ll, { icon: L.divIcon({ className: "", html: '<div class="yo-punto"></div>', iconSize: [22, 22], iconAnchor: [11, 11] }), interactive: false, zIndexOffset: 900 }).addTo(m);
+    } else { punto.setLatLng(ll); aro.setLatLng(ll).setRadius(Math.min(p.coords.accuracy, 300)); }
+    primera(m._yo);
+  }, () => primera(null), { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 });
+  m.on("unload", () => navigator.geolocation.clearWatch(id));
+  return lista;
+}
+
+export function nuevoMapa(id, modo = "", { yo = false } = {}) {
   const L = window.L;
   const libre = modo === "libre", mini = modo === "mini";
   const m = L.map(id, {
@@ -209,13 +230,19 @@ export function nuevoMapa(id, modo = "") {
   }).setView(CENTRO, 14);
   ponerFondo(m, leerFondo());
   if (mini) return m;
+  m.miUbicacion = yo ? seguirMiUbicacion(m) : Promise.resolve(null);
   L.control.zoom({ position: "bottomleft" }).addTo(m);
   const Controles = L.Control.extend({
     options: { position: "bottomleft" },
     onAdd() {
       const caja = L.DomUtil.create("div", "leaflet-bar controles-mapa");
-      caja.innerHTML = `<a href="#" role="button" data-fondo title="Cambiar entre satélite y calles">${icono("capas")}</a>${libre ? "" : `<a href="#" role="button" data-mover title="Mover el mapa">${icono("mano")}</a>`}<a href="#" role="button" data-centro title="Volver al centro de El Moján">${icono("centro")}</a>`;
+      caja.innerHTML = `${yo ? `<a href="#" role="button" data-yo title="Ir a mi ubicación">${icono("ubicarme")}</a>` : ""}<a href="#" role="button" data-fondo title="Cambiar entre satélite y calles">${icono("capas")}</a>${libre ? "" : `<a href="#" role="button" data-mover title="Mover el mapa">${icono("mano")}</a>`}<a href="#" role="button" data-centro title="Volver al centro de El Moján">${icono("centro")}</a>`;
       L.DomEvent.disableClickPropagation(caja);
+      if (yo) caja.querySelector("[data-yo]").onclick = (e) => {
+        e.preventDefault();
+        if (m._yo) m.flyTo(m._yo, Math.max(m.getZoom(), 17), { duration: 0.6 });
+        else aviso("Buscando tu ubicación… Activa el GPS y da permiso.");
+      };
       caja.querySelector("[data-fondo]").onclick = (e) => {
         e.preventDefault();
         const nuevo = leerFondo() === "satelite" ? "calles" : "satelite";
@@ -430,6 +457,8 @@ const TIPOS_LUGAR = {
   banco: { icono: "institucion", color: "#0f766e", nombre: "Banco" },
   gasolina: { icono: "gasolina", color: "#b91c1c", nombre: "Gasolina" },
   transporte: { icono: "moto", color: "#4f46e5", nombre: "Transporte" },
+  referencia: { icono: "pin", color: "#db2777", nombre: "Punto de referencia" },
+  sector: { icono: "casa", color: "#334155", nombre: "Sector o barrio" },
   otro: { icono: "pin", color: "#6b7280", nombre: "Lugar" },
   favorito: { icono: "casa", color: "#7c3aed", nombre: "Tus lugares" },
 };
@@ -449,17 +478,30 @@ function clasificar(tag) {
   if (a === "bank" || a === "atm") return "banco";
   if (a === "fuel") return "gasolina";
   if (a === "bus_station" || tag.highway === "bus_stop") return "transporte";
+  if (tag.place) return "sector";
   return "otro";
 }
 
 // Se descargan una vez y se guardan 7 días en el teléfono (Overpass, gratis).
 let lugaresEnCamino = null;
 export function cargarLugares() {
-  if (!lugaresEnCamino) lugaresEnCamino = descargarLugares().catch((e) => { lugaresEnCamino = null; throw e; });
+  if (!lugaresEnCamino) lugaresEnCamino = Promise.all([
+    descargarLugares().catch(() => []),
+    lugaresPropios().catch(() => []),
+  ]).then(([osm, propios]) => {
+    if (!osm.length && !propios.length) throw new Error("sin lugares");
+    return [...propios, ...osm];
+  }).catch((e) => { lugaresEnCamino = null; throw e; });
   return lugaresEnCamino;
 }
+// Puntos de referencia que agrega el administrador (los ve todo el mundo).
+async function lugaresPropios() {
+  const s = await getDocs(collection(db, "lugares"));
+  return s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((l) => l.n && l.lat != null).map((l) => ({ n: l.n, t: l.t || "referencia", lat: l.lat, lng: l.lng, propio: true }));
+}
+export const TIPOS_PARA_AGREGAR = ["referencia", "comida", "mercado", "educacion", "salud", "iglesia", "gobierno", "parque", "playa", "transporte", "sector"];
 async function descargarLugares() {
-  const CLAVE = "whereapp.lugares.v1";
+  const CLAVE = "whereapp.lugares.v2";
   try { const g = JSON.parse(localStorage.getItem(CLAVE)); if (g && Date.now() - g.t < 7 * 864e5 && g.l.length) return g.l; } catch {}
   const [s, w, n, e] = [CENTRO[0] - 0.09, CENTRO[1] - 0.09, CENTRO[0] + 0.09, CENTRO[1] + 0.09].map((x) => x.toFixed(4));
   const caja = `(${s},${w},${n},${e})`;
@@ -469,7 +511,13 @@ async function descargarLugares() {
     nwr["natural"="beach"]${caja};
     nwr["name"]["leisure"~"^(park|stadium|sports_centre|pitch|playground)$"]${caja};
     nwr["name"]["tourism"]${caja};
-    nwr["name"]["office"="government"]${caja};
+    nwr["name"]["office"]${caja};
+    nwr["name"]["amenity"]${caja};
+    nwr["name"]["historic"]${caja};
+    nwr["name"]["man_made"]${caja};
+    nwr["name"]["landuse"~"^(cemetery|recreation_ground|religious)$"]${caja};
+    nwr["name"]["highway"="bus_stop"]${caja};
+    nwr["name"]["place"~"^(neighbourhood|suburb|quarter|hamlet|village|locality|isolated_dwelling)$"]${caja};
   );out center tags;`;
   const r = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
   const j = await r.json();
@@ -509,25 +557,36 @@ export function mostrarLugares(m, alTocar) {
   const capa = L.layerGroup().addTo(m);
   const marcas = new Map();
   let lista = null;
-  const quitar = (k) => { const mk = marcas.get(k); mk.unbindTooltip(); capa.removeLayer(mk); marcas.delete(k); };
+  const quitar = (k) => { const mk = marcas.get(k); if (mk.getTooltip()) mk.unbindTooltip(); capa.removeLayer(mk); marcas.delete(k); };
   // Solo agrega o quita los lugares que entran o salen de la vista: así el mapa no parpadea al moverse.
   const pintar = () => {
     m.getContainer().classList.toggle("sin-nombres", m.getZoom() < 16.5);
     if (!lista) return;
-    if (m.getZoom() < 15) { [...marcas.keys()].forEach(quitar); return; }
+    const z = m.getZoom();
+    // Lejos: solo sectores y puntos de referencia. Cerca: todos los lugares.
+    const visible = (l) => l.t === "sector" ? z >= 13.5 && z < 17.5 : l.propio ? z >= 14 : z >= 15;
     const vista = m.getBounds().pad(0.6);
-    [...marcas.keys()].forEach((k) => { if (!vista.contains(marcas.get(k).getLatLng())) quitar(k); });
+    [...marcas.keys()].forEach((k) => { const l = lista[k]; if (!visible(l) || !vista.contains(marcas.get(k).getLatLng())) quitar(k); });
     lista.forEach((l, k) => {
-      if (marcas.has(k) || !vista.contains([l.lat, l.lng])) return;
-      const mk = L.marker([l.lat, l.lng], { icon: iconoLugar(l) }).addTo(capa);
-      mk.bindTooltip(esc(l.n), { permanent: true, direction: "top", offset: [0, -12], className: "nombre-lugar" });
+      if (marcas.has(k) || !visible(l) || !vista.contains([l.lat, l.lng])) return;
+      if (l.t === "sector") {
+        // Sectores y barrios: solo el nombre grande, para orientarse.
+        const mk = L.marker([l.lat, l.lng], { icon: L.divIcon({ className: "", html: `<div class="nombre-sector">${esc(l.n)}</div>`, iconSize: [0, 0] }), interactive: !!alTocar }).addTo(capa);
+        if (alTocar) mk.on("click", () => alTocar(l));
+        marcas.set(k, mk);
+        return;
+      }
+      const mk = L.marker([l.lat, l.lng], { icon: iconoLugar(l), zIndexOffset: l.propio ? 300 : 0 }).addTo(capa);
+      mk.bindTooltip(esc(l.n), { permanent: true, direction: "top", offset: [0, -12], className: "nombre-lugar" + (l.propio ? " propio" : "") });
       if (alTocar) mk.on("click", () => alTocar(l));
       marcas.set(k, mk);
     });
   };
   m.on("moveend zoomend", pintar);
   const listo = cargarLugares().then((l) => { lista = l; pintar(); return l; });
-  return { capa, listo };
+  // Para que el panel pueda refrescar los lugares después de agregar uno.
+  const recargar = () => { [...marcas.keys()].forEach(quitar); lugaresEnCamino = null; return cargarLugares().then((l) => { lista = l; pintar(); return l; }); };
+  return { capa, listo, recargar };
 }
 
 // ---------- Modo oscuro ----------

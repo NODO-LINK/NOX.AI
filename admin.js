@@ -9,8 +9,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   auth, authSecundaria, db, NOMBRE, botonTema, botonInstalar, nuevoMapa, ICONOS, recargos, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
-  leerTarifas, aviso, avisoSinConfigurar,
-} from "./comun.js?v=35";
+  leerTarifas, aviso, avisoSinConfigurar, mostrarLugares, tipoLugar, TIPOS_PARA_AGREGAR,
+} from "./comun.js?v=36";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -18,6 +18,7 @@ function iniciar() {
   let subs = [], ruta = "motos", tarifas = null;
   let motos = [], carreras = [], resenas = [], pagos = [], llamadas = {}, visitas = {}, cedulas = {}, clientes = [], bloqueados = {}, notasClientes = {};
   let mapaVivo = null, marcasVivo = {}, filtroClientes = "";
+  let lugaresPropios = [], mapaLugares = null;
   const DIA = 864e5;
 
   onAuthStateChanged(auth, async (u) => {
@@ -80,6 +81,11 @@ function iniciar() {
     });
     escuchar(collection(db, "bloqueados"), (s) => { bloqueados = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); });
     escuchar(doc(db, "stats", "visitas"), (s) => { visitas = s.exists() ? s.data() : {}; });
+    escuchar(collection(db, "lugares"), (s) => {
+      lugaresPropios = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.n).localeCompare(b.n));
+      pintarListaLugares();
+      return false;   // no se redibuja toda la pestaña (el mapa se quedaría en blanco)
+    });
     ir("motos");
   }
 
@@ -89,6 +95,7 @@ function iniciar() {
     $("#punto-resenas").hidden = !resenas.some((r) => !r.aprobada);
     const foco = document.activeElement;
     if (foco && /INPUT|TEXTAREA|SELECT/.test(foco.tagName) && $("#vista").contains(foco)) return;
+    if (ruta === "mas" && subMas === "lugares") return;   // el mapa de lugares no se redibuja solo
     if (!$(".modal")) ir(ruta, true);
   }
 
@@ -97,6 +104,7 @@ function iniciar() {
     activarBarra(r);
     const y = window.scrollY;
     if (mapaVivo && r !== "motos") { mapaVivo.remove(); mapaVivo = null; marcasVivo = {}; }
+    if (mapaLugares) { mapaLugares.remove(); mapaLugares = null; }
     ({ motos: vistaMotos, pagos: vistaPagos, carreras: vistaCarreras, clientes: vistaClientes, resenas: vistaResenas, mas: vistaMas })[r]();
     if (!quieto) transicion();
     window.scrollTo(0, quieto ? y : 0);
@@ -429,17 +437,89 @@ function iniciar() {
   // Pestaña "Más": tarifas y números.
   let subMas = "tarifas";
   function vistaMas() {
-    $("#vista").innerHTML = `<div class="segmento" id="sub-mas" data-activo="${subMas === "tarifas" ? "delivery" : "mototaxi"}">
+    if (mapaLugares) { mapaLugares.remove(); mapaLugares = null; }
+    const subs = ["tarifas", "stats", "lugares"];
+    $("#vista").innerHTML = `<div class="segmento tres" id="sub-mas" data-pos="${subs.indexOf(subMas)}">
       <button data-s="tarifas" class="${subMas === "tarifas" ? "activo" : ""}">${icono("dolar")} Tarifas</button>
-      <button data-s="stats" class="${subMas === "stats" ? "activo" : ""}">${icono("grafica")} Números</button></div><div id="sub-vista"></div>`;
+      <button data-s="stats" class="${subMas === "stats" ? "activo" : ""}">${icono("grafica")} Números</button>
+      <button data-s="lugares" class="${subMas === "lugares" ? "activo" : ""}">${icono("pin")} Lugares</button></div><div id="sub-vista"></div>`;
     const vista = $("#vista");
     // Las vistas escriben en #vista: se les presta un contenedor y luego se pone debajo del selector.
     const real = vista.id;
     const cont = $("#sub-vista");
     vista.id = ""; cont.id = "vista";
-    (subMas === "tarifas" ? vistaTarifas : vistaStats)();
+    ({ tarifas: vistaTarifas, stats: vistaStats, lugares: vistaLugares })[subMas]();
     cont.id = "sub-vista"; vista.id = real;
     $$("#sub-mas button").forEach((b) => (b.onclick = () => { subMas = b.dataset.s; vistaMas(); }));
+  }
+
+  // ---------- Lugares: puntos de referencia que ven clientes y motorizados ----------
+  let capaLugares = null;
+  function vistaLugares() {
+    $("#vista").innerHTML = `
+      <h1 class="titulo">Puntos de referencia</h1>
+      <p class="nota">Toca el mapa donde está el lugar (una bodega, una cancha, la casa de alguien conocido, un sector…) y ponle nombre. Lo verán todos los clientes y motorizados en sus mapas.</p>
+      <div class="mapa" id="mapa-lugares" style="height:380px"></div>
+      <div class="caja" style="margin-top:14px"><h2>Agregados por ti</h2><div id="lista-lugares"></div></div>`;
+    // El mapa se crea después de que la vista está en su lugar.
+    setTimeout(() => {
+      if (!$("#mapa-lugares") || mapaLugares) return;
+      mapaLugares = nuevoMapa("mapa-lugares", "libre");
+      mapaLugares.setView([10.9833, -71.6667], 15, { animate: false });
+      capaLugares = mostrarLugares(mapaLugares, (l) => aviso(`${l.n} · ${tipoLugar(l.t).nombre}`));
+      mapaLugares.on("click", (e) => nuevoLugar(e.latlng));
+      pintarListaLugares();
+    }, 0);
+  }
+  function pintarListaLugares() {
+    const caja = $("#lista-lugares");
+    if (!caja) return;
+    caja.innerHTML = lugaresPropios.length ? lugaresPropios.map((l) => `
+      <div class="fila-mi-lugar"><span class="punto-tipo" style="background:${tipoLugar(l.t).color}">${icono(tipoLugar(l.t).icono)}</span>
+        <b>${esc(l.n)}</b><small>${esc(tipoLugar(l.t).nombre)}</small>
+        <button class="quitar" data-ver="${l.id}" aria-label="Ver en el mapa">${icono("pin")}</button>
+        <button class="quitar" data-borrar-lugar="${l.id}" aria-label="Borrar">${icono("basura")}</button></div>`).join("")
+      : `<p class="nota">Todavía no agregaste lugares.</p>`;
+    $$("[data-ver]", caja).forEach((b) => (b.onclick = () => {
+      const l = lugaresPropios.find((x) => x.id === b.dataset.ver);
+      if (mapaLugares) { mapaLugares.flyTo([l.lat, l.lng], 17, { duration: 0.6 }); $("#mapa-lugares").scrollIntoView({ behavior: "smooth", block: "center" }); }
+    }));
+    $$("[data-borrar-lugar]", caja).forEach((b) => (b.onclick = async () => {
+      const l = lugaresPropios.find((x) => x.id === b.dataset.borrarLugar);
+      if (!confirm(`¿Borrar «${l.n}»?`)) return;
+      await deleteDoc(doc(db, "lugares", l.id));
+      aviso("Lugar borrado");
+      if (capaLugares) capaLugares.recargar();
+    }));
+  }
+  function nuevoLugar(latlng) {
+    const fondo = document.createElement("div");
+    fondo.className = "modal";
+    fondo.innerHTML = `<form class="ventana"><h2>Nuevo punto de referencia</h2>
+      <label>Nombre<input name="n" maxlength="50" required placeholder="Ej.: Bodega Los Primos, Cancha del sector, Sector Las Palmas"></label>
+      <label>Tipo<select name="t">${TIPOS_PARA_AGREGAR.map((t) => `<option value="${t}">${esc(tipoLugar(t).nombre)}</option>`).join("")}</select></label>
+      <button class="boton">Guardar</button>
+      <button class="boton secundario" type="button" data-no>Cancelar</button></form>`;
+    document.body.append(fondo);
+    const marca = window.L.marker(latlng).addTo(mapaLugares);
+    const cerrar = () => { fondo.remove(); if (mapaLugares) mapaLugares.removeLayer(marca); };
+    $("[data-no]", fondo).onclick = cerrar;
+    $("form", fondo).onsubmit = async (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const n = String(f.get("n")).trim();
+      if (!n) return;
+      try {
+        await addDoc(collection(db, "lugares"), { n, t: f.get("t"), lat: latlng.lat, lng: latlng.lng, creado: serverTimestamp() });
+        aviso(`«${n}» agregado. Ya lo ven todos.`);
+        cerrar();
+        if (capaLugares) capaLugares.recargar();
+      } catch (err) {
+        console.error(err);
+        aviso("No se pudo guardar. ¿Publicaste las reglas nuevas de Firebase?");
+      }
+    };
+    setTimeout(() => $("input", fondo).focus(), 50);
   }
 
   // ---------- Números ----------
