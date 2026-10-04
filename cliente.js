@@ -10,7 +10,7 @@ import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
   pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
-} from "./comun.js?v=51";
+} from "./comun.js?v=52";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -439,12 +439,14 @@ function iniciar() {
   }
 
   // Marcadores y línea del recorrido en un mapa (arrastrables en el mapa completo).
-  function dibujarRecorrido(m, capa, editable, alMover) {
+  function dibujarRecorrido(m, capa, editable, alMover, { oculto = null, alTocar = null } = {}) {
     capa.clearLayers();
     const n = pedido.puntos.length;
     pedido.puntos.forEach((p, i) => {
-      const marca = L.marker(p, { icon: iconoPunto(i, n), draggable: editable }).addTo(capa);
+      if (i === oculto) return;   // el punto que se está moviendo con la mira no se dibuja dos veces
+      const marca = L.marker(p, { icon: iconoPunto(i, n), draggable: editable, zIndexOffset: 800 }).addTo(capa);
       if (editable) marca.on("dragend", (e) => { pedido.puntos[i] = e.target.getLatLng(); alMover && alMover(); });
+      if (alTocar) marca.on("click", () => alTocar(i));
     });
     if (pedido.linea && n >= 2) L.polyline(pedido.linea, { color: "#7c3aed", weight: 5, opacity: .75 }).addTo(capa);
   }
@@ -786,8 +788,36 @@ function iniciar() {
     setTimeout(() => m.invalidateSize(), 50);
     let guardando = false;
     let moviendo = null;   // índice del lugar guardado que se está reubicando (null = lugar nuevo)
-    let buscandoYo = false;   // mientras se busca tu ubicación para ponerla como A   // modo "Guardar lugar": el próximo toque en el mapa se guarda en Mis lugares
+    let buscandoYo = false;   // mientras se busca tu ubicación para ponerla como A
+    let ajustando = null;     // índice del punto (A, parada o B) que se está moviendo con la mira
     const ir = (p, z) => m.flyTo(p, Math.max(z, m.getZoom()), { duration: 0.6 });
+    // Falta poner un punto (A, B o la parada pedida): se marca con la mira del centro.
+    const pendiente = () => !guardando && ajustando == null && !buscandoYo && (pedido.puntos.length < 2 || pedido.agregando);
+    const conMira = () => guardando || ajustando != null || pendiente();
+    // Qué letra y color lleva la mira: la del punto que se va a poner o mover.
+    const letraMira = () => {
+      const n = pedido.puntos.length;
+      if (ajustando != null) return { l: letraPunto(ajustando, n), c: ajustando === 0 ? "#16a34a" : ajustando === n - 1 ? "#7c3aed" : "#f59e0b", q: ajustando === 0 ? "el punto A" : ajustando === n - 1 ? "el punto B" : `la parada ${ajustando}` };
+      if (n === 0) return { l: "A", c: "#16a34a", q: "A" };
+      if (n === 1) return { l: "B", c: "#7c3aed", q: "B" };
+      return { l: String(n - 1), c: "#f59e0b", q: "la parada" };
+    };
+    // Mover un punto ya puesto: el mapa se centra en él y la mira toma su lugar.
+    const ajustar = (i) => {
+      if (guardando) return;
+      ajustando = i; pedido.agregando = false;
+      m.flyTo(pedido.puntos[i], Math.max(m.getZoom(), 17), { duration: 0.5 });
+      pintar();
+    };
+    // Usa un lugar (de la lista, buscado o tocado): mueve el punto que se ajusta o pone el siguiente.
+    const usar = (latlng, nombre = "") => {
+      if (ajustando != null) {
+        const i = ajustando; ajustando = null;
+        pedido.puntos[i] = latlng; if (nombre) pedido.refs[i] = nombre;
+        return cambiar();
+      }
+      poner(latlng, nombre);
+    };
 
     // Mis lugares en el mapa: tocarlos los usa como punto.
     const pintarMios = () => {
@@ -796,34 +826,42 @@ function iniciar() {
       favoritos.leer().forEach((f) => {
         const mk = L.marker([f.lat, f.lng], { icon: iconoMio(f), zIndexOffset: 500 }).addTo(capaMios);
         mk.bindTooltip(esc(f.n), { permanent: true, direction: "top", offset: [0, -34], className: "nombre-mio" });
-        mk.on("click", () => { if (guardando) return m.flyTo([f.lat, f.lng], Math.max(m.getZoom(), 17), { duration: 0.4 }); poner(L.latLng(f.lat, f.lng), f.n); });
+        mk.on("click", () => { if (guardando) return m.flyTo([f.lat, f.lng], Math.max(m.getZoom(), 17), { duration: 0.4 }); usar(L.latLng(f.lat, f.lng), f.n); });
       });
     };
 
     const pintar = () => {
       const n = pedido.puntos.length;
-      dibujarRecorrido(m, capa, true, cambiar);
-      caja.classList.toggle("con-mira", guardando);
+      dibujarRecorrido(m, capa, true, cambiar, { oculto: ajustando, alTocar: ajustar });
+      caja.classList.toggle("con-mira", conMira());
+      const lm = guardando ? { l: icono("favorito"), c: "#ec4899" } : letraMira();
+      $(".mira", caja).style.setProperty("--color-mira", lm.c);
+      $(".mira .pin span", caja).innerHTML = lm.l;
+      $("#guardar-mira", caja).innerHTML = `${icono("check")} ${guardando ? "Guardar este punto" : ajustando != null ? `Mover ${lm.l} aquí` : `Poner ${lm.l} aquí`}`;
+      $("#cancelar-mira", caja).hidden = ajustando == null;
       $("#guia", caja).innerHTML = guardando
         ? `${icono("pin")}<span>Mueve el mapa hasta que la <b>punta del pin</b> quede justo en ${moviendo != null ? `«${esc(favoritos.leer()[moviendo]?.n || "el lugar")}»` : "el lugar"}. Acerca con dos dedos.</span><button class="boton secundario chico" id="guardar-aqui">${icono("ubicarme")} Aquí estoy</button>`
+        : ajustando != null
+        ? `<i class="${clasePunto(ajustando, n)}">${letraPunto(ajustando, n)}</i><span>Mueve el mapa hasta que la <b>punta</b> quede donde va ${letraMira().q}.</span>`
         : n === 0 && buscandoYo
-        ? `${icono("ubicarme")}<span>Buscando tu ubicación… También puedes tocar el mapa.</span>`
+        ? `${icono("ubicarme")}<span>Buscando tu ubicación… También puedes mover el mapa.</span>`
         : n === 0
-        ? `<i class="letra-a">A</i><span>Toca el mapa o un lugar donde te buscamos</span>`
+        ? `<i class="letra-a">A</i><span>Mueve el mapa hasta donde te buscamos, o búscalo arriba</span>`
         : n === 1
-        ? `<i class="letra-b">B</i><span>Ahora toca a dónde vas</span>`
+        ? `<i class="letra-b">B</i><span>Mueve el mapa hasta <b>a dónde vas</b> (o toca un lugar) y pon la punta justo ahí</span>`
         : pedido.agregando
-        ? `<i class="letra-p">${n - 1}</i><span>Toca dónde quieres la parada</span>`
-        : `${icono("check")}<span>¡Listo! Arrastra los puntos para ajustar</span>`;
-      $("#chips", caja).innerHTML = pedido.puntos.map((_, i) => `<span class="chip-punto"><i class="${clasePunto(i, n)}">${letraPunto(i, n)}</i>${esc(pedido.refs[i] || "Punto marcado")}</span>`).join("")
+        ? `<i class="letra-p">${n - 1}</i><span>Mueve el mapa hasta la parada y pon la punta justo ahí</span>`
+        : `${icono("check")}<span>¡Listo! Para corregir un punto, <b>tócalo</b> en el mapa o abajo</span>`;
+      $("#chips", caja).innerHTML = pedido.puntos.map((_, i) => `<button class="chip-punto ${i === ajustando ? "activo" : ""}" data-ajustar="${i}" aria-label="Mover este punto"><i class="${clasePunto(i, n)}">${letraPunto(i, n)}</i>${esc(pedido.refs[i] || "Punto marcado")}${icono("pin")}</button>`).join("")
         || `<span class="nota">Puedes buscar un lugar arriba o tocar el mapa.</span>`;
       const favs = favoritos.leer();
       $("#favoritos", caja).innerHTML = `<button class="chip-fav nuevo ${guardando ? "activo" : ""}" id="nuevo-lugar">${icono(guardando ? "cerrar" : "mas")} ${guardando ? "Cancelar" : "Guardar lugar"}</button>`
         + favs.map((f, i) => `<button class="chip-fav" data-favi="${i}"><span class="punto-tipo" style="background:${tipoMio(f).color}">${icono(tipoMio(f).icono)}</span>${esc(f.n)}</button>`).join("")
         + (favs.length ? `<button class="chip-fav editar" id="editar-lugares">${icono("basura")} Editar</button>` : "");
-      $$("[data-favi]", caja).forEach((b) => (b.onclick = () => { const f = favs[Number(b.dataset.favi)]; guardando = false; ir([f.lat, f.lng], 16); poner(L.latLng(f.lat, f.lng), f.n); }));
+      $$("[data-ajustar]", caja).forEach((b) => (b.onclick = () => ajustar(Number(b.dataset.ajustar))));
+      $$("[data-favi]", caja).forEach((b) => (b.onclick = () => { const f = favs[Number(b.dataset.favi)]; guardando = false; ir([f.lat, f.lng], 16); usar(L.latLng(f.lat, f.lng), f.n); }));
       $("#nuevo-lugar", caja).onclick = () => {
-        guardando = !guardando; moviendo = null;
+        guardando = !guardando; moviendo = null; ajustando = null;
         if (guardando && m.getZoom() < 17) m.flyTo(m.getCenter(), 17, { duration: 0.5 });
         pintar();
       };
@@ -864,8 +902,9 @@ function iniciar() {
       const n = pedido.puntos.length;
       if (n < 2) { pedido.puntos.push(latlng); pedido.refs.push(nombre); }
       else if (pedido.agregando) { pedido.puntos.splice(n - 1, 0, latlng); pedido.refs.splice(n - 1, 0, nombre); pedido.agregando = false; pedido.paradaPendiente = false; }
-      else { aviso("Para otra parada toca «Parada». Para mover un punto, arrástralo."); return; }
+      else { aviso("Para corregir un punto, tócalo. Para otra parada, toca «Parada»."); return; }
       if (pedido.puntos.length === 2) encuadrar(m);
+      else if (pedido.puntos.length === 1) m.flyTo(latlng, Math.max(m.getZoom() - 1, 15), { duration: 0.5 });
       cambiar();
     };
     const guardarAqui = async (latlng) => {
@@ -884,16 +923,21 @@ function iniciar() {
       pintarMios(); pintar();
       if (lugar && pedido.puntos.length < 2) poner(L.latLng(lugar.lat, lugar.lng), lugar.n);
     };
+    // Con la mira, tocar el mapa solo lo lleva a ese sitio; el punto se fija con el botón.
     m.on("click", (e) => {
-      if (guardando) return m.flyTo(e.latlng, Math.max(m.getZoom(), 17), { duration: 0.4 });
-      poner(e.latlng);
-      // Lejos, un toque cae impreciso: se acerca para que puedas arrastrar el pin al sitio exacto.
-      if (m.getZoom() < 16) { m.flyTo(e.latlng, 17, { duration: 0.5 }); aviso("Si no quedó justo, arrastra el pin al sitio exacto"); }
+      if (conMira()) return m.flyTo(e.latlng, Math.max(m.getZoom(), 17), { duration: 0.4 });
+      aviso("Para corregir un punto, tócalo. Para otra parada, toca «Parada».");
     });
-    // Mira fija en el centro (modo Guardar lugar) y su botón para confirmar.
-    $(".mapa-sel", caja).insertAdjacentHTML("beforeend", `<div class="mira"><div class="pin" style="background:#ec4899"><span>${icono("favorito")}</span></div><i></i></div>`);
-    caja.insertAdjacentHTML("beforeend", `<button class="boton guardar-mira" id="guardar-mira">${icono("check")} Guardar este punto</button>`);
-    $("#guardar-mira", caja).onclick = () => guardarAqui(m.getCenter());
+    // Mira fija en el centro y sus botones para confirmar o cancelar.
+    $(".mapa-sel", caja).insertAdjacentHTML("beforeend", `<div class="mira"><div class="pin"><span></span></div><i></i></div>`);
+    caja.insertAdjacentHTML("beforeend", `<div class="botones-mira"><button class="boton secundario" id="cancelar-mira" hidden>${icono("cerrar")}</button><button class="boton guardar-mira" id="guardar-mira"></button></div>`);
+    $("#guardar-mira", caja).onclick = () => {
+      const c = m.getCenter();
+      if (guardando) return guardarAqui(c);
+      if (!L.latLngBounds(m.options.maxBounds).contains(c)) return aviso("Ese punto está fuera de El Moján");
+      usar(c);
+    };
+    $("#cancelar-mira", caja).onclick = () => { ajustando = null; pintar(); };
     pintarMios();
 
     // Tu ubicación se pone sola como punto A (si todavía no marcaste nada).
@@ -911,7 +955,7 @@ function iniciar() {
     });
 
     // Lugares de El Moján: se ven al acercarse; tocar uno lo usa como punto con su nombre.
-    mostrarLugares(m, (l) => (guardando ? m.flyTo([l.lat, l.lng], Math.max(m.getZoom(), 17), { duration: 0.4 }) : poner(L.latLng(l.lat, l.lng), l.n))).listo
+    mostrarLugares(m, (l) => (guardando ? m.flyTo([l.lat, l.lng], Math.max(m.getZoom(), 17), { duration: 0.4 }) : usar(L.latLng(l.lat, l.lng), l.n))).listo
       .then((l) => { lugares = l; })
       .catch(() => aviso("No se pudieron cargar los lugares. Puedes tocar el mapa igual."));
 
@@ -931,12 +975,13 @@ function iniciar() {
       $$("[data-i]", res).forEach((b) => (b.onclick = () => {
         const l = hallados[Number(b.dataset.i)];
         res.hidden = true; buscar.value = ""; buscar.blur();
+        if (guardando) return ir([l.lat, l.lng], 18);
         ir([l.lat, l.lng], 17);
-        poner(L.latLng(l.lat, l.lng), l.n);
+        usar(L.latLng(l.lat, l.lng), l.n);
       }));
     });
 
-    $("#sel-agregar", caja).onclick = () => { pedido.agregando = !pedido.agregando; pintar(); };
+    $("#sel-agregar", caja).onclick = () => { pedido.agregando = !pedido.agregando; ajustando = null; pintar(); };
     $("#sel-ubicacion", caja).onclick = () => {
       if (!navigator.geolocation) return aviso("Tu teléfono no permite usar la ubicación");
       const usar = (aqui) => {
