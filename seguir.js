@@ -3,7 +3,7 @@
 
 import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { auth, db, NOMBRE, $, esc, icono, ICONOS, nuevoMapa, marcarRecorrido, filasRecorrido, progreso, afinarEta, transicion, avisoSinConfigurar } from "./comun.js?v=47";
+import { fecha, auth, db, NOMBRE, $, esc, icono, ICONOS, nuevoMapa, marcarRecorrido, filasRecorrido, progreso, afinarEta, transicion, avisoSinConfigurar } from "./comun.js?v=48";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -35,10 +35,12 @@ function iniciar() {
 
   function seguirMoto(uid) {
     if (quitarMoto) return;
-    quitarMoto = onSnapshot(doc(db, "motorizados", uid), (s) => {
-      ubic = (s.data() && s.data().ubicacion) || null;
-      pintar();
-    });
+    // La posición en vivo está en "ubicaciones"; la de la ficha del motorizado sirve mientras tanto.
+    let vivo = null, ficha = null;
+    const elegir = () => { ubic = vivo && (!ficha || (fecha(vivo.t) || 0) >= (fecha(ficha.t) || 0)) ? vivo : ficha; pintar(); };
+    const q1 = onSnapshot(doc(db, "motorizados", uid), (s) => { ficha = (s.data() && s.data().ubicacion) || null; elegir(); });
+    const q2 = onSnapshot(doc(db, "ubicaciones", uid), (s) => { vivo = s.exists() ? s.data() : null; elegir(); }, () => {});
+    quitarMoto = () => { q1(); q2(); };
   }
 
   function pie() { return `<div class="seguir-pie"><a class="boton secundario chico" href="./">${icono("moto")} ¿Necesitas una moto? Pide en ${NOMBRE}</a></div>`; }

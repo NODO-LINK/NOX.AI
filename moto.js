@@ -6,8 +6,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   leerOpiniones, listaOpiniones, ENLACE_POLITICAS, sonarAlerta, ASPECTOS, insigniasSeguridad, textoCobro, FORMAS_PAGO, bs, auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
-  mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar, escucharTarifas, aBs,
-} from "./comun.js?v=47";
+  mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar, escucharTarifas, aBs, lineaRecta,
+} from "./comun.js?v=48";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -306,14 +306,26 @@ function iniciar() {
     const deTurno = perfil && habilitado(perfil) && perfil.deTurno !== false;
     if (miCarrera || deTurno) iniciarGps(); else pararGps();
   }
+  // Para ahorrar (plan gratis de Firebase):
+  // - Con carrera: la posición va cada 8 s a "ubicaciones/{uid}", que solo mira el cliente de esa carrera.
+  // - De turno sin carrera: a la ficha del motorizado solo si se movió más de 150 m (máx. cada 3 min)
+  //   o, si está quieto, una vez cada 8 min para seguir saliendo "con señal".
   function iniciarGps() {
     if (vigilaGps !== null || !navigator.geolocation) return;
-    let ultima = 0;
+    let ultVivo = 0, ultFicha = 0, ultPos = null;
     vigilaGps = navigator.geolocation.watchPosition((p) => {
-      if (Date.now() - ultima < (miCarrera ? 8000 : 30000)) return;
-      ultima = Date.now();
-      updateDoc(doc(db, "motorizados", yo.uid), { ubicacion: { lat: p.coords.latitude, lng: p.coords.longitude, t: new Date() } }).catch(() => {});
-    }, () => aviso("Activa la ubicación para que el cliente te vea llegar"), { enableHighAccuracy: true });
+      const ahora = Date.now();
+      const pos = { lat: p.coords.latitude, lng: p.coords.longitude };
+      if (miCarrera && ahora - ultVivo >= 8000) {
+        ultVivo = ahora;
+        setDoc(doc(db, "ubicaciones", yo.uid), { ...pos, t: new Date() }).catch(() => {});
+      }
+      const movido = ultPos ? lineaRecta(ultPos, pos) : Infinity;
+      if ((movido > 0.15 && ahora - ultFicha >= 180000) || ahora - ultFicha >= 480000) {
+        ultFicha = ahora; ultPos = pos;
+        updateDoc(doc(db, "motorizados", yo.uid), { ubicacion: { ...pos, t: new Date() } }).catch(() => {});
+      }
+    }, () => aviso("Activa la ubicación para que el cliente te vea llegar"), { enableHighAccuracy: true, maximumAge: 5000 });
   }
   function pararGps() { if (vigilaGps !== null) { navigator.geolocation.clearWatch(vigilaGps); vigilaGps = null; } }
 

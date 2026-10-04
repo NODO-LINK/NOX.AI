@@ -10,7 +10,7 @@ import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
   pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
-} from "./comun.js?v=47";
+} from "./comun.js?v=48";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -994,7 +994,7 @@ function iniciar() {
   // Distancia del motorizado al cliente (solo si su ubicación es de los últimos 15 min).
   function cercania(m) {
     const u = m.ubicacion;
-    if (!miPos || !u || Date.now() - (fecha(u.t) || 0) > 15 * 60000) return null;
+    if (!miPos || !u || Date.now() - (fecha(u.t) || 0) > 20 * 60000) return null;
     const km = lineaRecta(miPos, u) * 1.3;
     return { km, min: Math.max(1, Math.round((km / 25) * 60)) };
   }
@@ -1002,10 +1002,10 @@ function iniciar() {
   function vistaMotorizados() {
     actualizarMiPos();
     // Disponibles primero; luego por cercanía (si se sabe) y por calificación.
-    // Sin señal: hace más de 10 min que su teléfono no manda la ubicación (puede tener la app cerrada).
+    // Sin señal: hace más de 15 min que su teléfono no manda la ubicación (puede tener la app cerrada).
     const sinSenal = (m) => { const t = m.ubicacion && fecha(m.ubicacion.t); return t ? Math.round((Date.now() - t) / 60000) : null; };
     const lista = motos.map((m) => ({ m, cerca: cercania(m), visto: sinSenal(m) })).sort((a, b) =>
-      ((a.visto || 0) > 10) - ((b.visto || 0) > 10)
+      ((a.visto || 0) > 15) - ((b.visto || 0) > 15)
       || !!a.m.enCarrera - !!b.m.enCarrera
       || (a.cerca ? a.cerca.km : 1e9) - (b.cerca ? b.cerca.km : 1e9)
       || promedio(b.m) - promedio(a.m));
@@ -1021,7 +1021,7 @@ function iniciar() {
             <button class="ver-perfil" data-perfil="${m.id}">${icono("estrella")} Ver perfil y opiniones</button>
             <div class="etiquetas">${m.enCarrera ? `<span class="pildora ocupado">${icono("ruta")} Carrera en curso</span>` : `<span class="pildora ok">Disponible</span>`}
             ${cerca ? `<span class="pildora cerca">${icono("pin")} a ${cerca.min} min</span>` : ""}
-            ${visto > 10 ? `<span class="pildora medio">${icono("reloj")} Sin señal hace ${visto > 90 ? `${Math.round(visto / 60)} h` : `${visto} min`}</span>` : ""}
+            ${visto > 15 ? `<span class="pildora medio">${icono("reloj")} Sin señal hace ${visto > 90 ? `${Math.round(visto / 60)} h` : `${visto} min`}</span>` : ""}
             <span class="rating">${estrellas(m)}</span>${insigniasSeguridad(m)}</div></div>
           <div class="acciones">
             <a class="boton secundario" href="tel:${esc(m.telefono)}" data-llamar="${m.id}">${icono("telefono")} Llamar</a>
@@ -1481,11 +1481,20 @@ function iniciar() {
     }
     if (enCurso && !seguimiento.id) {
       Object.assign(seguimiento, { id: c.id, motoUid: c.motoUid });
-      seguimiento.quitar = onSnapshot(doc(db, "motorizados", c.motoUid), (s) => {
-        seguimiento.ubic = (s.data() && s.data().ubicacion) || null;
-        seguimiento.moto = s.data() || null;   // datos completos (pago móvil, calificación) aunque ya no salga en la lista
+      // Ubicación en vivo (cada pocos segundos) en "ubicaciones"; si aún no hay, la de la ficha del motorizado.
+      let vivo = null, ficha = null;
+      const elegir = () => {
+        const tv = vivo && (fecha(vivo.t) || 0), tf = ficha && (fecha(ficha.t) || 0);
+        seguimiento.ubic = vivo && (!ficha || tv >= tf) ? vivo : ficha;
         refrescarVivo();
+      };
+      const q1 = onSnapshot(doc(db, "motorizados", c.motoUid), (s) => {
+        ficha = (s.data() && s.data().ubicacion) || null;
+        seguimiento.moto = s.data() || null;   // datos completos (pago móvil, calificación) aunque ya no salga en la lista
+        elegir();
       });
+      const q2 = onSnapshot(doc(db, "ubicaciones", c.motoUid), (s) => { vivo = s.exists() ? s.data() : null; elegir(); }, () => {});
+      seguimiento.quitar = () => { q1(); q2(); };
       // Chat: contador de mensajes sin leer y aviso si la app está en segundo plano.
       seguimiento.quitarChat = escucharChat(c.id, usuario.uid, (msgs, sinLeer) => {
         const nuevo = sinLeer > seguimiento.sinLeer;

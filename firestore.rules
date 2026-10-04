@@ -31,6 +31,14 @@ service cloud.firestore {
       allow update: if esAdmin() || (dentro() && request.auth.uid == uid && soloCambia(['ubicacion', 'enCarrera', 'deTurno', 'pagoMovil']));
     }
 
+    // Ubicación en vivo del motorizado durante una carrera (la escribe él, cada pocos segundos).
+    match /ubicaciones/{uid} {
+      allow read: if dentro();
+      allow write: if esMoto() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['lat', 'lng', 't'])
+        && request.resource.data.lat is number && request.resource.data.lng is number;
+    }
+
     // Opiniones públicas en el perfil del motorizado (copia de las reseñas que aprueba el admin).
     match /motorizados/{uid}/opiniones/{id} {
       allow read: if dentro();
