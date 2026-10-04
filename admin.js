@@ -9,8 +9,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   auth, authSecundaria, db, NOMBRE, botonTema, botonInstalar, nuevoMapa, ICONOS, recargos, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
-  leerTarifas, aviso, avisoSinConfigurar, mostrarLugares, tipoLugar, TIPOS_PARA_AGREGAR,
-} from "./comun.js?v=37";
+  leerTarifas, aviso, avisoSinConfigurar, mostrarLugares, tipoLugar, TIPOS_PARA_AGREGAR, ASPECTOS, insigniasSeguridad,
+} from "./comun.js?v=38";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -160,6 +160,7 @@ function iniciar() {
           <h3>${esc(m.nombre)} ${habilitado(m) ? `<span class="pildora ok">En la app</span>` : `<span class="pildora mal">No sale</span>`}${m.enCarrera ? ` <span class="pildora ocupado">Carrera en curso</span>` : m.deTurno === false ? ` <span class="pildora">Descansando</span>` : ""}</h3>
           <p>Usuario: <b>${esc(m.usuario)}</b> · ${icono("telefono")} ${esc(m.telefono)}</p>
           <p>${icono("moto")} ${esc(m.moto)} · Placa ${esc(m.placa)} · <span class="rating">${estrellas(m)}</span></p>
+          ${insigniasSeguridad(m) || Object.keys(m.malos || {}).length ? `<div class="etiquetas">${insigniasSeguridad(m, 3)}${Object.entries(m.malos || {}).filter(([, n]) => n > 0).map(([k, n]) => `<span class="pildora riesgo">${icono("alerta")} ${esc((ASPECTOS.malos.find((a) => a.k === k) || { t: k }).t)} (${n})</span>`).join("")}</div>` : ""}
           <p>${estadoPago(m)} · ${llamadas[m.id] || 0} llamadas</p></div>
           <div class="acciones">
             <button class="boton ${m.activo ? "peligro" : "verde"}" data-activo="${m.id}">${m.activo ? "Desactivar" : "Activar"}</button>
@@ -367,14 +368,19 @@ function iniciar() {
 
   // ---------- Reseñas ----------
   function vistaResenas() {
-    const pendientes = resenas.filter((r) => !r.aprobada), aprobadas = resenas.filter((r) => r.aprobada);
-    const tarjeta = (r, botones) => `<article class="tarjeta"><div class="info">
+    const grave = (r) => (r.seguro === false ? 2 : 0) + ((r.malos || []).length ? 1 : 0);
+    const pendientes = resenas.filter((r) => !r.aprobada).sort((a, b) => grave(b) - grave(a)), aprobadas = resenas.filter((r) => r.aprobada);
+    const texto = (lista, k) => (lista.find((a) => a.k === k) || { t: k }).t;
+    const tarjeta = (r, botones) => `<article class="tarjeta ${r.seguro === false || (r.malos || []).length ? "reporte" : ""}"><div class="info">
       <h3><span class="rating">${[1, 2, 3, 4, 5].map((n) => icono("estrella", n <= r.estrellas ? "" : "apagada")).join("")}</span> para ${esc(r.motoNombre)}</h3>
+      ${r.seguro === false ? `<p class="pildora riesgo">${icono("alerta")} El cliente NO se sintió seguro</p>` : r.seguro ? `<p class="pildora seguro">${icono("escudo")} Viaje seguro</p>` : ""}
+      ${(r.malos || []).length ? `<div class="etiquetas">${r.malos.map((k) => `<span class="pildora riesgo">${icono("alerta")} ${esc(texto(ASPECTOS.malos, k))}</span>`).join("")}</div>` : ""}
+      ${(r.buenos || []).length ? `<div class="etiquetas">${r.buenos.map((k) => `<span class="pildora insignia">${icono("check")} ${esc(texto(ASPECTOS.buenos, k))}</span>`).join("")}</div>` : ""}
       ${r.comentario ? `<p>“${esc(r.comentario)}”</p>` : `<p><i>Sin comentario</i></p>`}
       <p>De ${esc(r.clienteNombre)} · ${fechaTexto(r.fecha)}</p></div>${botones}</article>`;
     $("#vista").innerHTML = `
       <h1 class="titulo">Por aprobar (${pendientes.length})</h1>
-      <p class="nota">Las estrellas cuentan para el motorizado solo cuando apruebas la reseña.</p>
+      <p class="nota">Las estrellas y lo de seguridad cuentan para el motorizado solo cuando apruebas la reseña. Los reportes de seguridad salen en rojo.</p>
       <div class="lista">${pendientes.map((r) => tarjeta(r, `<div class="acciones">
         <button class="boton verde" data-aprobar="${r.id}">Aprobar</button><button class="boton peligro" data-rechazar="${r.id}">Rechazar</button></div>`)).join("")
         || `<div class="vacio">${icono("estrella")}No hay reseñas pendientes.</div>`}</div>
@@ -384,7 +390,13 @@ function iniciar() {
       const r = resenas.find((x) => x.id === b.dataset.aprobar);
       const lote = writeBatch(db);
       lote.update(doc(db, "resenas", r.id), { aprobada: true });
-      if (motos.some((m) => m.id === r.motoUid)) lote.update(doc(db, "motorizados", r.motoUid), { ratingSum: increment(r.estrellas), ratingCount: increment(1) });
+      if (motos.some((m) => m.id === r.motoUid)) {
+        const cambios = { ratingSum: increment(r.estrellas), ratingCount: increment(1) };
+        if (typeof r.seguro === "boolean") { cambios.seguroN = increment(1); if (r.seguro) cambios.seguroSi = increment(1); }
+        (r.buenos || []).forEach((k) => { cambios[`buenos.${k}`] = increment(1); });
+        (r.malos || []).forEach((k) => { cambios[`malos.${k}`] = increment(1); });
+        lote.update(doc(db, "motorizados", r.motoUid), cambios);
+      }
       await lote.commit();
     }));
     $$("[data-rechazar]").forEach((b) => (b.onclick = () => {

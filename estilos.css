@@ -722,3 +722,26 @@ body.con-selector { overflow: hidden; }
 .linea-rastro { border-top: 4px solid #64748b; }
 .parada-fila { position: relative; }
 .parada-fila:focus-within { z-index: 700; }
+/* ---------- Calificar: viaje seguro ---------- */
+.calificar > label { display: block; margin-top: 14px; font-weight: 800; }
+.si-no { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+.si-no button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; border-radius: 18px; border: 2px solid var(--borde); background: var(--superficie); color: var(--texto); font: 800 .95rem "Nunito", system-ui, sans-serif; cursor: pointer; transition: transform .2s var(--resorte), background .2s; }
+.si-no button:active { transform: scale(.96); }
+.si-no button[data-s="si"].on { background: #dcfce7; border-color: #16a34a; color: #166534; }
+.si-no button[data-s="no"].on { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
+.si-no.falta { animation: sacudir .4s; }
+@keyframes sacudir { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+.chips-calif { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.chips-calif button { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: var(--pildora); border: 1.5px solid var(--borde); background: var(--superficie); color: var(--texto); font: 700 .82rem "Nunito", system-ui, sans-serif; cursor: pointer; }
+.chips-calif button .ico { width: 14px; height: 14px; opacity: .5; }
+.chips-calif button.on { background: #dcfce7; border-color: #16a34a; color: #166534; }
+.chips-calif.malos button.on { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
+.chips-calif button.on .ico { opacity: 1; }
+.chips-calif.malos.resaltar { padding: 8px; border-radius: 18px; background: #fff1f2; }
+.pildora.seguro { background: #dcfce7; color: #166534; }
+.pildora.medio { background: #fef3c7; color: #92400e; }
+.pildora.riesgo { background: #fee2e2; color: #b91c1c; }
+.pildora.insignia { background: var(--marca-suave); color: var(--marca); }
+.pildora .ico { width: 13px; height: 13px; vertical-align: -2px; }
+.tarjeta.reporte { box-shadow: 0 0 0 2px #fca5a5, var(--sombra-2); }
+[data-tema="oscuro"] .chips-calif.malos.resaltar { background: rgba(220, 38, 38, .12); }

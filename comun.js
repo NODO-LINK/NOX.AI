@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=37";
-import { icono, pintarIconos } from "./iconos.js?v=37";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=38";
+import { icono, pintarIconos } from "./iconos.js?v=38";
 
 export { icono };
 pintarIconos();
@@ -58,6 +58,37 @@ export const estrellas = (m) => {
   return `${icono("estrella")} ${p.toFixed(1)} (${m.ratingCount})`;
 };
 export const promedio = (m) => (m.ratingCount ? m.ratingSum / m.ratingCount : 0);
+
+// ---------- Viaje seguro: lo que el cliente marca al calificar ----------
+export const ASPECTOS = {
+  buenos: [
+    { k: "prudente", t: "Manejó con prudencia", c: "Prudente" },
+    { k: "velocidad", t: "Respetó la velocidad", c: "Velocidad segura" },
+    { k: "casco", t: "Me dio casco", c: "Da casco" },
+    { k: "moto", t: "Moto en buen estado", c: "Moto en buen estado" },
+    { k: "puntual", t: "Llegó a tiempo", c: "Puntual" },
+    { k: "respeto", t: "Amable y respetuoso", c: "Respetuoso" },
+  ],
+  malos: [
+    { k: "rapido", t: "Iba muy rápido" },
+    { k: "peligro", t: "Maniobras peligrosas" },
+    { k: "sincasco", t: "No me dio casco" },
+    { k: "telefono", t: "Usó el teléfono manejando" },
+    { k: "motomal", t: "Moto en mal estado" },
+    { k: "irrespeto", t: "Trato irrespetuoso" },
+  ],
+};
+// % de viajes en que el cliente dijo que se sintió seguro (null si nadie ha respondido).
+export const pctSeguro = (m) => (m.seguroN ? Math.round((100 * (m.seguroSi || 0)) / m.seguroN) : null);
+// Insignias para la tarjeta del motorizado: % seguro y lo que más destacan los clientes.
+export function insigniasSeguridad(m, cuantas = 2) {
+  const pct = pctSeguro(m);
+  if (pct == null) return "";
+  const top = ASPECTOS.buenos.map((a) => ({ a, n: (m.buenos || {})[a.k] || 0 })).filter((x) => x.n > 0)
+    .sort((a, b) => b.n - a.n).slice(0, cuantas);
+  return `<span class="pildora ${pct >= 90 ? "seguro" : pct >= 70 ? "medio" : "riesgo"}">${icono("escudo")} ${pct}% viajes seguros</span>`
+    + top.map((x) => `<span class="pildora insignia">${icono("check")} ${esc(x.a.c)}</span>`).join("");
+}
 
 // Un motorizado sale en la app si el admin lo activó y tiene la quincena pagada.
 export const habilitado = (m) => m.activo === true && fecha(m.pagadoHasta) > new Date();

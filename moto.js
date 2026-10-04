@@ -5,9 +5,9 @@ import {
   doc, addDoc, onSnapshot, updateDoc, collection, query, where, runTransaction, serverTimestamp, arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
+  ASPECTOS, insigniasSeguridad, auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar,
-} from "./comun.js?v=37";
+} from "./comun.js?v=38";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -213,6 +213,12 @@ function iniciar() {
       html += `<h1 class="titulo">${icono("dinero")} Tus ganancias</h1>
         <div class="cifras">${g.map((x) => `<div class="cifra"><b>${usd(x.monto)}</b><span>${x.n} · ${x.cant} carrera${x.cant === 1 ? "" : "s"}</span></div>`).join("")}</div>
         <p class="nota">Suma de lo que cobraste en las carreras terminadas.</p>`;
+      // Lo que dicen los clientes de su seguridad (de las reseñas aprobadas).
+      const malosMios = Object.entries(perfil.malos || {}).filter(([, n]) => n > 0);
+      html += `<h1 class="titulo">${icono("escudo")} Tu seguridad</h1>
+        <div class="caja">${insigniasSeguridad(perfil, 6) ? `<div class="etiquetas">${insigniasSeguridad(perfil, 6)}</div>` : `<p class="nota">Todavía no hay opiniones de seguridad.</p>`}
+        ${malosMios.length ? `<p class="nota" style="margin-top:10px">Para mejorar:</p><div class="etiquetas">${malosMios.map(([k, n]) => `<span class="pildora riesgo">${icono("alerta")} ${esc((ASPECTOS.malos.find((a) => a.k === k) || { t: k }).t)} (${n})</span>`).join("")}</div>` : ""}
+        <p class="nota" style="margin-top:10px">Maneja con prudencia y lleva casco para tu pasajero: los clientes lo ven en tu perfil.</p></div>`;
     }
     $("#vista").innerHTML = html;
     // Animar la entrada solo cuando cambia lo que se muestra (lista, carrera o aviso de inactivo).

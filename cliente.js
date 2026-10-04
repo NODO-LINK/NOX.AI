@@ -9,8 +9,8 @@ import {
 import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
-  sonarAlerta, cargarLugares, CENTRO,
-} from "./comun.js?v=37";
+  sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad,
+} from "./comun.js?v=38";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -819,7 +819,7 @@ function iniciar() {
             <p>${icono("moto")} ${esc(m.moto || "")}${m.placa ? ` · Placa ${esc(m.placa)}` : ""}</p>
             <div class="etiquetas">${m.enCarrera ? `<span class="pildora ocupado">${icono("ruta")} Carrera en curso</span>` : `<span class="pildora ok">Disponible</span>`}
             ${cerca ? `<span class="pildora cerca">${icono("pin")} a ${cerca.min} min</span>` : ""}
-            <span class="rating">${estrellas(m)}</span></div></div>
+            <span class="rating">${estrellas(m)}</span>${insigniasSeguridad(m)}</div></div>
           <div class="acciones">
             <a class="boton secundario" href="tel:${esc(m.telefono)}" data-llamar="${m.id}">${icono("telefono")} Llamar</a>
             <button class="boton ${m.enCarrera ? "secundario" : ""}" data-pedir="${m.id}">${m.enCarrera ? "Pedir (al terminar)" : "Pedir a este"}</button>
@@ -992,13 +992,26 @@ function iniciar() {
     <div class="pista"><i class="letra-a">A</i><div class="carril"><b style="width:${info.pct}%"></b><span class="moto-pista" style="left:${info.pct}%">${icono("moto")}</span></div><i class="letra-b">B</i></div>`;
 
   function vistaCalificar(c) {
-    let puntos = 5;
+    let puntos = 5, seguro = null;
+    const buenos = new Set(), malos = new Set();
+    const quien = esc(String(c.motoNombre).split(" ")[0]);
     $("#vista").innerHTML = `
-      <div class="estado-carrera"><div class="grande">${icono("listo")}</div><h2>¡Llegaste! ¿Cómo te fue con ${esc(c.motoNombre)}?</h2></div>
-      <div class="caja">
+      <div class="estado-carrera"><div class="grande">${icono("escudo")}</div><h2>¡Llegaste! ¿Fue un viaje seguro con ${quien}?</h2>
+        <p class="nota">Tu opinión ayuda a que todos viajen seguros en El Moján.</p></div>
+      <div class="caja calificar">
+        <label>¿Te sentiste seguro en el viaje?</label>
+        <div class="si-no" id="seguro">
+          <button data-s="si">${icono("escudo")} Sí, seguro</button>
+          <button data-s="no">${icono("alerta")} No</button>
+        </div>
+        <label>¿Cómo calificas el viaje?</label>
         <div class="estrellas" id="estrellas">${[1, 2, 3, 4, 5].map((n) => `<button data-n="${n}" aria-label="${n} estrellas">${icono("estrella")}</button>`).join("")}</div>
+        <label>¿Qué hizo bien ${quien}?</label>
+        <div class="chips-calif" id="buenos">${ASPECTOS.buenos.map((a) => `<button data-k="${a.k}">${icono("check")} ${esc(a.t)}</button>`).join("")}</div>
+        <label id="titulo-malos">¿Algo que reportar? <small class="nota">(lo ve solo el administrador)</small></label>
+        <div class="chips-calif malos" id="malos">${ASPECTOS.malos.map((a) => `<button data-k="${a.k}">${icono("alerta")} ${esc(a.t)}</button>`).join("")}</div>
         <label for="comentario">Comentario (opcional)</label>
-        <textarea id="comentario" placeholder="¿Qué tal el servicio?"></textarea>
+        <textarea id="comentario" placeholder="Cuéntanos cómo te fue"></textarea>
         <button class="boton" id="calificar">Enviar calificación</button>
         <button class="boton secundario" id="omitir">Ahora no</button>
       </div>`;
@@ -1011,15 +1024,29 @@ function iniciar() {
       });
     }));
     pintar();
+    $$("#seguro button").forEach((b) => (b.onclick = () => {
+      seguro = b.dataset.s === "si";
+      $$("#seguro button").forEach((x) => x.classList.toggle("on", x === b));
+      // Si no se sintió seguro, se resalta la parte de reportar.
+      $("#malos").classList.toggle("resaltar", !seguro);
+      if (!seguro) { if (puntos > 3) { puntos = 2; pintar(); } $("#titulo-malos").scrollIntoView({ behavior: "smooth", block: "center" }); }
+    }));
+    const alternar = (caja, conjunto) => $$(`#${caja} button`).forEach((b) => (b.onclick = () => {
+      conjunto.has(b.dataset.k) ? conjunto.delete(b.dataset.k) : conjunto.add(b.dataset.k);
+      b.classList.toggle("on", conjunto.has(b.dataset.k));
+    }));
+    alternar("buenos", buenos); alternar("malos", malos);
     $("#calificar").onclick = async () => {
+      if (seguro === null) { $("#seguro").classList.add("falta"); setTimeout(() => $("#seguro").classList.remove("falta"), 600); return aviso("Dinos si te sentiste seguro en el viaje"); }
       $("#calificar").disabled = true;
       await addDoc(collection(db, "resenas"), {
         motoUid: c.motoUid, motoNombre: c.motoNombre, carreraId: c.id,
         clienteUid: usuario.uid, clienteNombre: cliente.nombre,
         estrellas: puntos, comentario: $("#comentario").value.trim(), aprobada: false, fecha: serverTimestamp(),
+        seguro, buenos: [...buenos], malos: [...malos],
       });
       await updateDoc(doc(db, "carreras", c.id), { calificada: true });
-      aviso("¡Gracias por calificar!");
+      aviso(seguro ? "¡Gracias por calificar!" : "Gracias por avisarnos. El administrador revisará tu reporte.");
       ir("motorizados");
     };
     $("#omitir").onclick = async () => { await updateDoc(doc(db, "carreras", c.id), { calificada: true }); ir("motorizados"); };
