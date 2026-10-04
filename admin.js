@@ -9,8 +9,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   auth, authSecundaria, db, NOMBRE, botonTema, botonInstalar, nuevoMapa, ICONOS, recargos, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
-  leerTarifas, aviso, avisoSinConfigurar, mostrarLugares, tipoLugar, TIPOS_PARA_AGREGAR, ASPECTOS, insigniasSeguridad, opinionPublica,
-} from "./comun.js?v=44";
+  leerTarifas, aviso, avisoSinConfigurar, bs, sonarAlerta, mostrarLugares, tipoLugar, TIPOS_PARA_AGREGAR, ASPECTOS, insigniasSeguridad, opinionPublica, fotosDe, olvidarFotos, achicarFoto, pintarFotos,
+} from "./comun.js?v=45";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -18,7 +18,7 @@ function iniciar() {
   let subs = [], ruta = "motos", tarifas = null;
   let motos = [], carreras = [], resenas = [], pagos = [], llamadas = {}, visitas = {}, cedulas = {}, clientes = [], bloqueados = {}, notasClientes = {};
   let mapaVivo = null, marcasVivo = {}, filtroClientes = "";
-  let lugaresPropios = [], mapaLugares = null;
+  let lugaresPropios = [], mapaLugares = null, reportesPago = [];
   const DIA = 864e5;
 
   onAuthStateChanged(auth, async (u) => {
@@ -82,6 +82,7 @@ function iniciar() {
     });
     escuchar(collection(db, "bloqueados"), (s) => { bloqueados = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); });
     escuchar(doc(db, "stats", "visitas"), (s) => { visitas = s.exists() ? s.data() : {}; });
+    escuchar(query(collection(db, "reportesPago"), orderBy("creado", "desc"), limit(60)), (s) => { reportesPago = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
     escuchar(collection(db, "lugares"), (s) => {
       lugaresPropios = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.n).localeCompare(b.n));
       pintarListaLugares();
@@ -91,8 +92,24 @@ function iniciar() {
   }
 
   // Cada snapshot redibuja la pestaña abierta, salvo que se esté escribiendo en un formulario.
+  // Alerta SOS de un cliente: banda roja arriba en cualquier pestaña, con sonido.
+  const sosVistos = new Set();
+  function pintarSos() {
+    const activas = carreras.filter((c) => c.sos && c.estado === "aceptada" && !c.sosAtendido);
+    let banda = $("#banda-sos");
+    if (!activas.length) { if (banda) banda.remove(); return; }
+    if (!banda) { banda = document.createElement("div"); banda.id = "banda-sos"; banda.className = "banda-sos"; document.body.prepend(banda); }
+    if (activas.some((c) => !sosVistos.has(c.id))) { sonarAlerta(); activas.forEach((c) => sosVistos.add(c.id)); }
+    banda.innerHTML = activas.map((c) => `<div class="sos-item"><b>${icono("alerta")} SOS: ${esc(c.clienteNombre)} en carrera con ${esc(c.motoNombre)} (${esc(c.motoPlaca || "")})</b>
+      <div class="botones"><a class="boton chico" href="tel:${esc(c.clienteTel)}">${icono("telefono")} Cliente</a><a class="boton chico" href="tel:${esc(c.motoTel || "")}">${icono("telefono")} Motorizado</a>
+      ${c.sosUbic ? `<a class="boton chico" href="https://maps.google.com/?q=${c.sosUbic.lat},${c.sosUbic.lng}" target="_blank" rel="noopener">${icono("pin")} Ubicación</a>` : ""}
+      <button class="boton chico secundario" data-atendido="${c.id}">Atendido</button></div></div>`).join("");
+    $$("[data-atendido]", banda).forEach((b) => (b.onclick = () => updateDoc(doc(db, "carreras", b.dataset.atendido), { sosAtendido: true })));
+  }
+
   function refrescar() {
-    $("#punto-pagos").hidden = !porVencer().length;
+    pintarSos();
+    $("#punto-pagos").hidden = !porVencer().length && !reportesPago.some((r) => r.estado === "pendiente");
     $("#punto-resenas").hidden = !resenas.some((r) => !r.aprobada);
     const foco = document.activeElement;
     if (foco && /INPUT|TEXTAREA|SELECT/.test(foco.tagName) && $("#vista").contains(foco)) return;
@@ -157,7 +174,7 @@ function iniciar() {
       <button class="boton" id="nuevo">+ Agregar motorizado</button>
       ${motos.some((x) => x.usuario === "prueba") ? "" : `<button class="boton secundario" id="prueba">${icono("moto")} Crear motorizado de prueba</button>`}
       <div class="lista" style="margin-top:12px">${motos.map((m) => `
-        <article class="tarjeta"><div class="info">
+        <article class="tarjeta"><div class="avatar" data-foto-moto="${m.id}">${esc(String(m.nombre).split(" ").slice(0, 2).map((x) => x[0] || "").join("").toUpperCase())}</div><div class="info">
           <h3>${esc(m.nombre)} ${habilitado(m) ? `<span class="pildora ok">En la app</span>` : `<span class="pildora mal">No sale</span>`}${m.enCarrera ? ` <span class="pildora ocupado">Carrera en curso</span>` : m.deTurno === false ? ` <span class="pildora">Descansando</span>` : ""}</h3>
           <p>Usuario: <b>${esc(m.usuario)}</b> · ${icono("telefono")} ${esc(m.telefono)}</p>
           <p>${icono("moto")} ${esc(m.moto)} · Placa ${esc(m.placa)} · <span class="rating">${estrellas(m)}</span></p>
@@ -166,7 +183,8 @@ function iniciar() {
           <p>${estadoPago(m)} · ${llamadas[m.id] || 0} llamadas</p></div>
           <div class="acciones">
             <button class="boton ${m.activo ? "peligro" : "verde"}" data-activo="${m.id}">${m.activo ? "Desactivar" : "Activar"}</button>
-            <button class="boton secundario" data-editar="${m.id}">Editar</button></div>
+            <button class="boton secundario" data-editar="${m.id}">Editar</button>
+            <button class="boton secundario" data-fotos="${m.id}">${icono("usuario")} Fotos</button></div>
         </article>`).join("") || `<div class="vacio">${icono("moto")}Aún no hay motorizados.</div>`}</div>`;
     mapaVivo = nuevoMapa("mapa-vivo");
     moverMapaVivo();
@@ -180,13 +198,21 @@ function iniciar() {
       updateDoc(doc(db, "motorizados", m.id), { activo: !m.activo });
     }));
     $$("[data-editar]").forEach((b) => (b.onclick = () => formularioMoto(motos.find((x) => x.id === b.dataset.editar))));
+    $$("[data-fotos]").forEach((b) => (b.onclick = () => fotosMoto(motos.find((x) => x.id === b.dataset.fotos))));
+    pintarFotos();
   }
 
   // ---------- Pagos de la cuota ----------
   function vistaPagos() {
     const avisos = porVencer();
     const orden = [...motos].sort((a, b) => diasRestantes(a) - diasRestantes(b));
+    const reportados = reportesPago.filter((r) => r.estado === "pendiente");
     $("#vista").innerHTML = `
+      ${reportados.length ? `<h1 class="titulo">${icono("check")} Pagos reportados (${reportados.length})</h1>
+        <p class="nota">Revisa en tu banco que llegó el pago y apruébalo: se le suman ${tarifas.diasCuota} días.</p>
+        <div class="lista">${reportados.map((r) => `<article class="tarjeta"><div class="info"><h3>${esc(r.nombre)}</h3>
+          <p><b>Ref. ${esc(r.referencia)}</b> · ${r.moneda === "bs" ? bs(r.monto) : usd(r.monto)} · ${esc(r.fechaPago || "")}</p><p class="nota">Reportado ${fechaTexto(r.creado)}</p></div>
+          <div class="acciones"><button class="boton verde" data-aprobar-pago="${r.id}">Aprobar</button><button class="boton peligro" data-rechazar-pago="${r.id}">Rechazar</button></div></article>`).join("")}</div>` : ""}
       ${avisos.length ? `<h1 class="titulo">${icono("alerta")} Por vencer o vencidas (${avisos.length})</h1><div class="lista">${avisos.map((m) => `
         <article class="tarjeta"><div class="info"><h3>${esc(m.nombre)}</h3><p>${estadoPago(m)} · ${fechaPago(m)}</p></div>
           <div class="acciones">
@@ -204,16 +230,60 @@ function iniciar() {
         ${pagos.slice(0, 30).map((p) => `<tr><td>${fechaTexto(p.fecha)}</td><td>${esc(p.nombre)}</td><td class="num">${usd(p.monto)}</td></tr>`).join("") || `<tr><td colspan="3">Todavía no hay pagos</td></tr>`}
       </table></div>`;
     $$("[data-pago]").forEach((b) => (b.onclick = () => registrarPago(motos.find((x) => x.id === b.dataset.pago))));
+    $$("[data-aprobar-pago]").forEach((b) => (b.onclick = async () => {
+      const r = reportesPago.find((x) => x.id === b.dataset.aprobarPago);
+      const m = motos.find((x) => x.id === r.motoUid);
+      if (!m) return aviso("Ese motorizado ya no existe");
+      await registrarPago(m, r);
+    }));
+    $$("[data-rechazar-pago]").forEach((b) => (b.onclick = async () => {
+      const motivo = prompt("¿Por qué lo rechazas? (lo verá el motorizado)", "No llegó el pago");
+      if (motivo === null) return;
+      await updateDoc(doc(db, "reportesPago", b.dataset.rechazarPago), { estado: "rechazado", motivo: motivo.trim(), revisado: serverTimestamp() });
+      aviso("Reporte rechazado");
+    }));
   }
   const fechaPago = (m) => (yaPago(m) || diasRestantes(m) > 0 ? `pagado hasta ${fechaTexto(m.pagadoHasta)}` : "nunca ha pagado");
 
-  async function registrarPago(m) {
-    if (!confirm(`¿Registrar pago de ${usd(tarifas.cuota)} de ${m.nombre}? Se le suman ${tarifas.diasCuota} días.`)) return;
+  // Fotos del motorizado y de su moto: el cliente las ve en el perfil y cuando le aceptan la carrera.
+  async function fotosMoto(m) {
+    const actuales = await fotosDe(m.id);
+    const nuevas = { ...actuales };
+    const fondo = document.createElement("div");
+    fondo.className = "modal";
+    const cuadro = (k, titulo) => `<label class="foto-subir"><span class="foto-vista" data-vista="${k}" style="${nuevas[k] ? `background-image:url('${nuevas[k]}')` : ""}">${nuevas[k] ? "" : icono(k === "moto" ? "moto" : "usuario")}</span>
+      <b>${titulo}</b><small>Toca para elegir</small><input type="file" accept="image/*" data-archivo="${k}" hidden></label>`;
+    fondo.innerHTML = `<div class="ventana"><h2>Fotos de ${esc(m.nombre)}</h2>
+      <div class="fotos-dos">${cuadro("persona", "Motorizado")}${cuadro("moto", "Moto")}</div>
+      <p class="nota">Que se vea bien la cara y la moto con la placa. Se guardan en tamaño pequeño.</p>
+      <button class="boton" data-ok>Guardar fotos</button><button class="boton secundario" data-no>Cancelar</button></div>`;
+    document.body.append(fondo);
+    $$("[data-archivo]", fondo).forEach((inp) => (inp.onchange = async () => {
+      const a = inp.files[0]; if (!a) return;
+      try {
+        nuevas[inp.dataset.archivo] = await achicarFoto(a);
+        const v = $(`[data-vista=${inp.dataset.archivo}]`, fondo);
+        v.style.backgroundImage = `url('${nuevas[inp.dataset.archivo]}')`; v.innerHTML = "";
+      } catch { aviso("No se pudo leer esa imagen"); }
+    }));
+    $("[data-no]", fondo).onclick = () => fondo.remove();
+    $("[data-ok]", fondo).onclick = async () => {
+      try {
+        await setDoc(doc(db, "fotos", m.id), { persona: nuevas.persona || null, moto: nuevas.moto || null, actualizado: serverTimestamp() });
+        olvidarFotos(m.id); fondo.remove(); aviso("Fotos guardadas"); ir(ruta, true);
+      } catch (e) { console.error(e); aviso("No se pudieron guardar. ¿Publicaste las reglas nuevas?"); }
+    };
+  }
+
+  async function registrarPago(m, reporte = null) {
+    if (!confirm(reporte ? `¿Aprobar el pago de ${m.nombre} (ref. ${reporte.referencia})? Se le suman ${tarifas.diasCuota} días.`
+      : `¿Registrar pago de ${usd(tarifas.cuota)} de ${m.nombre}? Se le suman ${tarifas.diasCuota} días.`)) return;
     const desde = new Date(Math.max(Date.now(), (fecha(m.pagadoHasta) || new Date(0)).getTime()));
     const hasta = new Date(desde.getTime() + tarifas.diasCuota * DIA);
     const lote = writeBatch(db);
     lote.update(doc(db, "motorizados", m.id), { pagadoHasta: Timestamp.fromDate(hasta) });
-    lote.set(doc(collection(db, "pagos")), { motoUid: m.id, nombre: m.nombre, monto: tarifas.cuota, desde: Timestamp.fromDate(desde), hasta: Timestamp.fromDate(hasta), fecha: serverTimestamp() });
+    lote.set(doc(collection(db, "pagos")), { motoUid: m.id, nombre: m.nombre, monto: tarifas.cuota, desde: Timestamp.fromDate(desde), hasta: Timestamp.fromDate(hasta), fecha: serverTimestamp(), ...(reporte ? { referencia: reporte.referencia } : {}) });
+    if (reporte) lote.update(doc(db, "reportesPago", reporte.id), { estado: "aprobado", revisado: serverTimestamp() });
     await lote.commit();
     aviso(`Pago registrado. Pagado hasta ${fechaTexto(hasta)}`);
   }
@@ -429,6 +499,11 @@ function iniciar() {
       <div class="caja"><h2>${icono("dinero")} Tasa del dólar</h2>
         <label>Bolívares por cada $1 (ej. tasa BCV del día)</label><input name="tasa" type="number" step="0.01" min="0" value="${t.tasa || ""}" placeholder="Ej.: 36.50">
         <p class="nota">${t.tasa ? `Actualizada el ${fechaTexto(t.tasaFecha)} · Con esta tasa la app muestra los precios en Bs.` : "Escríbela para que los clientes puedan pagar en Bs y Pago móvil."} Actualízala cada día.</p></div>
+      <div class="caja"><h2>${icono("telefono")} Tu pago móvil (para cobrar la cuota)</h2>
+        <p class="nota">Los motorizados lo ven en su app para pagarte la quincena y reportar el pago.</p>
+        <label>Banco</label><input name="cobroBanco" value="${esc((t.cobro || {}).banco || "")}" placeholder="Ej.: Banesco">
+        <div class="dos"><div><label>Teléfono</label><input name="cobroTel" value="${esc((t.cobro || {}).telefono || "")}" placeholder="0414-1234567"></div>
+        <div><label>Cédula</label><input name="cobroCed" value="${esc((t.cobro || {}).cedula || "")}" placeholder="V-12345678"></div></div></div>
       <h1 class="titulo">Tarifas por kilómetro</h1>
       <p class="nota">Precio = base + (precio por km × kilómetros). El cliente lo ve calculado en el mapa.</p>
       <div class="caja" ${SERVICIOS.includes("delivery") ? "" : "hidden"}><h2>${icono("paquete")} Delivery</h2><div class="dos">
@@ -460,6 +535,7 @@ function iniciar() {
         nocturna: { activa: fd.get("nocheActiva") === "on", desde: fd.get("nocheDesde") || "20:00", hasta: fd.get("nocheHasta") || "05:00", extra: num("nocheExtra") },
         lluvia: { activa: fd.get("lluviaActiva") === "on", extra: num("lluviaExtra") },
         tasa: num("tasa"),
+        cobro: { banco: String(fd.get("cobroBanco") || "").trim(), telefono: String(fd.get("cobroTel") || "").trim(), cedula: String(fd.get("cobroCed") || "").trim() },
         tasaFecha: num("tasa") !== (t.tasa || 0) ? new Date() : (t.tasaFecha || new Date()),
       };
       await setDoc(doc(db, "config", "general"), tarifas);

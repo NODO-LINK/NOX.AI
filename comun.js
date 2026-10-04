@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=44";
-import { icono, pintarIconos } from "./iconos.js?v=44";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=45";
+import { icono, pintarIconos } from "./iconos.js?v=45";
 
 export { icono };
 pintarIconos();
@@ -100,6 +100,39 @@ export const ASPECTOS = {
 };
 // % de viajes en que el cliente dijo que se sintió seguro (null si nadie ha respondido).
 export const pctSeguro = (m) => (m.seguroN ? Math.round((100 * (m.seguroSi || 0)) / m.seguroN) : null);
+// ---------- Fotos del motorizado y de su moto ----------
+// Se guardan pequeñas (JPEG ~300 px) en la colección "fotos", aparte, para no hacer pesada la lista de motorizados.
+const cacheFotos = new Map();
+export function fotosDe(motoId) {
+  if (!cacheFotos.has(motoId)) cacheFotos.set(motoId, getDoc(doc(db, "fotos", motoId)).then((d) => (d.exists() ? d.data() : {})).catch(() => ({})));
+  return cacheFotos.get(motoId);
+}
+export const olvidarFotos = (motoId) => cacheFotos.delete(motoId);
+// Reduce una imagen elegida en el teléfono a un JPEG pequeño (data URL).
+export function achicarFoto(archivo, lado = 320) {
+  return new Promise((ok, mal) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, lado / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      ok(c.toDataURL("image/jpeg", 0.78));
+    };
+    img.onerror = mal;
+    img.src = URL.createObjectURL(archivo);
+  });
+}
+// Pone la foto en los avatares con data-foto-moto="id" (si tiene).
+export function pintarFotos(raiz = document) {
+  $$("[data-foto-moto]", raiz).forEach(async (el) => {
+    const f = await fotosDe(el.dataset.fotoMoto);
+    const url = el.dataset.cual === "moto" ? f.moto : f.persona;
+    if (url) { el.style.backgroundImage = `url("${url}")`; el.classList.add("con-foto"); }
+  });
+}
+
 // Copia pública de una reseña aprobada (sin datos privados del cliente ni los reportes).
 export function opinionPublica(r) {
   const partes = String(r.clienteNombre || "Cliente").trim().split(/\s+/);

@@ -9,8 +9,8 @@ import {
 import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
-  leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
-} from "./comun.js?v=44";
+  pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
+} from "./comun.js?v=45";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -178,6 +178,7 @@ function iniciar() {
       const ahora = carreraActual();
       $("#punto").hidden = !ahora;
       actualizarSeguimiento(antes);
+      escucharOfertas(ahora);
       if (ahora && antes && ahora.id === antes.id && ahora.llegoEn && !antes.llegoEn && !ahora.recogido) {
         const quien = (ahora.motoNombre || "Tu motorizado").split(" ")[0];
         aviso(`¡${quien} llegó! Está afuera esperándote`);
@@ -982,7 +983,7 @@ function iniciar() {
       <p class="nota">${miPos ? "Primero los disponibles y los más cerca de ti." : "Primero los disponibles, por calificación. Activa tu ubicación para ver quién está más cerca."}</p>
       <div class="lista">${motos.length ? lista.map(({ m, cerca }) => `
         <article class="tarjeta">
-          <div class="avatar">${esc(iniciales(m.nombre))}</div>
+          <div class="avatar" data-foto-moto="${m.id}">${esc(iniciales(m.nombre))}</div>
           <div class="info"><h3>${esc(m.nombre)}</h3>
             <p>${icono("moto")} ${esc(m.moto || "")}${m.placa ? ` · Placa ${esc(m.placa)}` : ""}</p>
             <button class="ver-perfil" data-perfil="${m.id}">${icono("estrella")} Ver perfil y opiniones</button>
@@ -997,6 +998,7 @@ function iniciar() {
       </div>`;
     $("#vista").insertAdjacentHTML("beforeend", `<p class="nota pie-legal">${ENLACE_POLITICAS}</p>`);
     $$("[data-perfil]").forEach((b) => (b.onclick = () => verPerfil(motos.find((x) => x.id === b.dataset.perfil))));
+    pintarFotos($("#vista"));
     $$("[data-llamar]").forEach((a) => a.addEventListener("click", () => {
       setDoc(doc(db, "llamadas", a.dataset.llamar), { n: increment(1) }, { merge: true }).catch(() => {});
     }));
@@ -1026,20 +1028,122 @@ function iniciar() {
     try { await navigator.clipboard.writeText(b.dataset.copiar); aviso("Copiado"); } catch { aviso(b.dataset.copiar); }
   });
 
+  // ---------- Contraofertas: los motorizados proponen otro precio a una carrera publicada ----------
+  const ofertas = { id: null, quitar: null, lista: [], vistas: 0 };
+  function escucharOfertas(c) {
+    const toca = c && c.estado === "esperando" && c.ofertaCliente;
+    if (toca && ofertas.id === c.id) return;
+    if (ofertas.quitar) ofertas.quitar();
+    Object.assign(ofertas, { id: null, quitar: null, lista: [], vistas: 0 });
+    if (!toca) return;
+    ofertas.id = c.id;
+    ofertas.quitar = onSnapshot(collection(db, "carreras", c.id, "ofertas"), (s) => {
+      ofertas.lista = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.precio - b.precio);
+      if (ofertas.lista.length > ofertas.vistas) {
+        const nueva = ofertas.lista.find((o) => !o.avisada) || ofertas.lista[0];
+        notificar(`${String(nueva.nombre).split(" ")[0]} te ofrece ${usd(nueva.precio)}`, "Toca para ver las ofertas de los motorizados", { sonar: true });
+        aviso(`Nueva oferta: ${String(nueva.nombre).split(" ")[0]} · ${usd(nueva.precio)}`);
+      }
+      ofertas.vistas = ofertas.lista.length;
+      pintarOfertas();
+    }, () => {});
+  }
+  function pintarOfertas() {
+    const caja = $("#ofertas");
+    const c = carreraActual();
+    if (!caja || !c) return;
+    const enBs = c.formaPago === "bs" || c.formaPago === "pagomovil";
+    caja.innerHTML = ofertas.lista.length ? ofertas.lista.map((o) => `
+      <article class="tarjeta oferta-moto">
+        <div class="avatar" data-foto-moto="${o.motoUid}">${esc(iniciales(o.nombre))}</div>
+        <div class="info"><h3>${esc(o.nombre)}</h3>
+          <p>${icono("moto")} ${esc(o.moto)}${o.placa ? ` · Placa ${esc(o.placa)}` : ""}</p>
+          <div class="etiquetas"><span class="rating">${estrellas(o)}</span>${insigniasSeguridad(o, 0)}</div></div>
+        <div class="acciones"><div class="precio-oferta"><b>${usd(o.precio)}</b>${enBs && o.precioBs ? `<small>${bs(o.precioBs)}</small>` : ""}
+          ${o.precio > c.precio ? `<small class="mas-caro">+${usd(o.precio - c.precio)} que tu precio</small>` : o.precio < c.precio ? `<small class="mas-barato">${usd(c.precio - o.precio)} menos</small>` : ""}</div>
+          <button class="boton" data-tomar="${o.motoUid}">Aceptar</button></div>
+      </article>`).join("")
+      : `<p class="nota">Si un motorizado propone otro precio, aparece aquí y te avisamos con la corneta. También pueden aceptar tu precio directamente.</p>`;
+    pintarFotos(caja);
+    $$("[data-tomar]", caja).forEach((b) => (b.onclick = async () => {
+      const o = ofertas.lista.find((x) => x.motoUid === b.dataset.tomar);
+      if (!confirm(`¿Aceptar la oferta de ${o.nombre} por ${usd(o.precio)}${enBs && o.precioBs ? ` (${bs(o.precioBs)})` : ""}?`)) return;
+      b.disabled = true;
+      try {
+        await updateDoc(doc(db, "carreras", c.id), {
+          estado: "aceptada", motoUid: o.motoUid, motoNombre: o.nombre, motoTel: o.telefono || "", motoMoto: o.moto || "", motoPlaca: o.placa || "",
+          aceptada: serverTimestamp(), precio: o.precio, precioBs: o.precioBs ?? null, contraoferta: true,
+        });
+      } catch (e) {
+        console.error(e); b.disabled = false;
+        aviso("No se pudo aceptar: puede que otro motorizado ya tomó tu carrera.");
+      }
+    }));
+  }
+
+  // ---------- SOS: emergencia durante el viaje ----------
+  const contactoSos = {
+    leer() { try { return JSON.parse(localStorage.getItem("whereapp.contactoSos")) || null; } catch { return null; } },
+    guardar(c) { try { localStorage.setItem("whereapp.contactoSos", JSON.stringify(c)); } catch {} },
+  };
+  function abrirSos(c) {
+    const fondo = document.createElement("div");
+    fondo.className = "modal";
+    let ubic = null; // se llena con tu GPS
+    const enlace = new URL(`seguir.html?c=${encodeURIComponent(c.id)}`, location.href).href;
+    const texto = () => `🚨 NECESITO AYUDA. Voy en una moto de ${NOMBRE}: ${c.motoNombre}, ${c.motoMoto || "moto"}${c.motoPlaca ? `, placa ${c.motoPlaca}` : ""}.`
+      + (ubic ? ` Mi ubicación: https://maps.google.com/?q=${ubic.lat},${ubic.lng}` : "")
+      + ` Sígueme en vivo: ${enlace}`;
+    const pintar = () => {
+      const k = contactoSos.leer();
+      fondo.innerHTML = `<div class="ventana sos-ventana"><h2>${icono("alerta")} ¿Necesitas ayuda?</h2>
+        <a class="boton peligro grande" href="tel:911">${icono("telefono")} Llamar al 911</a>
+        ${k ? `<a class="boton" data-wa href="https://wa.me/${k.tel}?text=${encodeURIComponent(texto())}" target="_blank" rel="noopener">${icono("chat")} Avisar a ${esc(k.nombre)} por WhatsApp</a>` : ""}
+        <a class="boton secundario" data-wa href="https://wa.me/?text=${encodeURIComponent(texto())}" target="_blank" rel="noopener">${icono("compartir")} Enviar mi ubicación a alguien</a>
+        <button class="boton secundario chico" id="contacto-sos">${icono("usuario")} ${k ? "Cambiar contacto de confianza" : "Guardar un contacto de confianza"}</button>
+        <p class="nota">${ubic ? "Tu ubicación va en el mensaje." : "Buscando tu ubicación para el mensaje…"} También le avisamos al administrador de ${NOMBRE}.</p>
+        <button class="boton secundario" data-no>Cerrar</button></div>`;
+      $("[data-no]", fondo).onclick = () => fondo.remove();
+      $("#contacto-sos", fondo).onclick = () => {
+        const nombre = prompt("Nombre de tu contacto de confianza:", (k && k.nombre) || "");
+        if (!nombre) return;
+        const tel = normalizarTel(prompt("Su número de WhatsApp (ej. 0414-1234567):", "") || "");
+        if (!tel) return aviso("Ese número no es válido");
+        contactoSos.guardar({ nombre: nombre.trim(), tel: tel.replace("+", "") });
+        pintar();
+      };
+    };
+    document.body.append(fondo);
+    pintar();
+    if (navigator.vibrate) navigator.vibrate(200);
+    const avisarAdmin = () => {
+      if (c.sos) return;
+      updateDoc(doc(db, "carreras", c.id), { sos: serverTimestamp(), ...(ubic ? { sosUbic: ubic } : {}) }).catch((e) => console.error(e));
+      c.sos = true;
+    };
+    if (navigator.geolocation) navigator.geolocation.getCurrentPosition(
+      (p) => { ubic = { lat: p.coords.latitude, lng: p.coords.longitude }; if (document.body.contains(fondo)) pintar(); avisarAdmin(); },
+      () => avisarAdmin(), { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 });
+    else avisarAdmin();
+  }
+
   // Perfil del motorizado: datos, seguridad y opiniones de otros clientes.
   async function verPerfil(m) {
     if (!m) return;
     const fondo = document.createElement("div");
     fondo.className = "modal";
     fondo.innerHTML = `<div class="ventana perfil-moto">
-      <div class="perfil-cabeza"><div class="avatar">${esc(iniciales(m.nombre))}</div>
+      <div class="perfil-cabeza"><div class="avatar" data-foto-moto="${m.id}">${esc(iniciales(m.nombre))}</div>
         <div><h2>${esc(m.nombre)}</h2><p class="nota">${icono("moto")} ${esc(m.moto || "")}${m.placa ? ` · Placa ${esc(m.placa)}` : ""}</p>
         <span class="rating">${estrellas(m)}</span></div></div>
       ${insigniasSeguridad(m, 6) ? `<div class="etiquetas">${insigniasSeguridad(m, 6)}</div>` : ""}
+      <div class="foto-moto-grande" data-foto-moto="${m.id}" data-cual="moto" hidden></div>
       <h3 class="subtitulo-perfil">Opiniones de clientes</h3>
       <div class="opiniones" id="opiniones"><p class="nota">Cargando…</p></div>
       <button class="boton secundario" data-no>Cerrar</button></div>`;
     document.body.append(fondo);
+    pintarFotos(fondo);
+    fotosDe(m.id).then((f) => { if (f.moto) $(".foto-moto-grande", fondo).hidden = false; });
     const cerrar = () => fondo.remove();
     $("[data-no]", fondo).onclick = cerrar;
     fondo.addEventListener("click", (e) => { if (e.target === fondo) cerrar(); });
@@ -1090,15 +1194,18 @@ function iniciar() {
         <div class="estado-carrera"><div class="grande latido">${icono("moto")}</div>
           <h2>${c.paraMoto ? `Esperando a que ${esc(c.paraMotoNombre)} acepte…` : "Buscando motorizado…"}</h2>
           <p class="nota">Te avisamos apenas un motorizado acepte. Puedes dejar esta pantalla abierta.</p></div>
+        ${c.ofertaCliente ? `<h2 class="subtitulo-ofertas">${icono("dinero")} Ofertas de motorizados</h2><div class="lista" id="ofertas"></div>` : ""}
         ${botonesExtra}
         ${resumen}
         <button class="boton peligro" id="cancelar">Cancelar carrera</button>`;
+      pintarOfertas();
     } else {
       const m = motos.find((x) => x.id === c.motoUid) || {};
       $("#vista").innerHTML = `
         <div class="vivo" id="vivo"></div>
         <article class="tarjeta" id="tarjeta-moto">
-          <div class="avatar">${esc(iniciales(c.motoNombre || "?"))}</div>
+          <div class="avatar" data-foto-moto="${c.motoUid}">${esc(iniciales(c.motoNombre || "?"))}</div>
+          <div class="foto-moto-mini" data-foto-moto="${c.motoUid}" data-cual="moto"></div>
           <div class="info"><h3>${esc(c.motoNombre)}</h3>
             <p>${icono("moto")} ${esc(c.motoMoto || "")}${c.motoPlaca ? ` · Placa <b>${esc(c.motoPlaca)}</b>` : ""}</p>
             ${m.ratingCount ? `<span class="rating">${estrellas(m)}</span>` : ""}</div>
@@ -1109,6 +1216,7 @@ function iniciar() {
           <div class="mapa grande" id="mapa"></div>
           <div class="mapa-estado" id="mapa-estado"></div>
           <button class="boton secundario chico seguir-moto" id="seguir-moto">${icono("moto")} Seguir la moto</button>
+          <button class="boton-sos" id="sos" aria-label="Emergencia">SOS</button>
         </div>
         <p class="nota leyenda-mapa"><i class="linea-camino"></i> camino que va a tomar · <i class="linea-rastro"></i> por dónde ha venido</p>
         ${botonesExtra}
@@ -1169,6 +1277,8 @@ function iniciar() {
         $("#mapa-estado").classList.toggle("alerta", quieto >= 2 && !info.llego);
       };
       seguimiento.alMover(seguimiento.info || progreso(c, null), seguimiento.ubic);
+      pintarFotos($("#tarjeta-moto"));
+      $("#sos").onclick = () => abrirSos(c);
     }
     $("#compartir").onclick = () => compartirCarrera(c, cliente.nombre);
     if ($("#chat")) $("#chat").onclick = () => abrirChat(c.id, usuario.uid, cliente.nombre, c.motoNombre.split(" ")[0]);

@@ -33,6 +33,12 @@ service cloud.firestore {
       allow write: if esAdmin();
     }
 
+    // Fotos del motorizado y de su moto (las sube el administrador).
+    match /fotos/{uid} {
+      allow read: if dentro();
+      allow write: if esAdmin();
+    }
+
     match /clientes/{uid} {
       allow read: if dentro() && request.auth.uid == uid;
       allow write: if dentro() && request.auth.uid == uid
@@ -75,6 +81,17 @@ service cloud.firestore {
             && resource.data.estado in ['esperando', 'aceptada']
             && request.resource.data.estado == 'cancelada'
             && soloCambia(['estado', 'cancelacion']))
+        // …acepta la contraoferta de un motorizado (con el precio que él ofreció)…
+        || (dentro() && resource.data.clienteUid == request.auth.uid
+            && resource.data.estado == 'esperando'
+            && request.resource.data.estado == 'aceptada'
+            && exists(/databases/$(database)/documents/carreras/$(id)/ofertas/$(request.resource.data.motoUid))
+            && request.resource.data.precio == get(/databases/$(database)/documents/carreras/$(id)/ofertas/$(request.resource.data.motoUid)).data.precio
+            && soloCambia(['estado', 'motoUid', 'motoNombre', 'motoTel', 'motoMoto', 'motoPlaca', 'aceptada', 'precio', 'precioBs', 'contraoferta']))
+        // …avisa una emergencia (SOS) durante el viaje…
+        || (dentro() && resource.data.clienteUid == request.auth.uid
+            && resource.data.estado == 'aceptada'
+            && soloCambia(['sos', 'sosUbic']))
         // …o la califica cuando terminó.
         || (dentro() && resource.data.clienteUid == request.auth.uid
             && resource.data.estado == 'terminada'
@@ -93,6 +110,17 @@ service cloud.firestore {
              || (request.resource.data.estado == 'terminada' && soloCambia(['estado', 'terminada']))
              || (request.resource.data.estado == 'esperando' && request.resource.data.motoUid == null
                  && soloCambia(['estado', 'motoUid', 'paraMoto', 'paraMotoNombre', 'cancelaciones', 'recogido', 'llegoEn']))));
+    }
+
+    // Contraofertas: cada motorizado propone su precio en una carrera publicada por el cliente.
+    match /carreras/{cid}/ofertas/{motoId} {
+      function carreraO() { return get(/databases/$(database)/documents/carreras/$(cid)).data; }
+      allow read: if esAdmin() || (dentro() && (carreraO().clienteUid == request.auth.uid || request.auth.uid == motoId));
+      allow create, update: if esMoto() && request.auth.uid == motoId && motoHabilitado()
+        && carreraO().estado == 'esperando' && carreraO().paraMoto == null
+        && request.resource.data.motoUid == motoId
+        && request.resource.data.precio is number && request.resource.data.precio > 0;
+      allow delete: if dentro() && request.auth.uid == motoId;
     }
 
     // Chat de la carrera: solo el cliente y el motorizado asignado (el admin puede leer).
@@ -124,6 +152,13 @@ service cloud.firestore {
         && request.resource.data.estrellas is int
         && request.resource.data.estrellas >= 1 && request.resource.data.estrellas <= 5;
       allow read, update, delete: if esAdmin();
+    }
+
+    // El motorizado reporta el pago de su cuota; el administrador lo aprueba o lo rechaza.
+    match /reportesPago/{id} {
+      allow create: if esMoto() && request.resource.data.motoUid == request.auth.uid && request.resource.data.estado == 'pendiente';
+      allow read: if esAdmin() || (dentro() && resource.data.motoUid == request.auth.uid);
+      allow update, delete: if esAdmin();
     }
 
     match /pagos/{id} {
