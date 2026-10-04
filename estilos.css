@@ -467,7 +467,11 @@ body.con-widget .aviso { bottom: calc(176px + env(safe-area-inset-bottom)); }
 .letra-p { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; color: #fff; font-style: normal; font-weight: 800; font-size: .7rem; margin-right: 6px; box-shadow: var(--sombra-1); background: linear-gradient(135deg, #fbbf24, #f59e0b); }
 .paradas { display: grid; gap: 8px; margin-top: 12px; }
 .paradas:empty { display: none; }
-.parada-fila { display: flex; align-items: center; gap: 8px; animation: entrar .4s var(--suave) both; }
+.parada-fila { display: flex; align-items: center; gap: 8px; }
+.parada-fila.nueva { animation: fila-nueva .35s var(--suave) both; }
+@keyframes fila-nueva { from { opacity: 0; transform: translateY(-8px) scale(.98); } to { opacity: 1; transform: none; } }
+.calculando { width: 46px; height: 8px; border-radius: 9px; background: linear-gradient(90deg, var(--marca-suave), var(--marca), var(--marca-suave)); background-size: 200% 100%; animation: cargando 1s linear infinite; }
+@keyframes cargando { to { background-position: -200% 0; } }
 .parada-fila > i { margin: 0; flex: 0 0 auto; }
 .parada-fila input { flex: 1; min-width: 0; padding: 11px 14px; }
 .quitar { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 50%; border: 0; background: var(--suave-rojo); color: var(--rojo); display: grid; place-items: center; cursor: pointer; transition: transform .3s var(--resorte); }

@@ -10,7 +10,7 @@ import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
   politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
-} from "./comun.js?v=41";
+} from "./comun.js?v=42";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -231,6 +231,9 @@ function iniciar() {
     const activa = carreraActual();
     const n = pedido.puntos.length;
     const pub = publicando();
+    // Al redibujar (agregar parada, elegir un lugar…) se reusa el mapa chiquito: así no parpadea ni recarga.
+    const mapaViejo = mapa && mapa._dePedido && $("#abrir-mapa");
+    const scroll = window.scrollY;
     $("#vista").innerHTML = `
       ${pub ? `<h1 class="titulo">Publica tu carrera</h1>
         <p class="nota">Marca a dónde vas y pon cuánto quieres pagar. Todos los motorizados de turno la ven y el primero que acepte te busca.</p>`
@@ -270,14 +273,27 @@ function iniciar() {
       ${activa ? `<p class="nota">Ya tienes una carrera en curso. Mírala en "Mi carrera".</p>` : ""}`;
 
     // Vista previa quieta: tocarla abre el mapa en pantalla completa.
-    mapa = nuevoMapa("mapa", "mini");
-    dibujarRecorrido(mapa, L.layerGroup().addTo(mapa), false);
-    encuadrar(mapa);
+    if (mapaViejo) {
+      $("#abrir-mapa").replaceWith(mapaViejo);
+      $(".vista-mapa-boton", mapaViejo).innerHTML = `${icono("pin")} ${n < 2 ? "Toca para elegir en el mapa" : "Editar en el mapa"}`;
+      mapa._capaPedido.clearLayers();
+      dibujarRecorrido(mapa, mapa._capaPedido, false);
+      encuadrar(mapa, true);
+      window.scrollTo(0, scroll);
+    } else {
+      if (mapa) { mapa.remove(); mapa = null; }
+      mapa = nuevoMapa("mapa", "mini");
+      mapa._dePedido = true;
+      mapa._capaPedido = L.layerGroup().addTo(mapa);
+      dibujarRecorrido(mapa, mapa._capaPedido, false);
+      encuadrar(mapa);
+    }
 
     const t = tarifas[pedido.tipo];
     const extras = recargos(tarifas);
     $("#precio").innerHTML = (pedido.km != null && n >= 2
       ? `<span>${resumenRecorrido()}</span><b>${usd(precio(tarifas, pedido.tipo, pedido.km))}${tarifas.tasa > 0 ? `<small class="en-bs">${bs(aBs(precio(tarifas, pedido.tipo, pedido.km), tarifas.tasa))}</small>` : ""}</b>`
+      : n >= 2 ? `<span>${icono("ruta")} Calculando el precio…</span><span class="calculando"></span>`
       : `<span>${usd(t.base)} + ${usd(t.porKm)} por km</span><span class="nota">Marca A y B</span>`)
       + (extras.length ? `<small class="recargo">${icono(extras.some((x) => /lluvia/i.test(x.nombre)) ? "lluvia" : "luna")} Incluye ${extras.map((x) => `${x.nombre.toLowerCase()} (+${usd(x.monto)})`).join(" y ")}</small>` : "");
     if (pub) $("#precio").hidden = true;   // al publicar, el precio lo pone el cliente (abajo se muestra el sugerido)
@@ -288,7 +304,12 @@ function iniciar() {
     pintarListaPuntos(() => vistaPedir());
 
     $("#abrir-mapa").onclick = () => abrirSelector();
-    if ($("#agregar")) $("#agregar").onclick = () => { pedido.paradaPendiente = true; vistaPedir(); setTimeout(() => $("[data-nuevo=P]")?.focus(), 60); };
+    if ($("#agregar")) $("#agregar").onclick = () => {
+      pedido.paradaPendiente = true; pedido.filaNueva = "P";
+      vistaPedir();
+      const campo = $("[data-nuevo=P]");
+      if (campo) { campo.focus({ preventScroll: true }); campo.closest(".parada-fila").scrollIntoView({ behavior: "smooth", block: "center" }); }
+    };
     if ($("#agregar")) $("#agregar").disabled = pedido.paradaPendiente || n >= MAX_PUNTOS;
     if ($("#retorno")) $("#retorno").onchange = async (e) => { pedido.retorno = e.target.checked; await recalcular(); vistaPedir(); };
     $$("#tipo button").forEach((b) => (b.onclick = () => { pedido.tipo = b.dataset.t; vistaPedir(); }));
@@ -366,9 +387,9 @@ function iniciar() {
     return `${pedido.km.toFixed(1)} km${n > 2 ? ` · ${n - 2} parada${n > 3 ? "s" : ""}` : ""}${pedido.retorno ? " · ida y vuelta" : ""}`;
   };
 
-  function encuadrar(m) {
-    if (pedido.puntos.length >= 2) m.fitBounds(L.latLngBounds(pedido.puntos).pad(0.3), { animate: false });
-    else if (pedido.puntos.length === 1) m.setView(pedido.puntos[0], 16, { animate: false });
+  function encuadrar(m, animar = false) {
+    if (pedido.puntos.length >= 2) m.fitBounds(L.latLngBounds(pedido.puntos).pad(0.3), { animate: animar, duration: 0.5 });
+    else if (pedido.puntos.length === 1) m.setView(pedido.puntos[0], 16, { animate: animar });
   }
 
   // Marcadores y línea del recorrido en un mapa (arrastrables en el mapa completo).
@@ -492,7 +513,7 @@ function iniciar() {
         const clase = f.pendiente === "A" ? "letra-a" : f.pendiente === "B" ? "letra-b" : "letra-p";
         const ph = f.pendiente === "A" ? (pedido.buscandoA ? "Buscando tu ubicación…" : "¿Dónde te buscan? Escribe un lugar…")
           : f.pendiente === "B" ? (f.bloqueada ? "Primero el punto A" : "¿A dónde vas? Escribe un lugar…") : "¿Dónde es la parada? Escribe un lugar…";
-        return `<div class="parada-fila pendiente">
+        return `<div class="parada-fila pendiente ${pedido.filaNueva === "P" && f.pendiente === "P" ? "nueva" : ""}">
           <i class="${clase}">${letra}</i>
           <div class="campo-lugar"><input data-nuevo="${f.pendiente}" placeholder="${ph}" ${f.bloqueada ? "disabled" : ""} autocomplete="off"><div class="sugerencias" hidden></div></div>
           <button class="quitar" data-en-mapa="${f.pendiente}" aria-label="Marcar en el mapa" ${f.bloqueada ? "disabled" : ""}>${icono("pin")}</button>
@@ -500,7 +521,7 @@ function iniciar() {
         </div>`;
       }
       const i = f.i;
-      return `<div class="parada-fila">
+      return `<div class="parada-fila ${pedido.filaNueva === i ? "nueva" : ""}">
         <i class="${clasePunto(i, n)}">${letraPunto(i, n)}</i>
         <div class="campo-lugar"><input data-ref="${i}" placeholder="${i === 0 ? "Referencia: casa, color, frente a…" : "Referencia del lugar…"}" value="${esc(pedido.refs[i] || "")}" autocomplete="off"><div class="sugerencias" hidden></div></div>
         <button class="estrella-fav ${esFavorito(pedido.puntos[i]) ? "on" : ""}" data-fav="${i}" aria-label="Guardar en mis lugares">${icono("favorito")}</button>
@@ -508,6 +529,7 @@ function iniciar() {
       </div>`;
     }).join("");
     void total;
+    pedido.filaNueva = null;
 
     const listo = async () => { await recalcular(); if (enPedido() && !$(".selector")) alCambiar(); };
     // Puntos ya marcados: lo escrito es la referencia; si eliges una sugerencia, el punto cambia a ese lugar.
@@ -515,7 +537,7 @@ function iniciar() {
       const i = Number(el.dataset.ref);
       el.addEventListener("input", () => { pedido.refs[i] = el.value; });
       sugerir(el, i === 0, (l) => {
-        pedido.puntos[i] = L.latLng(l.lat, l.lng); pedido.refs[i] = l.n;
+        pedido.puntos[i] = L.latLng(l.lat, l.lng); pedido.refs[i] = l.n; pedido.km = null;
         alCambiar(); listo();
       });
     });
@@ -524,6 +546,7 @@ function iniciar() {
       const p = L.latLng(l.lat, l.lng);
       if (el.dataset.nuevo === "P") { const k = pedido.puntos.length - 1; pedido.puntos.splice(k, 0, p); pedido.refs.splice(k, 0, l.n); pedido.paradaPendiente = false; }
       else { pedido.puntos.push(p); pedido.refs.push(l.n); }
+      pedido.km = null;
       alCambiar(); listo();
       setTimeout(() => { const sig = $("[data-nuevo]:not([disabled])"); if (sig) sig.focus(); }, 60);
     }));
