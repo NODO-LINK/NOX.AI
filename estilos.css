@@ -888,3 +888,4 @@ body.con-selector { overflow: hidden; }
 .ficha .fila b { text-align: right; }
 .placa { display: inline-block; padding: 3px 12px; border-radius: 8px; background: #fde68a; color: #1b1033; border: 2px solid #1b1033; font-family: ui-monospace, monospace; letter-spacing: 2px; font-weight: 900; }
 .tocable { cursor: pointer; }
+.avisos-ok { display: inline-flex; align-items: center; gap: 6px; padding: 10px 14px; }

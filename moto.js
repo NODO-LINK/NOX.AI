@@ -5,9 +5,9 @@ import {
   doc, getDoc, setDoc, deleteDoc, addDoc, writeBatch, onSnapshot, updateDoc, collection, query, where, runTransaction, serverTimestamp, arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  leerOpiniones, listaOpiniones, ENLACE_POLITICAS, sonarAlerta, ASPECTOS, insigniasSeguridad, textoCobro, FORMAS_PAGO, bs, auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
+  pedirAvisosAlTocar, leerOpiniones, listaOpiniones, ENLACE_POLITICAS, sonarAlerta, ASPECTOS, insigniasSeguridad, textoCobro, FORMAS_PAGO, bs, auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar, escucharTarifas, aBs, lineaRecta,
-} from "./comun.js?v=49";
+} from "./comun.js?v=50";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -36,6 +36,7 @@ function iniciar() {
     $$(".modal").forEach((m) => m.remove());
     yo = u; perfil = null; miCarrera = null; disponibles = []; ultimoModo = null;
     if (!u) return pantallaEntrada();
+    pedirAvisosAlTocar();
     subs.push(onSnapshot(doc(db, "motorizados", u.uid), (s) => {
       if (!s.exists()) { aviso("Esta cuenta no es de un motorizado"); signOut(auth); return; }
       const antes = perfil && habilitado(perfil);
@@ -118,10 +119,14 @@ function iniciar() {
       const nuevas = disponibles.filter((c) => !conocidas.has(c.id));
       nuevas.forEach((c) => conocidas.add(c.id));
       if (nuevas.length && !primeraCarga && !miCarrera) {
-        sonar(); aviso("¡Carrera nueva!");
-        // Si la app está en segundo plano, aviso en la barra de notificaciones.
-        const c = nuevas[0];
-        if (document.hidden) notificar("¡Carrera nueva!", `${textoCobro(c)} · ${esc(c.km)} km · ${c.origen.dir}`, { tag: "whereapp-moto" });
+        sonar();
+        aviso(nuevas.length > 1 ? `¡${nuevas.length} carreras nuevas!` : nuevas[0].ofertaCliente ? "¡Carrera publicada! El cliente puso su precio" : "¡Carrera nueva!");
+        // Una notificación por cada carrera, en la barra del teléfono (aunque la app esté minimizada).
+        nuevas.forEach((c) => {
+          const titulo = c.paraMoto ? "🏍️ ¡Un cliente te pidió a ti!" : c.ofertaCliente ? "🏍️ Carrera publicada · precio del cliente" : "🏍️ ¡Carrera nueva!";
+          const ruta = `${c.origen.dir} → ${c.destino.dir}${(c.paradas || []).length ? ` (+${c.paradas.length} parada${c.paradas.length > 1 ? "s" : ""})` : ""}`;
+          notificar(titulo, `${textoCobro(c)} · ${Number(c.km) || 0} km\n${ruta}`, { tag: "carrera-" + c.id, urgente: true });
+        });
       }
       primeraCarga = false;
       // Con una carrera en curso no se redibuja (si no, el mapa se reinicia a cada rato).
@@ -294,10 +299,8 @@ function iniciar() {
 
   // ---------- Sonido ----------
   // Corneta de moto (la misma de la app del cliente); solo después de tocar "Activar sonido".
-  function sonar() {
-    if (!sonido) return;
-    sonarAlerta();
-  }
+  function sonar() { sonarAlerta(); }
+  const avisosListos = () => sonido && (!("Notification" in window) || Notification.permission === "granted");
 
 
   // ---------- Ubicación en vivo ----------
@@ -360,7 +363,7 @@ function iniciar() {
           <button class="interruptor-grande ${deTurno ? "on" : ""}" id="turno" aria-label="Cambiar turno"><span></span></button>
         </div>
         ${deTurno ? `<div class="botones">
-          ${sonido ? "" : `<button class="boton secundario" id="activar-sonido">${icono("campana")} Activar sonido y avisos</button>`}
+          ${avisosListos() ? `<span class="pildora ok avisos-ok">${icono("campana")} Avisos activados</span>` : `<button class="boton" id="activar-sonido">${icono("campana")} Activar sonido y avisos</button>`}
           <button class="boton secundario ${pantallaFija ? "activo-suave" : ""}" id="pantalla">${icono("pantalla")} ${pantallaFija ? "Pantalla siempre encendida" : "Mantener pantalla encendida"}</button>
         </div>
         <h1 class="titulo">Carreras disponibles (${disponibles.length})</h1>
@@ -404,7 +407,13 @@ function iniciar() {
       if ($("#lista-opiniones")) $("#lista-opiniones").innerHTML = opiniones.html;
     });
     const s = $("#activar-sonido");
-    if (s) s.onclick = () => { sonido = new (window.AudioContext || window.webkitAudioContext)(); sonar(); pedirPermisoAvisos(); pintar(); };
+    if (s) s.onclick = async () => {
+      sonido = true; sonar();
+      await pedirPermisoAvisos();
+      if ("Notification" in window && Notification.permission === "granted") notificar("🏍️ Avisos activados", "Así te llegará cada carrera nueva, aunque tengas la app minimizada.", { tag: "prueba-aviso" });
+      else if ("Notification" in window && Notification.permission === "denied") aviso("Las notificaciones están bloqueadas: actívalas en Ajustes → Apps → Whereapp → Notificaciones");
+      pintar();
+    };
     const t = $("#turno");
     if (t) t.onclick = async () => {
       t.disabled = true;

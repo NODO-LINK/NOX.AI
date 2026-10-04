@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=49";
-import { icono, pintarIconos } from "./iconos.js?v=49";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=50";
+import { icono, pintarIconos } from "./iconos.js?v=50";
 
 export { icono };
 pintarIconos();
@@ -858,14 +858,20 @@ export async function pedirPermisoAvisos() {
   if (!avisosPosibles() || Notification.permission !== "default") return;
   try { await Notification.requestPermission(); } catch {}
 }
-export async function notificar(titulo, cuerpo, { tag = "whereapp", sonar = true, url = location.href.split("#")[0] } = {}) {
+export async function notificar(titulo, cuerpo, { tag = "whereapp", sonar = true, url = location.href.split("#")[0], urgente = false } = {}) {
   if (!avisosPosibles() || Notification.permission !== "granted") return;
   const reg = (await registroSw) || (await navigator.serviceWorker.ready.catch(() => null));
   if (!reg) return;
   reg.showNotification(titulo, {
     body: cuerpo, tag, renotify: sonar, silent: !sonar, icon: "icono-192.png", badge: "icono-192.png",
-    data: { url }, vibrate: sonar ? [200, 100, 200] : undefined,
+    data: { url }, vibrate: sonar ? (urgente ? [150, 80, 400, 120, 400] : [200, 100, 200]) : undefined,
+    requireInteraction: urgente,   // se queda en la barra hasta que la toque
   }).catch(() => {});
+}
+// Pide permiso de notificaciones con el primer toque en la pantalla (algunos teléfonos solo lo permiten así).
+export function pedirAvisosAlTocar() {
+  if (!avisosPosibles() || Notification.permission !== "default") return;
+  addEventListener("pointerdown", () => { Notification.requestPermission().catch(() => {}); }, { once: true, capture: true });
 }
 
 // ---------- Chat de la carrera (cliente ↔ motorizado) ----------
