@@ -11,8 +11,8 @@ import {
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
   pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
   hoyLocal,
-  enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO,
-} from "./comun.js?v=54";
+  enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
+} from "./comun.js?v=55";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -191,6 +191,11 @@ function iniciar() {
       anuncio = d.exists() ? d.data() : null;
       if (rutaActual === "motorizados") vistaMotorizados();
     }, () => {}));
+    // Publicidad de negocios: la ven todos los clientes (en la página y en la app).
+    cancelarSubs.push(onSnapshot(doc(db, "config", "publicidad"), (d) => {
+      publicidad = d.exists() ? d.data() : null;
+      if (rutaActual === "motorizados") vistaMotorizados();
+    }, () => {}));
     // Cédula bloqueada por el administrador: no puede pedir.
     bloqueado = await getDoc(doc(db, "bloqueados", cliente.cedula || "-")).then((x) => x.exists()).catch(() => false);
 
@@ -241,7 +246,9 @@ function iniciar() {
 
   // "pedir" (a un motorizado) y "publicar" (a todos, con el precio que pone el cliente) usan la misma pantalla.
   let cerrarSelector = null;
-  let anuncio = null;
+  let anuncio = null, publicidad = null;
+  const clavePublicidad = () => "whereapp.publicidad." + ((publicidad && fecha(publicidad.actualizado)?.getTime()) || 0);
+  const verPublicidad = () => { try { if (localStorage.getItem(clavePublicidad()) === "x") return ""; } catch {} return htmlPublicidad(publicidad); };
   const claveAnuncio = () => "whereapp.anuncio." + String((anuncio && anuncio.texto) || "").length + ":" + String((anuncio && anuncio.texto) || "").slice(0, 30);
   function htmlAnuncio() {
     if (!anuncio || !anuncio.activo || enApp()) return "";
@@ -1141,7 +1148,7 @@ function iniciar() {
       || (a.cerca ? a.cerca.km : 1e9) - (b.cerca ? b.cerca.km : 1e9)
       || promedio(b.m) - promedio(a.m));
     const libres = motos.filter((m) => !m.enCarrera).length;
-    $("#vista").innerHTML = `${htmlAnuncio()}<h1 class="titulo">Motorizados activos</h1>
+    $("#vista").innerHTML = `${htmlAnuncio()}${verPublicidad()}<h1 class="titulo">Motorizados activos</h1>
       ${motos.length && !libres ? `<div class="banner-aviso">${icono("reloj")}<span><b>Todos están ocupados ahora mismo.</b> Puedes pedirle a uno y tu carrera le llega apenas termine la que tiene.</span></div>` : ""}
       <p class="nota">${miPos ? "Primero los disponibles y los más cerca de ti." : "Primero los disponibles, por calificación. Activa tu ubicación para ver quién está más cerca."}</p>
       <div class="lista">${motos.length ? lista.map(({ m, cerca, visto }) => `
@@ -1163,6 +1170,11 @@ function iniciar() {
     $("#vista").insertAdjacentHTML("beforeend", `<p class="nota pie-legal">${ENLACE_POLITICAS}</p>`);
     $$("[data-perfil]").forEach((b) => (b.onclick = () => verPerfil(motos.find((x) => x.id === b.dataset.perfil))));
     pintarFotos($("#vista"));
+    if ($("#cerrar-publicidad")) $("#cerrar-publicidad").onclick = () => { try { localStorage.setItem(clavePublicidad(), "x"); } catch {} $(".publicidad").remove(); };
+    // Cuenta los toques del botón (para decirle al negocio cuánta gente se interesó).
+    if ($("#tocar-publicidad")) $("#tocar-publicidad").addEventListener("click", () => {
+      setDoc(doc(db, "stats", "publicidad"), { toques: increment(1) }, { merge: true }).catch(() => {});
+    });
     if ($("#cerrar-anuncio")) $("#cerrar-anuncio").onclick = () => { try { localStorage.setItem(claveAnuncio(), "x"); } catch {} $(".anuncio").remove(); };
     $$("[data-llamar]").forEach((a) => a.addEventListener("click", () => {
       setDoc(doc(db, "llamadas", a.dataset.llamar), { n: increment(1) }, { merge: true }).catch(() => {});

@@ -12,8 +12,8 @@ import {
   auth, authSecundaria, db, NOMBRE, botonTema, botonInstalar, nuevoMapa, ICONOS, recargos, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
   leerTarifas, escucharTarifas, aviso, avisoSinConfigurar, bs, sonarAlerta, mostrarLugares, tipoLugar, TIPOS_PARA_AGREGAR, ASPECTOS, insigniasSeguridad, opinionPublica, fotosDe, olvidarFotos, achicarFoto, pintarFotos,
   hoyLocal,
-  enlaceWhatsapp, ANUNCIO_PREDETERMINADO,
-} from "./comun.js?v=54";
+  enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad, enlacePublicidad,
+} from "./comun.js?v=55";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -22,7 +22,7 @@ function iniciar() {
   let motos = [], carreras = [], resenas = [], pagos = [], llamadas = {}, visitas = {}, cedulas = {}, clientes = [], bloqueados = {}, notasClientes = {};
   let mapaVivo = null, marcasVivo = {}, filtroClientes = "";
   let lugaresPropios = [], mapaLugares = null, reportesPago = [];
-  let anuncio = null;
+  let anuncio = null, publicidad = null, toquesPub = 0;
   const DIA = 864e5;
 
   onAuthStateChanged(auth, async (u) => {
@@ -73,6 +73,11 @@ function iniciar() {
     escuchar(query(collection(db, "pagos"), orderBy("fecha", "desc"), limit(500)), (s) => { pagos = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
     escuchar(collection(db, "llamadas"), (s) => { llamadas = Object.fromEntries(s.docs.map((d) => [d.id, Number(d.data().n) || 0])); return ruta === "mas"; });
     escuchar(doc(db, "config", "anuncio"), (d) => { anuncio = d.exists() ? d.data() : null; });
+    escuchar(doc(db, "config", "publicidad"), (d) => { publicidad = d.exists() ? d.data() : null; });
+    subs.push(onSnapshot(doc(db, "stats", "publicidad"), (d) => {
+      toquesPub = (d.exists() && d.data().toques) || 0;
+      const t = $("#toques-pub"); if (t) t.textContent = toquesPub;
+    }, () => {}));
     escuchar(collection(db, "clientes"), (s) => {
       clientes = s.docs.map((d) => ({ id: d.id, ...d.data() }));
       cedulas = Object.fromEntries(clientes.map((c) => [c.id, c.cedula]));
@@ -123,7 +128,7 @@ function iniciar() {
     $("#punto-resenas").hidden = !resenas.some((r) => !r.aprobada);
     const foco = document.activeElement;
     if (foco && /INPUT|TEXTAREA|SELECT/.test(foco.tagName) && $("#vista").contains(foco)) return;
-    if (ruta === "mas" && (subMas === "lugares" || subMas === "tarifas")) return;   // no borrar el mapa ni lo que se está escribiendo
+    if (ruta === "mas" && (subMas === "lugares" || subMas === "tarifas" || subMas === "publicidad")) return;   // no borrar el mapa ni lo que se está escribiendo
     if (!$(".modal")) ir(ruta, true);
   }
 
@@ -682,19 +687,81 @@ function iniciar() {
   let subMas = "tarifas";
   function vistaMas() {
     if (mapaLugares) { mapaLugares.remove(); mapaLugares = null; }
-    const subs = ["tarifas", "stats", "lugares"];
-    $("#vista").innerHTML = `<div class="segmento tres" id="sub-mas" data-pos="${subs.indexOf(subMas)}">
+    const subs = ["tarifas", "stats", "lugares", "publicidad"];
+    $("#vista").innerHTML = `<div class="segmento cuatro" id="sub-mas" data-pos="${subs.indexOf(subMas)}">
       <button data-s="tarifas" class="${subMas === "tarifas" ? "activo" : ""}">${icono("dolar")} Tarifas</button>
       <button data-s="stats" class="${subMas === "stats" ? "activo" : ""}">${icono("grafica")} Números</button>
-      <button data-s="lugares" class="${subMas === "lugares" ? "activo" : ""}">${icono("pin")} Lugares</button></div><div id="sub-vista"></div>`;
+      <button data-s="lugares" class="${subMas === "lugares" ? "activo" : ""}">${icono("pin")} Lugares</button>
+      <button data-s="publicidad" class="${subMas === "publicidad" ? "activo" : ""}">${icono("megafono")} Publicidad</button></div><div id="sub-vista"></div>`;
     const vista = $("#vista");
     // Las vistas escriben en #vista: se les presta un contenedor y luego se pone debajo del selector.
     const real = vista.id;
     const cont = $("#sub-vista");
     vista.id = ""; cont.id = "vista";
-    ({ tarifas: vistaTarifas, stats: vistaStats, lugares: vistaLugares })[subMas]();
+    ({ tarifas: vistaTarifas, stats: vistaStats, lugares: vistaLugares, publicidad: vistaPublicidad })[subMas]();
     cont.id = "sub-vista"; vista.id = real;
     $$("#sub-mas button").forEach((b) => (b.onclick = () => { subMas = b.dataset.s; vistaMas(); }));
+  }
+
+  // ---------- Publicidad: un anuncio de un negocio que ven todos los clientes ----------
+  function vistaPublicidad() {
+    const p = publicidad || {};
+    let foto = p.foto || null;
+    $("#vista").innerHTML = `
+      <form class="caja" id="form-pub"><h2>${icono("megafono")} Publicidad para clientes</h2>
+        <p class="nota">Sale arriba en la lista de motorizados de <b>todos</b> los clientes (en la página y en la app instalada), marcado como «Publicidad». Si el cliente lo cierra, no le vuelve a salir hasta que guardes un anuncio nuevo.</p>
+        <label class="opcion"><input type="checkbox" name="activo" ${p.activo ? "checked" : ""}><span>Mostrar la publicidad</span></label>
+        <label>Nombre del negocio</label><input name="negocio" maxlength="40" placeholder="Ej.: Pizzería El Moján" value="${esc(p.negocio || "")}">
+        <label>Mensaje</label><textarea name="texto" maxlength="160" placeholder="Ej.: 2x1 en pizzas los viernes. ¡Pide tu mototaxi y ven!">${esc(p.texto || "")}</textarea>
+        <label>Foto (opcional)</label>
+        <div class="botones"><label class="boton secundario">${icono("descargar")} Elegir foto<input type="file" accept="image/*" id="foto-pub" hidden></label>
+          <button type="button" class="boton secundario" id="quitar-foto-pub" ${foto ? "" : "hidden"}>Quitar foto</button></div>
+        <label>Texto del botón</label><input name="boton" maxlength="30" placeholder="Ej.: Escribir por WhatsApp" value="${esc(p.boton || "")}">
+        <label>WhatsApp del negocio o enlace</label><input name="enlace" maxlength="300" placeholder="0414-1234567 o https://instagram.com/…" value="${esc(p.enlace || "")}">
+        <p class="nota" id="enlace-pub-nota"></p>
+        <label class="opcion"><input type="checkbox" name="reiniciar" ${p.activo ? "" : "checked"}><span>Es un anuncio nuevo: volver a mostrarlo a todos y empezar a contar los toques desde cero</span></label>
+        <button class="boton">Guardar publicidad</button></form>
+      <div class="caja"><h2>${icono("grafica")} Resultados</h2>
+        <p><b id="toques-pub">${toquesPub}</b> toques en el botón${p.actualizado ? ` desde el ${fechaTexto(p.actualizado)}` : ""}</p>
+        <p class="nota">Sirve para mostrarle al negocio cuánta gente se interesó. Cada toque abre su WhatsApp o su página.</p></div>
+      <h2 class="subtitulo">Así lo ven los clientes</h2>
+      <div class="pub-vista-previa" id="vista-pub"></div>`;
+    const f = $("#form-pub");
+    const datos = () => {
+      const fd = new FormData(f);
+      return { activo: true, negocio: String(fd.get("negocio") || "").trim(), texto: String(fd.get("texto") || "").trim(), boton: String(fd.get("boton") || "").trim(), enlace: String(fd.get("enlace") || "").trim(), foto };
+    };
+    const previa = () => {
+      const d = datos();
+      $("#vista-pub").innerHTML = htmlPublicidad(d, { cerrable: false }) || `<p class="nota">Escribe un mensaje o elige una foto para ver cómo queda.</p>`;
+      const url = enlacePublicidad(d);
+      $("#enlace-pub-nota").textContent = !d.enlace ? "Sin enlace: no saldrá botón." : url ? (url.startsWith("https://wa.me/") ? "El botón abrirá el WhatsApp del negocio." : "El botón abrirá ese enlace.") : "No se entiende: pon un número de teléfono o un enlace que empiece con https://";
+      $("#quitar-foto-pub").hidden = !foto;
+    };
+    f.addEventListener("input", previa);
+    $("#foto-pub").onchange = async (e) => {
+      const a = e.target.files[0]; if (!a) return;
+      try { foto = await achicarFoto(a, 720); previa(); } catch { aviso("No se pudo leer esa imagen"); }
+    };
+    $("#quitar-foto-pub").onclick = () => { foto = null; previa(); };
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(f);
+      const d = datos(); d.activo = fd.get("activo") === "on";
+      if (d.activo && !d.texto && !d.foto) return aviso("Escribe un mensaje o elige una foto");
+      if (d.enlace && !enlacePublicidad(d)) return aviso("El WhatsApp o el enlace no es válido");
+      const nuevo = fd.get("reiniciar") === "on";
+      const bt = $("button.boton:not([type])", f) || $("button:last-of-type", f); bt.disabled = true;
+      try {
+        // "actualizado" cambia solo con un anuncio nuevo: así vuelve a salirle a quien cerró el anterior.
+        await setDoc(doc(db, "config", "publicidad"), { ...d, boton: d.boton || "Ver más", actualizado: nuevo || !p.actualizado ? serverTimestamp() : p.actualizado });
+        if (nuevo) await setDoc(doc(db, "stats", "publicidad"), { toques: 0 });
+        aviso(d.activo ? "Publicidad guardada. Los clientes la ven al instante." : "Publicidad guardada (apagada).");
+        ir(ruta, true);
+      } catch (err) { console.error(err); aviso("No se pudo guardar. ¿Publicaste las reglas nuevas?"); }
+      bt.disabled = false;
+    };
+    previa();
   }
 
   // ---------- Lugares: puntos de referencia que ven clientes y motorizados ----------

@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=54";
-import { icono, pintarIconos } from "./iconos.js?v=54";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=55";
+import { icono, pintarIconos } from "./iconos.js?v=55";
 
 export { icono };
 pintarIconos();
@@ -797,6 +797,26 @@ export const enApp = (() => {
 export const WHATSAPP = "584123042896";
 export const enlaceWhatsapp = (numero, texto) => `https://wa.me/${String(numero).replace(/\D/g, "")}?text=${encodeURIComponent(texto)}`;
 export const ANUNCIO_PREDETERMINADO = "¡Ya salió la app de Whereapp para Android! Escríbenos por WhatsApp y te la enviamos gratis.";
+// Publicidad de negocios: el enlace puede ser una página (https://…) o un número de WhatsApp.
+export function enlacePublicidad(p) {
+  const e = String((p && p.enlace) || "").trim();
+  if (/^https:\/\//.test(e)) return e;
+  let d = e.replace(/\D/g, "");
+  if (d.length === 11 && d.startsWith("0")) d = "58" + d.slice(1);
+  if (d.length === 10) d = "58" + d;
+  return d.length === 12 ? enlaceWhatsapp(d, "Hola, vi su anuncio en Whereapp.") : "";
+}
+export function htmlPublicidad(p, { cerrable = true } = {}) {
+  if (!p || !p.activo || !(p.texto || p.foto)) return "";
+  const url = enlacePublicidad(p);
+  const foto = /^data:image\/(jpeg|png|webp);base64,/.test(p.foto || "") ? p.foto : "";
+  return `<div class="publicidad">
+    ${cerrable ? `<button class="quitar" id="cerrar-publicidad" aria-label="Cerrar">${icono("cerrar")}</button>` : ""}
+    <span class="etiqueta-pub">Publicidad</span>
+    ${foto ? `<img src="${foto}" alt="">` : ""}
+    <div class="pub-cuerpo">${p.negocio ? `<b>${esc(p.negocio)}</b>` : ""}${p.texto ? `<p>${esc(p.texto)}</p>` : ""}
+      ${url ? `<a class="boton" id="tocar-publicidad" href="${esc(url)}" target="_blank" rel="noopener">${esc(p.boton || "Ver más")}</a>` : ""}</div></div>`;
+}
 function guiaIos() {
   const fondo = document.createElement("div");
   fondo.className = "modal";

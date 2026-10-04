@@ -243,6 +243,13 @@ service cloud.firestore {
       allow update: if dentro() && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n == resource.data.n + 1;
     }
 
+    // Toques en el botón de la publicidad: los clientes solo pueden sumar 1; el admin lo pone en cero.
+    match /stats/publicidad {
+      allow read, write: if esAdmin();
+      allow create: if dentro() && request.resource.data.keys().hasOnly(['toques']) && request.resource.data.toques == 1;
+      allow update: if dentro() && request.resource.data.keys().hasOnly(['toques']) && request.resource.data.toques == resource.data.toques + 1;
+    }
+
     match /stats/visitas {
       allow read: if esAdmin();
       // Solo se puede sumar 1 visita (nada de borrar ni poner textos raros).
