@@ -10,7 +10,7 @@ import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
   pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
-} from "./comun.js?v=46";
+} from "./comun.js?v=47";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -26,14 +26,21 @@ function iniciar() {
   const MAX_PUNTOS = 6;
   let lugares = null;   // lugares de El Moján para el buscador y las sugerencias
 
-  contarVisita();
-
   // Mientras se guarda el registro, el aviso de sesión nueva no debe mostrar el formulario otra vez.
   let registrando = false;
 
   onAuthStateChanged(auth, async (u) => {
     cancelarSubs.forEach((f) => f()); cancelarSubs = [];
-    if (typeof seguimiento !== "undefined" && seguimiento.quitar) { seguimiento.quitar(); seguimiento.quitar = null; seguimiento.id = null; }
+    // Nada del usuario anterior debe quedar (si otra persona entra en este teléfono).
+    if (typeof seguimiento !== "undefined") {
+      if (seguimiento.quitar) seguimiento.quitar();
+      if (seguimiento.quitarChat) seguimiento.quitarChat();
+      Object.assign(seguimiento, { id: null, motoUid: null, quitar: null, quitarChat: null, sinLeer: 0, ubic: null, info: null, memoria: {}, alMover: null, rastro: [], movido: 0, moto: null });
+      escucharOfertas(null);
+      cerrarNotificacion();
+    }
+    carreras = []; motos = [];
+    Object.assign(pedido, { puntos: [], refs: [], retorno: false, agregando: false, km: null, linea: null, nota: "", para: null, oferta: null, ofertaBs: null, ofertaTocada: false, paradaPendiente: false, yoIntentado: false });
     usuario = u;
     if (registrando) return;
     if (!u) return pantallaEntrada();
@@ -109,7 +116,7 @@ function iniciar() {
       const nombre = $("#nombre").value.trim().replace(/\s+/g, " ");
       const numero = $("#cedula").value.replace(/\D/g, "");
       const telefono = normalizarTel($("#tel").value);
-      if (nombre.split(" ").length < 2) return aviso("Escribe tu nombre y apellido");
+      if (nombre.split(" ").length < 2 || nombre.length < 5) return aviso("Escribe tu nombre y apellido");
       if (numero.length < 6 || numero.length > 9) return aviso("Escribe una cédula válida");
       if (!telefono) return aviso("Escribe un teléfono válido, ej. 0414-1234567");
       if (falta()) return;
@@ -121,6 +128,11 @@ function iniciar() {
     boton.disabled = true;
     registrando = true;
     try {
+      // Si en este teléfono había otra persona (otra cédula), se crea una cuenta nueva: la cédula no se cambia.
+      if (usuario) {
+        const previo = await getDoc(doc(db, "clientes", usuario.uid)).catch(() => null);
+        if (previo && previo.exists() && previo.data().cedula && previo.data().cedula !== datos.cedula) { await signOut(auth); usuario = null; }
+      }
       const cred = usuario ? { user: usuario } : await signInAnonymously(auth);
       usuario = cred.user;
       aceptarPoliticas();
@@ -154,13 +166,18 @@ function iniciar() {
     $("#cabecera").hidden = false; $("#barra").hidden = false;
     $("#cabecera").innerHTML = `<div class="dentro"><div><div class="logo">${NOMBRE}</div><div class="logo-sub">Hola, ${esc(cliente.nombre)}</div></div>
       <div class="derecha"><button class="boton secundario chico" id="salir">Salir</button></div></div>`;
-    $("#salir").onclick = () => { if (confirm("¿Salir de Whereapp?")) signOut(auth); };
+    $("#salir").onclick = () => {
+      const c = carreraActual();
+      if (c && c.estado !== "terminada") return aviso("Tienes una carrera en curso: termínala o cancélala antes de salir.");
+      if (confirm("¿Salir de Whereapp?")) signOut(auth);
+    };
     $("#cabecera .derecha").prepend(botonInstalar(), botonTema());
-    $$("#barra button").forEach((b) => (b.onclick = () => ir(b.dataset.ruta)));
+    $$("#barra button").forEach((b) => (b.onclick = () => (tarifas ? ir(b.dataset.ruta) : aviso("Cargando… un momento"))));
     $("#widget").onclick = () => ir("carrera");
     tarifas = await leerTarifas();
     // Tarifas en vivo: el recargo de lluvia aparece apenas el admin lo enciende.
     cancelarSubs.push(escucharTarifas((t) => { tarifas = t; if (enPedido() && !$(".selector")) vistaPedir(); }));
+    contarVisita();
     // Cédula bloqueada por el administrador: no puede pedir.
     bloqueado = await getDoc(doc(db, "bloqueados", cliente.cedula || "-")).then((x) => x.exists()).catch(() => false);
 
@@ -172,6 +189,7 @@ function iniciar() {
       // La ubicación de los motorizados cambia seguido; solo se redibuja si cambió otra cosa.
       if (rutaActual === "motorizados" && JSON.stringify(motos.map(sinUbicacion)) !== antes) vistaMotorizados();
     }));
+    let primeraVez = true;
     cancelarSubs.push(onSnapshot(query(collection(db, "carreras"), where("clienteUid", "==", usuario.uid)), (s) => {
       const antes = carreraActual();
       carreras = s.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -190,6 +208,8 @@ function iniciar() {
         if (ahora.estado === "terminada") aviso("Carrera terminada");
         if (rutaActual !== "carrera") return ir("carrera");
       }
+      // Al abrir la app con una carrera activa, se va directo a "Mi carrera".
+      if (primeraVez) { primeraVez = false; if (ahora && rutaActual !== "carrera") return ir("carrera"); }
       if (rutaActual === "carrera") vistaCarrera();
     }));
     ir(carreraActual() ? "carrera" : "motorizados");
@@ -558,7 +578,13 @@ function iniciar() {
     void total;
     pedido.filaNueva = null;
 
-    const listo = async () => { await recalcular(); if (enPedido() && !$(".selector")) alCambiar(); };
+    const listo = async () => {
+      await recalcular();
+      if (!enPedido() || $(".selector")) return;
+      // Si está escribiendo el monto, no se le mueve la casilla: solo se actualiza el texto del precio.
+      if (document.activeElement && document.activeElement.id === "oferta") { $("#oferta").dispatchEvent(new Event("input")); return; }
+      alCambiar();
+    };
     // Puntos ya marcados: lo escrito es la referencia; si eliges una sugerencia, el punto cambia a ese lugar.
     $$("[data-ref]").forEach((el) => {
       const i = Number(el.dataset.ref);
@@ -814,7 +840,7 @@ function iniciar() {
     const poner = (latlng, nombre = "") => {
       const n = pedido.puntos.length;
       if (n < 2) { pedido.puntos.push(latlng); pedido.refs.push(nombre); }
-      else if (pedido.agregando) { pedido.puntos.splice(n - 1, 0, latlng); pedido.refs.splice(n - 1, 0, nombre); pedido.agregando = false; }
+      else if (pedido.agregando) { pedido.puntos.splice(n - 1, 0, latlng); pedido.refs.splice(n - 1, 0, nombre); pedido.agregando = false; pedido.paradaPendiente = false; }
       else { aviso("Para otra parada toca «Parada». Para mover un punto, arrástralo."); return; }
       if (pedido.puntos.length === 2) encuadrar(m);
       cambiar();
@@ -976,15 +1002,18 @@ function iniciar() {
   function vistaMotorizados() {
     actualizarMiPos();
     // Disponibles primero; luego por cercanía (si se sabe) y por calificación.
-    const lista = motos.map((m) => ({ m, cerca: cercania(m) })).sort((a, b) =>
-      !!a.m.enCarrera - !!b.m.enCarrera
+    // Sin señal: hace más de 10 min que su teléfono no manda la ubicación (puede tener la app cerrada).
+    const sinSenal = (m) => { const t = m.ubicacion && fecha(m.ubicacion.t); return t ? Math.round((Date.now() - t) / 60000) : null; };
+    const lista = motos.map((m) => ({ m, cerca: cercania(m), visto: sinSenal(m) })).sort((a, b) =>
+      ((a.visto || 0) > 10) - ((b.visto || 0) > 10)
+      || !!a.m.enCarrera - !!b.m.enCarrera
       || (a.cerca ? a.cerca.km : 1e9) - (b.cerca ? b.cerca.km : 1e9)
       || promedio(b.m) - promedio(a.m));
     const libres = motos.filter((m) => !m.enCarrera).length;
     $("#vista").innerHTML = `<h1 class="titulo">Motorizados activos</h1>
       ${motos.length && !libres ? `<div class="banner-aviso">${icono("reloj")}<span><b>Todos están ocupados ahora mismo.</b> Puedes pedirle a uno y tu carrera le llega apenas termine la que tiene.</span></div>` : ""}
       <p class="nota">${miPos ? "Primero los disponibles y los más cerca de ti." : "Primero los disponibles, por calificación. Activa tu ubicación para ver quién está más cerca."}</p>
-      <div class="lista">${motos.length ? lista.map(({ m, cerca }) => `
+      <div class="lista">${motos.length ? lista.map(({ m, cerca, visto }) => `
         <article class="tarjeta">
           <div class="avatar" data-foto-moto="${m.id}">${esc(iniciales(m.nombre))}</div>
           <div class="info"><h3>${esc(m.nombre)}</h3>
@@ -992,6 +1021,7 @@ function iniciar() {
             <button class="ver-perfil" data-perfil="${m.id}">${icono("estrella")} Ver perfil y opiniones</button>
             <div class="etiquetas">${m.enCarrera ? `<span class="pildora ocupado">${icono("ruta")} Carrera en curso</span>` : `<span class="pildora ok">Disponible</span>`}
             ${cerca ? `<span class="pildora cerca">${icono("pin")} a ${cerca.min} min</span>` : ""}
+            ${visto > 10 ? `<span class="pildora medio">${icono("reloj")} Sin señal hace ${visto > 90 ? `${Math.round(visto / 60)} h` : `${visto} min`}</span>` : ""}
             <span class="rating">${estrellas(m)}</span>${insigniasSeguridad(m)}</div></div>
           <div class="acciones">
             <a class="boton secundario" href="tel:${esc(m.telefono)}" data-llamar="${m.id}">${icono("telefono")} Llamar</a>
@@ -1014,7 +1044,7 @@ function iniciar() {
 
   // Datos del pago móvil del motorizado, con botones para copiarlos.
   function tarjetaPagoMovil(c) {
-    const pm = (motos.find((x) => x.id === c.motoUid) || {}).pagoMovil || {};
+    const pm = ((seguimiento.motoUid === c.motoUid && seguimiento.moto) || motos.find((x) => x.id === c.motoUid) || {}).pagoMovil || {};
     const monto = c.precioBs ? bs(c.precioBs) : `${usd(c.precio)} en Bs`;
     if (!pm.telefono) return `<div class="caja pago-movil"><h2>${icono("telefono")} Pago móvil · ${monto}</h2>
       <p class="nota">${esc(String(c.motoNombre).split(" ")[0])} aún no registró sus datos de pago móvil. Pídeselos por el chat.</p></div>`;
@@ -1032,22 +1062,28 @@ function iniciar() {
   });
 
   // ---------- Contraofertas: los motorizados proponen otro precio a una carrera publicada ----------
-  const ofertas = { id: null, quitar: null, lista: [], vistas: 0 };
+  const ofertas = { id: null, quitar: null, lista: [], vistas: new Set(), primera: true };
   function escucharOfertas(c) {
     const toca = c && c.estado === "esperando" && c.ofertaCliente;
     if (toca && ofertas.id === c.id) return;
     if (ofertas.quitar) ofertas.quitar();
-    Object.assign(ofertas, { id: null, quitar: null, lista: [], vistas: 0 });
+    Object.assign(ofertas, { id: null, quitar: null, lista: [], vistas: new Set(), primera: true });
     if (!toca) return;
     ofertas.id = c.id;
     ofertas.quitar = onSnapshot(collection(db, "carreras", c.id, "ofertas"), (s) => {
-      ofertas.lista = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.precio - b.precio);
-      if (ofertas.lista.length > ofertas.vistas) {
-        const nueva = ofertas.lista.find((o) => !o.avisada) || ofertas.lista[0];
-        notificar(`${String(nueva.nombre).split(" ")[0]} te ofrece ${usd(nueva.precio)}`, "Toca para ver las ofertas de los motorizados", { sonar: true });
-        aviso(`Nueva oferta: ${String(nueva.nombre).split(" ")[0]} · ${usd(nueva.precio)}`);
+      ofertas.lista = s.docs.map((d) => ({ id: d.id, ...d.data() }))
+        .filter((o) => Number(o.precio) > 0)
+        .sort((a, b) => Number(a.precio) - Number(b.precio));
+      // Avisa solo de ofertas nuevas o con precio cambiado (no al abrir la app con ofertas que ya estaban).
+      const nuevas = ofertas.lista.filter((o) => !ofertas.vistas.has(`${o.id}:${o.precio}`) && motos.some((m) => m.id === o.motoUid));
+      ofertas.lista.forEach((o) => ofertas.vistas.add(`${o.id}:${o.precio}`));
+      if (nuevas.length && !ofertas.primera) {
+        const o = nuevas[0], m = motos.find((x) => x.id === o.motoUid);
+        const quien = String(m.nombre).split(" ")[0];
+        notificar(`${quien} te ofrece ${usd(o.precio)}`, "Toca para ver las ofertas de los motorizados", { sonar: true });
+        aviso(`Nueva oferta: ${quien} · ${usd(o.precio)}`);
       }
-      ofertas.vistas = ofertas.lista.length;
+      ofertas.primera = false;
       pintarOfertas();
     }, () => {});
   }
@@ -1056,25 +1092,34 @@ function iniciar() {
     const c = carreraActual();
     if (!caja || !c) return;
     const enBs = c.formaPago === "bs" || c.formaPago === "pagomovil";
-    caja.innerHTML = ofertas.lista.length ? ofertas.lista.map((o) => `
+    // Los datos (nombre, moto, calificación) salen del perfil real del motorizado, no de lo que escribió en la oferta.
+    // Solo se muestran ofertas de motorizados activos y de turno.
+    const validas = ofertas.lista.map((o) => ({ o, m: motos.find((x) => x.id === o.motoUid) })).filter((x) => x.m);
+    const precioC = Number(c.precioCliente ?? c.precio);
+    caja.innerHTML = validas.length ? validas.map(({ o, m }) => `
       <article class="tarjeta oferta-moto">
-        <div class="avatar" data-foto-moto="${o.motoUid}">${esc(iniciales(o.nombre))}</div>
-        <div class="info"><h3>${esc(o.nombre)}</h3>
-          <p>${icono("moto")} ${esc(o.moto)}${o.placa ? ` · Placa ${esc(o.placa)}` : ""}</p>
-          <div class="etiquetas"><span class="rating">${estrellas(o)}</span>${insigniasSeguridad(o, 0)}</div></div>
-        <div class="acciones"><div class="precio-oferta"><b>${usd(o.precio)}</b>${enBs && o.precioBs ? `<small>${bs(o.precioBs)}</small>` : ""}
-          ${o.precio > c.precio ? `<small class="mas-caro">+${usd(o.precio - c.precio)} que tu precio</small>` : o.precio < c.precio ? `<small class="mas-barato">${usd(c.precio - o.precio)} menos</small>` : ""}</div>
-          <button class="boton" data-tomar="${o.motoUid}">Aceptar</button></div>
+        <div class="avatar" data-foto-moto="${esc(m.id)}">${esc(iniciales(m.nombre))}</div>
+        <div class="info"><h3>${esc(m.nombre)}</h3>
+          <p>${icono("moto")} ${esc(m.moto || "")}${m.placa ? ` · Placa ${esc(m.placa)}` : ""}</p>
+          <div class="etiquetas"><span class="rating">${estrellas(m)}</span>${insigniasSeguridad(m, 0)}${m.enCarrera ? `<span class="pildora ocupado">Termina otra carrera primero</span>` : ""}</div></div>
+        <div class="acciones"><div class="precio-oferta"><b>${usd(o.precio)}</b>${enBs && Number(o.precioBs) ? `<small>${bs(o.precioBs)}</small>` : ""}
+          ${o.precio > precioC ? `<small class="mas-caro">+${usd(o.precio - precioC)} que tu precio</small>` : o.precio < precioC ? `<small class="mas-barato">${usd(precioC - o.precio)} menos</small>` : ""}</div>
+          <button class="boton" data-tomar="${esc(m.id)}" ${m.enCarrera ? "disabled" : ""}>Aceptar</button></div>
       </article>`).join("")
       : `<p class="nota">Si un motorizado propone otro precio, aparece aquí y te avisamos con la corneta. También pueden aceptar tu precio directamente.</p>`;
     pintarFotos(caja);
     $$("[data-tomar]", caja).forEach((b) => (b.onclick = async () => {
       const o = ofertas.lista.find((x) => x.motoUid === b.dataset.tomar);
-      if (!confirm(`¿Aceptar la oferta de ${o.nombre} por ${usd(o.precio)}${enBs && o.precioBs ? ` (${bs(o.precioBs)})` : ""}?`)) return;
+      const m0 = motos.find((x) => x.id === o.motoUid);
+      if (!confirm(`¿Aceptar la oferta de ${m0.nombre} por ${usd(o.precio)}${enBs && o.precioBs ? ` (${bs(o.precioBs)})` : ""}?`)) return;
       b.disabled = true;
       try {
+        // Datos del motorizado tal como están en su perfil (las reglas lo comprueban).
+        const md = await getDoc(doc(db, "motorizados", o.motoUid));
+        if (!md.exists()) throw new Error("no existe");
+        const m = md.data();
         await updateDoc(doc(db, "carreras", c.id), {
-          estado: "aceptada", motoUid: o.motoUid, motoNombre: o.nombre, motoTel: o.telefono || "", motoMoto: o.moto || "", motoPlaca: o.placa || "",
+          estado: "aceptada", motoUid: o.motoUid, motoNombre: m.nombre, motoTel: m.telefono || "", motoMoto: m.moto || "", motoPlaca: m.placa || "",
           aceptada: serverTimestamp(), precio: o.precio, precioBs: o.precioBs ?? null, contraoferta: true,
         });
       } catch (e) {
@@ -1120,9 +1165,9 @@ function iniciar() {
     pintar();
     if (navigator.vibrate) navigator.vibrate(200);
     const avisarAdmin = () => {
-      if (c.sos) return;
+      if (c.sosEnviado) return;
       updateDoc(doc(db, "carreras", c.id), { sos: serverTimestamp(), ...(ubic ? { sosUbic: ubic } : {}) }).catch((e) => console.error(e));
-      c.sos = true;
+      c.sosEnviado = true;
     };
     if (navigator.geolocation) navigator.geolocation.getCurrentPosition(
       (p) => { ubic = { lat: p.coords.latitude, lng: p.coords.longitude }; if (document.body.contains(fondo)) pintar(); avisarAdmin(); },
@@ -1203,7 +1248,7 @@ function iniciar() {
         <button class="boton peligro" id="cancelar">Cancelar carrera</button>`;
       pintarOfertas();
     } else {
-      const m = motos.find((x) => x.id === c.motoUid) || {};
+      const m = (seguimiento.motoUid === c.motoUid && seguimiento.moto) || motos.find((x) => x.id === c.motoUid) || {};
       $("#vista").innerHTML = `
         <div class="vivo" id="vivo"></div>
         <article class="tarjeta" id="tarjeta-moto">
@@ -1290,8 +1335,10 @@ function iniciar() {
     $("#cancelar").onclick = async () => {
       const motivo = await elegirMotivo("¿Por qué cancelas?", MOTIVOS_CLIENTE);
       if (!motivo) return;
-      await updateDoc(doc(db, "carreras", c.id), { estado: "cancelada", cancelacion: { por: "cliente", motivo, fecha: new Date() } });
-      aviso("Carrera cancelada");
+      try {
+        await updateDoc(doc(db, "carreras", c.id), { estado: "cancelada", cancelacion: { por: "cliente", motivo, fecha: new Date() } });
+        aviso("Carrera cancelada");
+      } catch { aviso("No se pudo cancelar: puede que la carrera ya haya cambiado. Revisa «Mi carrera»."); }
     };
   }
 
@@ -1318,7 +1365,7 @@ function iniciar() {
     <div class="pista"><i class="letra-a">A</i><div class="carril"><b style="width:${info.pct}%"></b><span class="moto-pista" style="left:${info.pct}%">${icono("moto")}</span></div><i class="letra-b">B</i></div>`;
 
   function vistaCalificar(c) {
-    let puntos = 5, seguro = null;
+    let puntos = 5, seguro = null, enviada = false;
     const buenos = new Set(), malos = new Set();
     const quien = esc(String(c.motoNombre).split(" ")[0]);
     $("#vista").innerHTML = `
@@ -1369,17 +1416,27 @@ function iniciar() {
     $("#calificar").onclick = async () => {
       if (seguro === null) { $("#seguro").classList.add("falta"); setTimeout(() => $("#seguro").classList.remove("falta"), 600); return aviso("Dinos si te sentiste seguro en el viaje"); }
       $("#calificar").disabled = true;
-      await addDoc(collection(db, "resenas"), {
-        motoUid: c.motoUid, motoNombre: c.motoNombre, carreraId: c.id,
-        clienteUid: usuario.uid, clienteNombre: cliente.nombre,
-        estrellas: puntos, comentario: $("#comentario").value.trim(), aprobada: false, fecha: serverTimestamp(),
-        seguro, buenos: [...buenos], malos: [...malos],
-      });
-      await updateDoc(doc(db, "carreras", c.id), { calificada: true });
-      aviso(seguro ? "¡Gracias por calificar!" : "Gracias por avisarnos. El administrador revisará tu reporte.");
-      ir("motorizados");
+      try {
+        // Si la reseña ya se guardó en un intento anterior, no se repite.
+        if (!enviada) {
+          await addDoc(collection(db, "resenas"), {
+            motoUid: c.motoUid, motoNombre: c.motoNombre, carreraId: c.id,
+            clienteUid: usuario.uid, clienteNombre: cliente.nombre,
+            estrellas: puntos, comentario: $("#comentario").value.trim().slice(0, 500), aprobada: false, fecha: serverTimestamp(),
+            seguro, buenos: [...buenos], malos: [...malos],
+          });
+          enviada = true;
+        }
+        await updateDoc(doc(db, "carreras", c.id), { calificada: true });
+        aviso(seguro ? "¡Gracias por calificar!" : "Gracias por avisarnos. El administrador revisará tu reporte.");
+        ir("motorizados");
+      } catch (e) {
+        console.error(e);
+        $("#calificar").disabled = false;
+        aviso(bloqueado ? "Tu cédula está bloqueada: no puedes calificar. Comunícate con el administrador." : "No se pudo enviar. Revisa tu internet e intenta de nuevo.");
+      }
     };
-    $("#omitir").onclick = async () => { await updateDoc(doc(db, "carreras", c.id), { calificada: true }); ir("motorizados"); };
+    $("#omitir").onclick = async () => { await updateDoc(doc(db, "carreras", c.id), { calificada: true }).catch(() => {}); ir("motorizados"); };
   }
 
   // ---------- Seguimiento en vivo: widget flotante y aviso en la barra de notificaciones ----------
@@ -1426,6 +1483,7 @@ function iniciar() {
       Object.assign(seguimiento, { id: c.id, motoUid: c.motoUid });
       seguimiento.quitar = onSnapshot(doc(db, "motorizados", c.motoUid), (s) => {
         seguimiento.ubic = (s.data() && s.data().ubicacion) || null;
+        seguimiento.moto = s.data() || null;   // datos completos (pago móvil, calificación) aunque ya no salga en la lista
         refrescarVivo();
       });
       // Chat: contador de mensajes sin leer y aviso si la app está en segundo plano.

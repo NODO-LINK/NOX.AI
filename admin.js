@@ -5,12 +5,12 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, onSnapshot,
-  serverTimestamp, increment, writeBatch, Timestamp,
+  serverTimestamp, increment, writeBatch, Timestamp, runTransaction,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   auth, authSecundaria, db, NOMBRE, botonTema, botonInstalar, nuevoMapa, ICONOS, recargos, motivoEntrada, SERVICIOS, icono, transicion, activarBarra, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado,
-  leerTarifas, aviso, avisoSinConfigurar, bs, sonarAlerta, mostrarLugares, tipoLugar, TIPOS_PARA_AGREGAR, ASPECTOS, insigniasSeguridad, opinionPublica, fotosDe, olvidarFotos, achicarFoto, pintarFotos,
-} from "./comun.js?v=46";
+  leerTarifas, escucharTarifas, aviso, avisoSinConfigurar, bs, sonarAlerta, mostrarLugares, tipoLugar, TIPOS_PARA_AGREGAR, ASPECTOS, insigniasSeguridad, opinionPublica, fotosDe, olvidarFotos, achicarFoto, pintarFotos,
+} from "./comun.js?v=47";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -67,7 +67,7 @@ function iniciar() {
     escuchar(query(collection(db, "carreras"), orderBy("creada", "desc"), limit(100)), (s) => { carreras = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
     escuchar(query(collection(db, "resenas"), orderBy("fecha", "desc"), limit(100)), (s) => { resenas = s.docs.map((d) => ({ id: d.id, ...d.data() })); publicarAprobadasViejas(); });
     escuchar(query(collection(db, "pagos"), orderBy("fecha", "desc"), limit(500)), (s) => { pagos = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
-    escuchar(collection(db, "llamadas"), (s) => { llamadas = Object.fromEntries(s.docs.map((d) => [d.id, d.data().n || 0])); });
+    escuchar(collection(db, "llamadas"), (s) => { llamadas = Object.fromEntries(s.docs.map((d) => [d.id, Number(d.data().n) || 0])); return ruta === "mas"; });
     escuchar(collection(db, "clientes"), (s) => {
       clientes = s.docs.map((d) => ({ id: d.id, ...d.data() }));
       cedulas = Object.fromEntries(clientes.map((c) => [c.id, c.cedula]));
@@ -81,7 +81,9 @@ function iniciar() {
       });
     });
     escuchar(collection(db, "bloqueados"), (s) => { bloqueados = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); });
-    escuchar(doc(db, "stats", "visitas"), (s) => { visitas = s.exists() ? s.data() : {}; });
+    escuchar(doc(db, "stats", "visitas"), (s) => { visitas = s.exists() ? s.data() : {}; return ruta === "mas"; });
+    // Tarifas siempre al día (por si se cambiaron desde otro teléfono), sin redibujar el formulario.
+    subs.push(escucharTarifas((t) => { tarifas = t; }));
     escuchar(query(collection(db, "reportesPago"), orderBy("creado", "desc"), limit(60)), (s) => { reportesPago = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
     escuchar(collection(db, "lugares"), (s) => {
       lugaresPropios = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.n).localeCompare(b.n));
@@ -95,16 +97,19 @@ function iniciar() {
   // Alerta SOS de un cliente: banda roja arriba en cualquier pestaña, con sonido.
   const sosVistos = new Set();
   function pintarSos() {
-    const activas = carreras.filter((c) => c.sos && c.estado === "aceptada" && !c.sosAtendido);
+    // Activa si el cliente pidió ayuda después de la última vez que se marcó atendida.
+    const t = (x) => (x === true ? Infinity : (fecha(x) || new Date(0)).getTime());
+    const activas = carreras.filter((c) => c.sos && c.estado === "aceptada" && (!c.sosAtendido || t(c.sos) > t(c.sosAtendido)));
     let banda = $("#banda-sos");
     if (!activas.length) { if (banda) banda.remove(); return; }
     if (!banda) { banda = document.createElement("div"); banda.id = "banda-sos"; banda.className = "banda-sos"; document.body.prepend(banda); }
-    if (activas.some((c) => !sosVistos.has(c.id))) { sonarAlerta(); activas.forEach((c) => sosVistos.add(c.id)); }
+    const clave = (c) => `${c.id}:${t(c.sos)}`;
+    if (activas.some((c) => !sosVistos.has(clave(c)))) { sonarAlerta(); activas.forEach((c) => sosVistos.add(clave(c))); }
     banda.innerHTML = activas.map((c) => `<div class="sos-item"><b>${icono("alerta")} SOS: ${esc(c.clienteNombre)} en carrera con ${esc(c.motoNombre)} (${esc(c.motoPlaca || "")})</b>
       <div class="botones"><a class="boton chico" href="tel:${esc(c.clienteTel)}">${icono("telefono")} Cliente</a><a class="boton chico" href="tel:${esc(c.motoTel || "")}">${icono("telefono")} Motorizado</a>
-      ${c.sosUbic ? `<a class="boton chico" href="https://maps.google.com/?q=${c.sosUbic.lat},${c.sosUbic.lng}" target="_blank" rel="noopener">${icono("pin")} Ubicación</a>` : ""}
-      <button class="boton chico secundario" data-atendido="${c.id}">Atendido</button></div></div>`).join("");
-    $$("[data-atendido]", banda).forEach((b) => (b.onclick = () => updateDoc(doc(db, "carreras", b.dataset.atendido), { sosAtendido: true })));
+      ${c.sosUbic ? `<a class="boton chico" href="https://maps.google.com/?q=${Number(c.sosUbic.lat)},${Number(c.sosUbic.lng)}" target="_blank" rel="noopener">${icono("pin")} Ubicación</a>` : ""}
+      <button class="boton chico secundario" data-atendido="${esc(c.id)}">Atendido</button></div></div>`).join("");
+    $$("[data-atendido]", banda).forEach((b) => (b.onclick = () => updateDoc(doc(db, "carreras", b.dataset.atendido), { sosAtendido: serverTimestamp() })));
   }
 
   function refrescar() {
@@ -113,7 +118,7 @@ function iniciar() {
     $("#punto-resenas").hidden = !resenas.some((r) => !r.aprobada);
     const foco = document.activeElement;
     if (foco && /INPUT|TEXTAREA|SELECT/.test(foco.tagName) && $("#vista").contains(foco)) return;
-    if (ruta === "mas" && subMas === "lugares") return;   // el mapa de lugares no se redibuja solo
+    if (ruta === "mas" && (subMas === "lugares" || subMas === "tarifas")) return;   // no borrar el mapa ni lo que se está escribiendo
     if (!$(".modal")) ir(ruta, true);
   }
 
@@ -212,7 +217,7 @@ function iniciar() {
         <p class="nota">Revisa en tu banco que llegó el pago y apruébalo: se le suman ${tarifas.diasCuota} días.</p>
         <div class="lista">${reportados.map((r) => `<article class="tarjeta"><div class="info"><h3>${esc(r.nombre)}</h3>
           <p><b>Ref. ${esc(r.referencia)}</b> · ${r.moneda === "bs" ? bs(r.monto) : usd(r.monto)} · ${esc(r.fechaPago || "")}</p><p class="nota">Reportado ${fechaTexto(r.creado)}</p></div>
-          <div class="acciones"><button class="boton verde" data-aprobar-pago="${r.id}">Aprobar</button><button class="boton peligro" data-rechazar-pago="${r.id}">Rechazar</button></div></article>`).join("")}</div>` : ""}
+          <div class="acciones"><button class="boton verde" data-aprobar-pago="${esc(r.id)}">Aprobar</button><button class="boton peligro" data-rechazar-pago="${esc(r.id)}">Rechazar</button></div></article>`).join("")}</div>` : ""}
       ${avisos.length ? `<h1 class="titulo">${icono("alerta")} Por vencer o vencidas (${avisos.length})</h1><div class="lista">${avisos.map((m) => `
         <article class="tarjeta"><div class="info"><h3>${esc(m.nombre)}</h3><p>${estadoPago(m)} · ${fechaPago(m)}</p></div>
           <div class="acciones">
@@ -275,17 +280,34 @@ function iniciar() {
     };
   }
 
+  let registrando = false;
   async function registrarPago(m, reporte = null) {
+    if (registrando) return;
     if (!confirm(reporte ? `¿Aprobar el pago de ${m.nombre} (ref. ${reporte.referencia})? Se le suman ${tarifas.diasCuota} días.`
       : `¿Registrar pago de ${usd(tarifas.cuota)} de ${m.nombre}? Se le suman ${tarifas.diasCuota} días.`)) return;
-    const desde = new Date(Math.max(Date.now(), (fecha(m.pagadoHasta) || new Date(0)).getTime()));
-    const hasta = new Date(desde.getTime() + tarifas.diasCuota * DIA);
-    const lote = writeBatch(db);
-    lote.update(doc(db, "motorizados", m.id), { pagadoHasta: Timestamp.fromDate(hasta) });
-    lote.set(doc(collection(db, "pagos")), { motoUid: m.id, nombre: m.nombre, monto: tarifas.cuota, desde: Timestamp.fromDate(desde), hasta: Timestamp.fromDate(hasta), fecha: serverTimestamp(), ...(reporte ? { referencia: reporte.referencia } : {}) });
-    if (reporte) lote.update(doc(db, "reportesPago", reporte.id), { estado: "aprobado", revisado: serverTimestamp() });
-    await lote.commit();
+    registrando = true;
+    try {
+    // En una transacción: lee la fecha actual de pago y, si es un reporte, que siga pendiente (evita sumar dos veces).
+    let hasta;
+    await runTransaction(db, async (tx) => {
+      const mRef = doc(db, "motorizados", m.id);
+      const md = await tx.get(mRef);
+      if (!md.exists()) throw new Error("Ese motorizado ya no existe");
+      if (reporte) {
+        const rd = await tx.get(doc(db, "reportesPago", reporte.id));
+        if (!rd.exists() || rd.data().estado !== "pendiente") throw new Error("Ese pago ya fue revisado");
+      }
+      const desde = new Date(Math.max(Date.now(), (fecha(md.data().pagadoHasta) || new Date(0)).getTime()));
+      hasta = new Date(desde.getTime() + tarifas.diasCuota * DIA);
+      const lote = tx;
+      lote.update(mRef, { pagadoHasta: Timestamp.fromDate(hasta) });
+      lote.set(doc(collection(db, "pagos")), { motoUid: m.id, nombre: m.nombre, monto: tarifas.cuota, desde: Timestamp.fromDate(desde), hasta: Timestamp.fromDate(hasta), fecha: serverTimestamp(),
+        ...(reporte ? { referencia: reporte.referencia, montoReportado: reporte.monto, monedaReportada: reporte.moneda } : {}) });
+      if (reporte) lote.update(doc(db, "reportesPago", reporte.id), { estado: "aprobado", revisado: serverTimestamp() });
+    });
     aviso(`Pago registrado. Pagado hasta ${fechaTexto(hasta)}`);
+    } catch (e) { console.error(e); aviso(e.message && !e.code ? e.message : "No se pudo registrar el pago. Intenta de nuevo."); }
+    finally { registrando = false; }
   }
 
   function normalizarTel(v) {
@@ -313,10 +335,12 @@ function iniciar() {
   async function crearMotoPrueba(boton) {
     boton.disabled = true;
     try {
+      // Clave al azar (la de antes estaba escrita en el código público y cualquiera podía entrar).
+      const clave = "p" + Math.random().toString(36).slice(2, 9);
       await crearMoto(
         { nombre: "Motorizado de Prueba", telefono: "+584140000000", moto: "Moto de prueba", placa: "PRUEBA1" },
-        "prueba", "prueba123", { pagado: true, activo: true, dias: 30, cobrar: false });
-      aviso("Listo: usuario «prueba», clave «prueba123». Ya sale en la app.");
+        "prueba", clave, { pagado: true, activo: true, dias: 30, cobrar: false });
+      alert(`Motorizado de prueba creado.\n\nUsuario: prueba\nClave: ${clave}\n\nAnótala. Desactívalo cuando termines de probar: mientras esté activo, los clientes lo ven.`);
     } catch (err) {
       console.error(err);
       aviso(err.code === "auth/email-already-in-use" ? "El usuario «prueba» ya existe" : err.message || "No se pudo crear");
@@ -332,7 +356,7 @@ function iniciar() {
       <label>Teléfono</label><input name="telefono" type="tel" value="${esc(m?.telefono)}" placeholder="0414-1234567" required>
       <div class="dos"><div><label>Moto</label><input name="moto" value="${esc(m?.moto)}" placeholder="Bera SBR 150"></div>
       <div><label>Placa</label><input name="placa" value="${esc(m?.placa)}"></div></div>
-      ${m ? `<p class="nota">Usuario: <b>${esc(m.usuario)}</b>. Para cambiar la clave, bórralo y créalo de nuevo, o cámbiala en la consola de Firebase.</p>` : `
+      ${m ? `<p class="nota">Usuario: <b>${esc(m.usuario)}</b>. Para cambiar la clave, hazlo en la consola de Firebase (Authentication → Usuarios). Si lo borras, ese usuario no se puede volver a crear.</p>` : `
       <div class="dos"><div><label>Usuario</label><input name="usuario" autocapitalize="none" required></div>
       <div><label>Clave (mín. 6)</label><input name="clave" minlength="6" required></div></div>
       <p class="nota">El pago de la quincena se registra en la pestaña Pagos.</p>`}
@@ -345,8 +369,10 @@ function iniciar() {
     $("[data-cerrar]", fondo).onclick = cerrar;
     const borrar = $("[data-borrar]", fondo);
     if (borrar) borrar.onclick = async () => {
-      if (!confirm(`¿Eliminar a ${m.nombre}? Ya no podrá entrar ni saldrá en la app.`)) return;
+      if (m.enCarrera || carreras.some((c) => c.motoUid === m.id && c.estado === "aceptada")) return aviso(`${m.nombre} tiene una carrera en curso: espera que termine (o cancélala en Carreras) antes de eliminarlo.`);
+      if (!confirm(`¿Eliminar a ${m.nombre}? Ya no podrá entrar ni saldrá en la app.\n\nSi solo quieres que deje de salir, mejor usa «Desactivar». Ojo: su usuario «${m.usuario}» no se podrá volver a crear.`)) return;
       await deleteDoc(doc(db, "motorizados", m.id));
+      deleteDoc(doc(db, "fotos", m.id)).catch(() => {});
       cerrar();
     };
     f.onsubmit = async (e) => {
@@ -386,16 +412,16 @@ function iniciar() {
       <h1 class="titulo">Últimas carreras</h1>
       <div class="lista">${carreras.map((c) => {
         const [cl, tx] = ESTADOS[c.estado] || ["", c.estado];
-        const cancel = [...(c.cancelaciones || []).map((x) => `${icono("moto")} ${esc(x.motoNombre)} canceló: ${esc(x.motivo)}`),
+        const cancel = [...(Array.isArray(c.cancelaciones) ? c.cancelaciones : []).map((x) => `${icono("moto")} ${esc(x.motoNombre)} canceló: ${esc(x.motivo)}`),
           c.cancelacion ? `${c.cancelacion.por === "admin" ? `${icono("escudo")} Admin` : `${icono("usuario")} Cliente`} canceló: ${esc(c.cancelacion.motivo)}` : ""].filter(Boolean);
         return `<article class="tarjeta"><div class="info">
-          <h3>${c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`} · ${usd(c.precio)} · ${c.km} km <span class="pildora ${cl}">${tx}</span></h3>
+          <h3>${c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`} · ${usd(c.precio)} · ${esc(c.km)} km <span class="pildora ${cl}">${tx}</span></h3>
           <p>${icono("usuario")} ${esc(c.clienteNombre)}${cedulas[c.clienteUid] ? ` · C.I. ${esc(cedulas[c.clienteUid])}` : ""} · ${esc(c.clienteTel)}</p>
           <p>${icono("moto")} ${c.motoNombre && c.motoUid ? esc(c.motoNombre) : c.paraMotoNombre ? `Pedida a ${esc(c.paraMotoNombre)}` : "—"}</p>
           <p>A: ${esc(c.origen?.dir)} ${icono("flecha")} B: ${esc(c.destino?.dir)}${c.paradas?.length ? ` · ${c.paradas.length} parada${c.paradas.length > 1 ? "s" : ""}` : ""}${c.retorno ? " · ida y vuelta" : ""}</p>
           <p>${fechaTexto(c.creada)}</p>
           ${cancel.map((x) => `<p style="color:var(--rojo)">${x}</p>`).join("")}</div>
-          ${c.estado === "esperando" || c.estado === "aceptada" ? `<div class="acciones"><button class="boton peligro" data-cancelar="${c.id}">Cancelar</button></div>` : ""}
+          ${c.estado === "esperando" || c.estado === "aceptada" ? `<div class="acciones"><button class="boton peligro" data-cancelar="${esc(c.id)}">Cancelar</button></div>` : ""}
         </article>`;
       }).join("") || `<div class="vacio">${icono("ruta")}Todavía no hay carreras.</div>`}</div>`;
     $$("[data-cancelar]").forEach((b) => (b.onclick = async () => {
@@ -457,7 +483,7 @@ function iniciar() {
     const pendientes = resenas.filter((r) => !r.aprobada).sort((a, b) => grave(b) - grave(a)), aprobadas = resenas.filter((r) => r.aprobada);
     const texto = (lista, k) => (lista.find((a) => a.k === k) || { t: k }).t;
     const tarjeta = (r, botones) => `<article class="tarjeta ${r.seguro === false || (r.malos || []).length ? "reporte" : ""}"><div class="info">
-      <h3><span class="rating">${[1, 2, 3, 4, 5].map((n) => icono("estrella", n <= r.estrellas ? "" : "apagada")).join("")}</span> para ${esc(r.motoNombre)}</h3>
+      <h3><span class="rating">${[1, 2, 3, 4, 5].map((n) => icono("estrella", n <= r.estrellas ? "" : "apagada")).join("")}</span> para ${esc((motos.find((m) => m.id === r.motoUid) || {}).nombre || r.motoNombre)}</h3>
       ${r.seguro === false ? `<p class="pildora riesgo">${icono("alerta")} El cliente NO se sintió seguro</p>` : r.seguro ? `<p class="pildora seguro">${icono("escudo")} Viaje seguro</p>` : ""}
       ${(r.malos || []).length ? `<div class="etiquetas">${r.malos.map((k) => `<span class="pildora riesgo">${icono("alerta")} ${esc(texto(ASPECTOS.malos, k))}</span>`).join("")}</div>` : ""}
       ${(r.buenos || []).length ? `<div class="etiquetas">${r.buenos.map((k) => `<span class="pildora insignia">${icono("check")} ${esc(texto(ASPECTOS.buenos, k))}</span>`).join("")}</div>` : ""}
@@ -467,25 +493,37 @@ function iniciar() {
       <h1 class="titulo">Por aprobar (${pendientes.length})</h1>
       <p class="nota">Las estrellas y lo de seguridad cuentan para el motorizado solo cuando apruebas la reseña. Los reportes de seguridad salen en rojo.</p>
       <div class="lista compacta">${pendientes.map((r) => tarjeta(r, `<div class="acciones">
-        <button class="boton verde" data-aprobar="${r.id}">Aprobar</button><button class="boton peligro" data-rechazar="${r.id}">Rechazar</button></div>`)).join("")
+        <button class="boton verde" data-aprobar="${esc(r.id)}">Aprobar</button><button class="boton peligro" data-rechazar="${esc(r.id)}">Rechazar</button></div>`)).join("")
         || `<div class="vacio">${icono("estrella")}No hay reseñas pendientes.</div>`}</div>
       <details class="caja plegable" ${resenasAbiertas ? "open" : ""} id="aprobadas"><summary>${icono("estrella")} Aprobadas (${aprobadas.length})</summary>
         <div class="lista compacta">${aprobadas.map((r) => tarjeta(r, "")).join("") || `<p class="nota">Ninguna todavía.</p>`}</div></details>`;
     $("#aprobadas").addEventListener("toggle", (e) => { resenasAbiertas = e.target.open; });
     $$("[data-aprobar]").forEach((b) => (b.onclick = async () => {
-      const r = resenas.find((x) => x.id === b.dataset.aprobar);
-      const lote = writeBatch(db);
-      lote.update(doc(db, "resenas", r.id), { aprobada: true });
-      if (motos.some((m) => m.id === r.motoUid)) {
-        const cambios = { ratingSum: increment(r.estrellas), ratingCount: increment(1) };
-        if (typeof r.seguro === "boolean") { cambios.seguroN = increment(1); if (r.seguro) cambios.seguroSi = increment(1); }
-        (r.buenos || []).forEach((k) => { cambios[`buenos.${k}`] = increment(1); });
-        (r.malos || []).forEach((k) => { cambios[`malos.${k}`] = increment(1); });
-        lote.update(doc(db, "motorizados", r.motoUid), cambios);
-        // Copia pública para el perfil del motorizado.
-        lote.set(doc(db, "motorizados", r.motoUid, "opiniones", r.id), opinionPublica(r));
-      }
-      await lote.commit();
+      b.disabled = true;
+      const id = b.dataset.aprobar;
+      try {
+        // En una transacción: si ya estaba aprobada (doble toque u otro teléfono), no suma dos veces.
+        await runTransaction(db, async (tx) => {
+          const ref = doc(db, "resenas", id);
+          const d = await tx.get(ref);
+          if (!d.exists() || d.data().aprobada) throw new Error("ya");
+          const r = { id, ...d.data() };
+          const mRef = doc(db, "motorizados", r.motoUid);
+          const m = await tx.get(mRef);
+          tx.update(ref, { aprobada: true });
+          if (m.exists()) {
+            const estrellasOk = Math.min(5, Math.max(1, Math.round(Number(r.estrellas) || 0)));
+            const cambios = { ratingSum: increment(estrellasOk), ratingCount: increment(1) };
+            if (typeof r.seguro === "boolean") { cambios.seguroN = increment(1); if (r.seguro) cambios.seguroSi = increment(1); }
+            const validos = (lista, k) => lista.some((a) => a.k === k);
+            (Array.isArray(r.buenos) ? r.buenos : []).filter((k) => validos(ASPECTOS.buenos, k)).forEach((k) => { cambios[`buenos.${k}`] = increment(1); });
+            (Array.isArray(r.malos) ? r.malos : []).filter((k) => validos(ASPECTOS.malos, k)).forEach((k) => { cambios[`malos.${k}`] = increment(1); });
+            tx.update(mRef, cambios);
+            // Copia pública para el perfil del motorizado.
+            tx.set(doc(db, "motorizados", r.motoUid, "opiniones", r.id), opinionPublica(r));
+          }
+        });
+      } catch (e) { if (e.message !== "ya") { console.error(e); aviso("No se pudo aprobar. Intenta de nuevo."); b.disabled = false; } }
     }));
     $$("[data-rechazar]").forEach((b) => (b.onclick = () => {
       if (confirm("¿Rechazar y borrar esta reseña?")) deleteDoc(doc(db, "resenas", b.dataset.rechazar));
@@ -656,9 +694,9 @@ function iniciar() {
     $("#vista").innerHTML = `
       <h1 class="titulo">Visitas a la app</h1>
       <div class="cifras">
-        <div class="cifra"><b>${dias[hoy] || 0}</b><span>Hoy</span></div>
-        <div class="cifra"><b>${semana}</b><span>Últimos 7 días</span></div>
-        <div class="cifra"><b>${visitas.total || 0}</b><span>En total</span></div>
+        <div class="cifra"><b>${Number(dias[hoy]) || 0}</b><span>Hoy</span></div>
+        <div class="cifra"><b>${Number(semana) || 0}</b><span>Últimos 7 días</span></div>
+        <div class="cifra"><b>${Number(visitas.total) || 0}</b><span>En total</span></div>
       </div>
       <h1 class="titulo">Pagos cobrados</h1>
       <div class="cifras"><div class="cifra"><b>${usd(totalCobrado)}</b><span>Total cobrado</span></div>

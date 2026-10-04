@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=46";
-import { icono, pintarIconos } from "./iconos.js?v=46";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=47";
+import { icono, pintarIconos } from "./iconos.js?v=47";
 
 export { icono };
 pintarIconos();
@@ -73,9 +73,10 @@ export const conBs = (montoUsd, tasa) => (tasa > 0 ? `${usd(montoUsd)} · ${bs(a
 export const fecha = (t) => (t ? (t.toDate ? t.toDate() : new Date(t)) : null);
 export const fechaTexto = (t) => { const f = fecha(t); return f ? f.toLocaleString("es-VE", { dateStyle: "medium", timeStyle: "short" }) : "—"; };
 export const estrellas = (m) => {
-  if (!m.ratingCount) return "Sin calificaciones";
-  const p = m.ratingSum / m.ratingCount;
-  return `${icono("estrella")} ${p.toFixed(1)} (${m.ratingCount})`;
+  const n = Number(m.ratingCount) || 0;
+  if (!n) return "Sin calificaciones";
+  const p = (Number(m.ratingSum) || 0) / n;
+  return `${icono("estrella")} ${p.toFixed(1)} (${n})`;
 };
 export const promedio = (m) => (m.ratingCount ? m.ratingSum / m.ratingCount : 0);
 
@@ -99,7 +100,7 @@ export const ASPECTOS = {
   ],
 };
 // % de viajes en que el cliente dijo que se sintió seguro (null si nadie ha respondido).
-export const pctSeguro = (m) => (m.seguroN ? Math.round((100 * (m.seguroSi || 0)) / m.seguroN) : null);
+export const pctSeguro = (m) => (Number(m.seguroN) > 0 ? Math.round((100 * (Number(m.seguroSi) || 0)) / Number(m.seguroN)) : null);
 // ---------- Fotos del motorizado y de su moto ----------
 // Se guardan pequeñas (JPEG ~300 px) en la colección "fotos", aparte, para no hacer pesada la lista de motorizados.
 const cacheFotos = new Map();

@@ -7,7 +7,7 @@ import {
 import {
   leerOpiniones, listaOpiniones, ENLACE_POLITICAS, sonarAlerta, ASPECTOS, insigniasSeguridad, textoCobro, FORMAS_PAGO, bs, auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar, escucharTarifas, aBs,
-} from "./comun.js?v=46";
+} from "./comun.js?v=47";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -665,7 +665,8 @@ function iniciar() {
         if (e.code !== "permission-denied") return aviso("No se pudo cancelar. Revisa tu internet e intenta de nuevo.");
         try { await updateDoc(doc(db, "carreras", c.id), base); } catch { return aviso("No se pudo cancelar."); }
       }
-      misOfertas.delete(c.id); aviso("Cancelaste la carrera");
+      misOfertas.delete(c.id); revisadas.delete(c.id); aviso("Cancelaste la carrera");
+      if (!miCarrera) pintar();
     };
   }
 }

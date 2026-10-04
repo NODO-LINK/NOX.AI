@@ -3,7 +3,7 @@
 
 import { signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { auth, db, NOMBRE, $, esc, icono, ICONOS, nuevoMapa, marcarRecorrido, filasRecorrido, progreso, afinarEta, transicion, avisoSinConfigurar } from "./comun.js?v=46";
+import { auth, db, NOMBRE, $, esc, icono, ICONOS, nuevoMapa, marcarRecorrido, filasRecorrido, progreso, afinarEta, transicion, avisoSinConfigurar } from "./comun.js?v=47";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -17,7 +17,7 @@ function iniciar() {
   $("#cabecera").innerHTML = `<div class="dentro"><div><div class="logo">${NOMBRE}</div><div class="logo-sub">Seguimiento en vivo</div></div>
     <div class="derecha"><span class="pildora ok">En vivo</span></div></div>`;
 
-  if (!id) return mensaje("cerrar", "Enlace incompleto", "Pídele a tu amigo que te lo comparta otra vez.");
+  if (!id || !/^[A-Za-z0-9_-]{6,40}$/.test(id)) return mensaje("cerrar", "Enlace incompleto", "Pídele a tu amigo que te lo comparta otra vez.");
   mensaje("reloj", "Cargando la carrera…", "");
 
   onAuthStateChanged(auth, (u) => {

@@ -11,6 +11,10 @@ service cloud.firestore {
       return m.activo == true && m.pagadoHasta > request.time;
     }
     function soloCambia(campos) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos); }
+    // Identificador normal de Firestore (evita ids con comillas o etiquetas).
+    function idNormal(id) { return id.matches('^[A-Za-z0-9]{20}$'); }
+    function punto(p) { return p is map && p.lat is number && p.lng is number && p.dir is string && p.dir.size() <= 200; }
+    function motoData(uid) { return get(/databases/$(database)/documents/motorizados/$(uid)).data; }
 
     match /admins/{uid} {
       allow read: if dentro() && request.auth.uid == uid;
@@ -41,10 +45,12 @@ service cloud.firestore {
 
     match /clientes/{uid} {
       allow read: if dentro() && request.auth.uid == uid;
-      allow write: if dentro() && request.auth.uid == uid
-        && request.resource.data.nombre is string && request.resource.data.nombre.size() >= 5
+      // La cédula no se puede cambiar después (así un cliente bloqueado no se desbloquea solo).
+      allow create, update: if dentro() && request.auth.uid == uid
+        && request.resource.data.nombre is string && request.resource.data.nombre.size() >= 5 && request.resource.data.nombre.size() <= 80
         && request.resource.data.cedula is string && request.resource.data.cedula.matches('^[VE]-[0-9]{6,9}$')
-        && request.resource.data.telefono is string && request.resource.data.telefono.matches('^[+]58[0-9]{10}$');
+        && request.resource.data.telefono is string && request.resource.data.telefono.matches('^[+]58[0-9]{10}$')
+        && (resource == null || request.resource.data.cedula == resource.data.cedula);
       allow read, update: if esAdmin();
     }
 
@@ -69,11 +75,15 @@ service cloud.firestore {
         || (esMoto() && resource.data.motoUid == request.auth.uid)
         || (esMoto() && resource.data.estado == 'esperando' && motoHabilitado());
 
-      allow create: if dentro()
+      allow create: if dentro() && idNormal(id)
         && request.resource.data.clienteUid == request.auth.uid
         && !exists(/databases/$(database)/documents/bloqueados/$(get(/databases/$(database)/documents/clientes/$(request.auth.uid)).data.cedula))
         && request.resource.data.estado == 'esperando'
-        && request.resource.data.motoUid == null;
+        && request.resource.data.motoUid == null
+        && request.resource.data.km is number && request.resource.data.km >= 0 && request.resource.data.km < 200
+        && request.resource.data.precio is number && request.resource.data.precio > 0 && request.resource.data.precio < 1000
+        && punto(request.resource.data.origen) && punto(request.resource.data.destino)
+        && request.resource.data.clienteNombre is string && request.resource.data.clienteNombre.size() <= 80;
 
       allow update: if esAdmin()
         // El cliente cancela su carrera…
@@ -87,11 +97,17 @@ service cloud.firestore {
             && request.resource.data.estado == 'aceptada'
             && exists(/databases/$(database)/documents/carreras/$(id)/ofertas/$(request.resource.data.motoUid))
             && request.resource.data.precio == get(/databases/$(database)/documents/carreras/$(id)/ofertas/$(request.resource.data.motoUid)).data.precio
-            && get(/databases/$(database)/documents/motorizados/$(request.resource.data.motoUid)).data.get('enCarrera', false) != true
+            && request.resource.data.get('precioBs', null) == get(/databases/$(database)/documents/carreras/$(id)/ofertas/$(request.resource.data.motoUid)).data.get('precioBs', null)
+            && motoData(request.resource.data.motoUid).get('enCarrera', false) != true
+            && motoData(request.resource.data.motoUid).activo == true
+            && motoData(request.resource.data.motoUid).pagadoHasta > request.time
+            && request.resource.data.motoNombre == motoData(request.resource.data.motoUid).nombre
+            && request.resource.data.motoTel == motoData(request.resource.data.motoUid).get('telefono', '')
             && soloCambia(['estado', 'motoUid', 'motoNombre', 'motoTel', 'motoMoto', 'motoPlaca', 'aceptada', 'precio', 'precioBs', 'contraoferta']))
         // …avisa una emergencia (SOS) durante el viaje…
         || (dentro() && resource.data.clienteUid == request.auth.uid
             && resource.data.estado == 'aceptada'
+            && (!('sosUbic' in request.resource.data) || (request.resource.data.sosUbic.lat is number && request.resource.data.sosUbic.lng is number))
             && soloCambia(['sos', 'sosUbic']))
         // …o la califica cuando terminó.
         || (dentro() && resource.data.clienteUid == request.auth.uid
@@ -112,6 +128,9 @@ service cloud.firestore {
              // Cancelar: solo antes de recoger; vuelve al precio original del cliente (si hubo contraoferta).
              || (request.resource.data.estado == 'esperando' && request.resource.data.motoUid == null
                  && resource.data.get('recogido', false) != true
+                 && request.resource.data.paraMoto == null
+                 && request.resource.data.cancelaciones is list
+                 && request.resource.data.cancelaciones.size() == resource.data.get('cancelaciones', []).size() + 1
                  && request.resource.data.get('precio', 0) == resource.data.get('precioCliente', resource.data.get('precio', 0))
                  && soloCambia(['estado', 'motoUid', 'paraMoto', 'paraMotoNombre', 'cancelaciones', 'recogido', 'llegoEn',
                                 'motoNombre', 'motoTel', 'motoMoto', 'motoPlaca', 'precio', 'precioBs', 'contraoferta']))));
@@ -150,9 +169,14 @@ service cloud.firestore {
     }
 
     match /resenas/{id} {
-      allow create: if dentro()
+      allow create: if dentro() && idNormal(id)
         && request.resource.data.clienteUid == request.auth.uid
         && !exists(/databases/$(database)/documents/bloqueados/$(get(/databases/$(database)/documents/clientes/$(request.auth.uid)).data.cedula))
+        && get(/databases/$(database)/documents/carreras/$(request.resource.data.carreraId)).data.clienteUid == request.auth.uid
+        && get(/databases/$(database)/documents/carreras/$(request.resource.data.carreraId)).data.motoUid == request.resource.data.motoUid
+        && get(/databases/$(database)/documents/carreras/$(request.resource.data.carreraId)).data.estado == 'terminada'
+        && get(/databases/$(database)/documents/carreras/$(request.resource.data.carreraId)).data.get('calificada', false) == false
+        && (!('comentario' in request.resource.data) || (request.resource.data.comentario is string && request.resource.data.comentario.size() <= 500))
         && request.resource.data.aprobada == false
         && request.resource.data.estrellas is int
         && request.resource.data.estrellas >= 1 && request.resource.data.estrellas <= 5;
@@ -161,7 +185,9 @@ service cloud.firestore {
 
     // El motorizado reporta el pago de su cuota; el administrador lo aprueba o lo rechaza.
     match /reportesPago/{id} {
-      allow create: if esMoto() && request.resource.data.motoUid == request.auth.uid && request.resource.data.estado == 'pendiente';
+      allow create: if esMoto() && idNormal(id) && request.resource.data.motoUid == request.auth.uid && request.resource.data.estado == 'pendiente'
+        && request.resource.data.referencia is string && request.resource.data.referencia.size() <= 20
+        && request.resource.data.monto is number;
       allow read: if esAdmin() || (dentro() && resource.data.motoUid == request.auth.uid);
       allow update, delete: if esAdmin();
     }
@@ -178,7 +204,11 @@ service cloud.firestore {
 
     match /stats/visitas {
       allow read: if esAdmin();
-      allow create, update: if request.resource.data.keys().hasOnly(['total', 'dias']);
+      // Solo se puede sumar 1 visita (nada de borrar ni poner textos raros).
+      allow create: if dentro() && request.resource.data.keys().hasOnly(['total', 'dias'])
+        && request.resource.data.total == 1 && request.resource.data.dias is map;
+      allow update: if dentro() && request.resource.data.keys().hasOnly(['total', 'dias'])
+        && request.resource.data.total == resource.data.total + 1 && request.resource.data.dias is map;
     }
   }
 }
