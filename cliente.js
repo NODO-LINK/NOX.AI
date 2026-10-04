@@ -10,7 +10,7 @@ import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
   sonarAlerta,
-} from "./comun.js?v=34";
+} from "./comun.js?v=35";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -21,7 +21,7 @@ function iniciar() {
   let motos = [], carreras = [], cancelarSubs = [];
   // Estado del formulario de pedido (se conserva al cambiar de pestaña).
   // puntos[0] = A (donde te buscan), los del medio = paradas, el último = B (destino).
-  const pedido = { tipo: SERVICIOS[0], puntos: [], refs: [], retorno: false, agregando: false, nota: "", para: null, km: null, linea: null };
+  const pedido = { tipo: SERVICIOS[0], puntos: [], refs: [], retorno: false, agregando: false, nota: "", para: null, km: null, linea: null, oferta: null, ofertaTocada: false };
   const MAX_PUNTOS = 6;
 
   contarVisita();
@@ -145,7 +145,7 @@ function iniciar() {
     $("#widget").onclick = () => ir("carrera");
     tarifas = await leerTarifas();
     // Tarifas en vivo: el recargo de lluvia aparece apenas el admin lo enciende.
-    cancelarSubs.push(escucharTarifas((t) => { tarifas = t; if (rutaActual === "pedir" && !$(".selector")) vistaPedir(); }));
+    cancelarSubs.push(escucharTarifas((t) => { tarifas = t; if (enPedido() && !$(".selector")) vistaPedir(); }));
     // Cédula bloqueada por el administrador: no puede pedir.
     bloqueado = await getDoc(doc(db, "bloqueados", cliente.cedula || "-")).then((x) => x.exists()).catch(() => false);
 
@@ -187,16 +187,21 @@ function iniciar() {
       .sort((a, b) => tiempo(b) - tiempo(a))[0] || null;
   }
 
+  // "pedir" (a un motorizado) y "publicar" (a todos, con el precio que pone el cliente) usan la misma pantalla.
+  function enPedido() { return rutaActual === "pedir" || rutaActual === "publicar"; }
+  const publicando = () => rutaActual === "publicar";
+
   function ir(r) {
     // "Pedir" ya no es pestaña: se llega desde "Pedir a este" y se marca Motorizados.
     if (r === "pedir" && !pedido.para) r = "motorizados";
+    if (r === "publicar") pedido.para = null;
     rutaActual = r;
     activarBarra(r === "pedir" ? "motorizados" : r);
     if (mapa) { mapa.remove(); mapa = null; }
     const sel = $(".selector");
     if (sel) { sel.remove(); document.body.classList.remove("con-selector"); }
     seguimiento.alMover = null;
-    ({ pedir: vistaPedir, motorizados: vistaMotorizados, carrera: vistaCarrera })[r]();
+    ({ pedir: vistaPedir, publicar: vistaPedir, motorizados: vistaMotorizados, carrera: vistaCarrera })[r]();
     refrescarVivo();
     transicion();
     window.scrollTo(0, 0);
@@ -210,9 +215,12 @@ function iniciar() {
   function vistaPedir() {
     const activa = carreraActual();
     const n = pedido.puntos.length;
+    const pub = publicando();
     $("#vista").innerHTML = `
-      <button class="boton secundario chico" id="volver" style="margin-top:16px">${icono("flecha", "girada")} Motorizados</button>
-      <h1 class="titulo">¿A dónde vamos?</h1>
+      ${pub ? `<h1 class="titulo">Publica tu carrera</h1>
+        <p class="nota">Marca a dónde vas y pon cuánto quieres pagar. Todos los motorizados de turno la ven y el primero que acepte te busca.</p>`
+      : `<button class="boton secundario chico" id="volver" style="margin-top:16px">${icono("flecha", "girada")} Motorizados</button>
+      <h1 class="titulo">¿A dónde vamos?</h1>`}
       ${SERVICIOS.length > 1 ? `<div class="segmento" id="tipo">
         <button data-t="delivery">${icono("paquete")} Delivery</button><button data-t="mototaxi">${icono("moto")} Mototaxi</button>
       </div>` : ""}
@@ -227,6 +235,15 @@ function iniciar() {
         <label class="opcion interruptor"><input type="checkbox" id="retorno" ${pedido.retorno ? "checked" : ""}><span>Ida y vuelta</span></label>
       </div>` : ""}
       <div class="precio-caja" id="precio"></div>
+      ${pub ? `<div class="oferta" id="caja-oferta">
+        <label for="oferta">¿Cuánto quieres pagar?</label>
+        <div class="campo-oferta">
+          <button class="boton secundario chico" data-sumar="-0.25" aria-label="Bajar">−</button>
+          <span>$</span><input id="oferta" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00">
+          <button class="boton secundario chico" data-sumar="0.25" aria-label="Subir">+</button>
+        </div>
+        <small class="nota" id="nota-oferta"></small>
+      </div>` : ""}
       <div id="caja-nota"><label for="nota">¿Qué hay que llevar?</label>
       <textarea id="nota" placeholder="Ej.: una pizza de la pizzería…, un sobre, unas compras">${esc(pedido.nota)}</textarea></div>
       <button class="boton" id="pedir" ${activa ? "disabled" : ""}>${pedido.para ? `Pedir a ${esc(pedido.para.nombre)}` : "Pedir a todos los motorizados"}</button>
@@ -243,6 +260,7 @@ function iniciar() {
       ? `<span>${resumenRecorrido()}</span><b>${usd(precio(tarifas, pedido.tipo, pedido.km))}</b>`
       : `<span>${usd(t.base)} + ${usd(t.porKm)} por km</span><span class="nota">Marca A y B</span>`)
       + (extras.length ? `<small class="recargo">${icono(extras.some((x) => /lluvia/i.test(x.nombre)) ? "lluvia" : "luna")} Incluye ${extras.map((x) => `${x.nombre.toLowerCase()} (+${usd(x.monto)})`).join(" y ")}</small>` : "");
+    if (pub) $("#precio").hidden = true;   // al publicar, el precio lo pone el cliente (abajo se muestra el sugerido)
     if (bloqueado) $("#pedir").outerHTML = `<p class="pildora mal" style="margin-top:14px">Tu cédula está bloqueada. Comunícate con el administrador.</p>`;
     $$("#tipo button").forEach((b) => b.classList.toggle("activo", b.dataset.t === pedido.tipo));
     if ($("#tipo")) $("#tipo").dataset.activo = pedido.tipo;
@@ -255,7 +273,29 @@ function iniciar() {
     $$("#tipo button").forEach((b) => (b.onclick = () => { pedido.tipo = b.dataset.t; vistaPedir(); }));
     const nota = $("#nota");
     if (nota) nota.addEventListener("input", (e) => { pedido.nota = e.target.value; });
-    $("#volver").onclick = () => ir("motorizados");
+    if ($("#volver")) $("#volver").onclick = () => ir("motorizados");
+    if (pub) {
+      // Precio que pone el cliente: arranca con el sugerido por distancia y se puede cambiar libremente.
+      const sugerido = n >= 2 && pedido.km != null ? precio(tarifas, pedido.tipo, pedido.km) : null;
+      const campo = $("#oferta");
+      const valor = () => { const v = parseFloat(String(campo.value).replace(",", ".")); return Number.isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : null; };
+      const pintarOferta = () => {
+        const v = valor();
+        const b = $("#pedir");
+        if (b) b.innerHTML = v ? `${icono("dinero")} Publicar por ${usd(v)}` : "Publicar carrera";
+        $("#nota-oferta").textContent = sugerido == null ? "Marca A y B para ver el precio sugerido."
+          : `Precio sugerido por distancia: ${usd(sugerido)}.${v && v < sugerido ? " Con menos dinero puede tardar más en aceptarse." : ""}`;
+      };
+      if (!pedido.ofertaTocada && sugerido != null) pedido.oferta = sugerido;
+      campo.value = pedido.oferta != null ? pedido.oferta.toFixed(2) : "";
+      campo.addEventListener("input", () => { pedido.oferta = valor(); pedido.ofertaTocada = true; pintarOferta(); });
+      $$("[data-sumar]").forEach((b) => (b.onclick = () => {
+        pedido.ofertaTocada = true;
+        pedido.oferta = Math.max(0.25, Math.round(((valor() || 0) + Number(b.dataset.sumar)) * 100) / 100);
+        campo.value = pedido.oferta.toFixed(2); pintarOferta();
+      }));
+      pintarOferta();
+    }
     const quitar = $("#quitar-para");
     if (quitar) quitar.onclick = () => { pedido.para = null; ir("motorizados"); };
     if ($("#pedir")) $("#pedir").onclick = enviarPedido;
@@ -541,7 +581,7 @@ function iniciar() {
       m.stop(); m.remove(); caja.remove();
       document.body.classList.remove("con-selector");
       pedido.agregando = false;
-      if (rutaActual === "pedir") vistaPedir();
+      if (enPedido()) vistaPedir();
     };
     $("#cerrar-sel", caja).onclick = cerrar;
     $("#listo", caja).onclick = () => {
@@ -558,6 +598,8 @@ function iniciar() {
     if (n < 2 || pedido.km == null) return aviso("Marca el punto A y el punto B en el mapa");
     if (pedido.puntos.some((_, i) => !(pedido.refs[i] || "").trim())) return aviso("Escribe una referencia para cada punto");
     if (pedido.tipo === "delivery" && !pedido.nota.trim()) return aviso("Cuéntanos qué hay que llevar");
+    const pub = publicando();
+    if (pub && !(pedido.oferta > 0)) return aviso("Escribe cuánto quieres pagar");
     $("#pedir").disabled = true;
     pedirPermisoAvisos();
     const punto = (i) => ({ lat: pedido.puntos[i].lat, lng: pedido.puntos[i].lng, dir: pedido.refs[i].trim() });
@@ -573,8 +615,9 @@ function iniciar() {
         retorno: pedido.retorno,
         nota: pedido.tipo === "delivery" ? pedido.nota.trim() : "",
         km: Math.round(pedido.km * 10) / 10,
-        precio: precio(tarifas, pedido.tipo, pedido.km),
-        recargos: recargos(tarifas),
+        precio: pub ? pedido.oferta : precio(tarifas, pedido.tipo, pedido.km),
+        recargos: pub ? [] : recargos(tarifas),
+        ...(pub ? { ofertaCliente: true, precioSugerido: precio(tarifas, pedido.tipo, pedido.km) } : {}),
         estado: "esperando",
         paraMoto: pedido.para ? pedido.para.id : null,
         paraMotoNombre: pedido.para ? pedido.para.nombre : null,
@@ -583,7 +626,7 @@ function iniciar() {
         cancelaciones: [],
         creada: serverTimestamp(),
       });
-      Object.assign(pedido, { puntos: [], refs: [], retorno: false, agregando: false, km: null, linea: null, nota: "", para: null });
+      Object.assign(pedido, { puntos: [], refs: [], retorno: false, agregando: false, km: null, linea: null, nota: "", para: null, oferta: null, ofertaTocada: false });
       ir("carrera");
     } catch (e) {
       console.error(e);
@@ -743,9 +786,9 @@ function iniciar() {
     });
     const m = motos.find((y) => y.id === x.motoUid);
     pedido.para = m ? { id: m.id, nombre: m.nombre } : null;
-    recalcular().then(() => { if (rutaActual === "pedir") vistaPedir(); });
+    recalcular().then(() => { if (enPedido()) vistaPedir(); });
     if (m) ir("pedir");
-    else { aviso("Elige un motorizado: tu viaje ya está cargado"); ir("motorizados"); }
+    else { aviso("Tu viaje ya está cargado: publícalo con tu precio"); ir("publicar"); }
   }
 
   // Tarjeta grande con los minutos que faltan y la barra A → B con la moto avanzando.

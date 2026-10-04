@@ -673,3 +673,11 @@ body.con-selector { overflow: hidden; }
 /* En el mapa completo, los botones van a la derecha para que la hoja de abajo no los tape. */
 .mapa-sel .leaflet-bottom.leaflet-left { left: auto; right: 0; bottom: auto; top: 30%; }
 .mapa-sel .leaflet-bottom.leaflet-left .leaflet-control { margin: 0 10px 10px 0; clear: right; float: right; }
+/* ---------- Publicar carrera con precio del cliente ---------- */
+.oferta { margin-top: 14px; padding: 14px; border-radius: var(--radio); background: var(--superficie); box-shadow: var(--sombra-1); display: grid; gap: 8px; }
+.oferta label { font-weight: 800; }
+.campo-oferta { display: flex; align-items: center; gap: 8px; }
+.campo-oferta span { font-size: 1.6rem; font-weight: 800; color: var(--marca); }
+.campo-oferta input { flex: 1; min-width: 0; font-size: 1.6rem; font-weight: 800; color: var(--marca); text-align: center; padding: 8px; }
+.campo-oferta .boton.chico { width: 44px; height: 44px; padding: 0; font-size: 1.4rem; flex: 0 0 auto; }
+.pildora.oferta-pill { background: #fef3c7; color: #92400e; }

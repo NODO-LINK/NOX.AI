@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=34";
-import { icono, pintarIconos } from "./iconos.js?v=34";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=35";
+import { icono, pintarIconos } from "./iconos.js?v=35";
 
 export { icono };
 pintarIconos();
