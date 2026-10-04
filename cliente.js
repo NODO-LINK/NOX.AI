@@ -9,8 +9,8 @@ import {
 import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
-  politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
-} from "./comun.js?v=42";
+  coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
+} from "./comun.js?v=43";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -252,6 +252,8 @@ function iniciar() {
         <button class="boton secundario" id="agregar">${icono("mas")} Agregar parada</button>
         <label class="opcion interruptor"><input type="checkbox" id="retorno" ${pedido.retorno ? "checked" : ""}><span>Ida y vuelta</span></label>
       </div>` : ""}
+      ${n >= 3 && !pedido.paradaPendiente ? `<p class="nota ayuda-orden">${icono("agarrar")} Mantén y arrastra la letra de una parada para cambiar el orden de la ruta.</p>` : ""}
+      ${n >= 4 && !pedido.paradaPendiente ? `<button class="boton secundario chico" id="ordenar">${icono("ruta")} Ordenar por la ruta más corta</button>` : ""}
       <div class="precio-caja" id="precio"></div>
       ${pub ? `<div class="oferta" id="caja-oferta">
         <label for="oferta">¿Cuánto quieres pagar?</label>
@@ -311,6 +313,7 @@ function iniciar() {
       if (campo) { campo.focus({ preventScroll: true }); campo.closest(".parada-fila").scrollIntoView({ behavior: "smooth", block: "center" }); }
     };
     if ($("#agregar")) $("#agregar").disabled = pedido.paradaPendiente || n >= MAX_PUNTOS;
+    if ($("#ordenar")) $("#ordenar").onclick = () => ordenarParadas(() => vistaPedir());
     if ($("#retorno")) $("#retorno").onchange = async (e) => { pedido.retorno = e.target.checked; await recalcular(); vistaPedir(); };
     $$("#tipo button").forEach((b) => (b.onclick = () => { pedido.tipo = b.dataset.t; vistaPedir(); }));
     const nota = $("#nota");
@@ -521,8 +524,9 @@ function iniciar() {
         </div>`;
       }
       const i = f.i;
-      return `<div class="parada-fila ${pedido.filaNueva === i ? "nueva" : ""}">
-        <i class="${clasePunto(i, n)}">${letraPunto(i, n)}</i>
+      const movible = i > 0 && n >= 3 && !pedido.paradaPendiente;
+      return `<div class="parada-fila ${pedido.filaNueva === i ? "nueva" : ""}" data-fila="${i}">
+        <i class="${clasePunto(i, n)} ${movible ? "asa" : ""}" ${movible ? `data-arrastrar="${i}" title="Arrastra para cambiar el orden"` : ""}>${letraPunto(i, n)}${movible ? `<b class="agarre">${icono("agarrar")}</b>` : ""}</i>
         <div class="campo-lugar"><input data-ref="${i}" placeholder="${i === 0 ? "Referencia: casa, color, frente a…" : "Referencia del lugar…"}" value="${esc(pedido.refs[i] || "")}" autocomplete="off"><div class="sugerencias" hidden></div></div>
         <button class="estrella-fav ${esFavorito(pedido.puntos[i]) ? "on" : ""}" data-fav="${i}" aria-label="Guardar en mis lugares">${icono("favorito")}</button>
         ${i > 0 ? `<button class="quitar" data-quitar="${i}" aria-label="Quitar punto">${icono("cerrar")}</button>` : ""}
@@ -558,6 +562,79 @@ function iniciar() {
       pedido.puntos.splice(i, 1); pedido.refs.splice(i, 1);
       await recalcular(); alCambiar();
     }));
+    $$("[data-arrastrar]").forEach((asa) => arrastrable(asa, (desde, hasta) => {
+      const [p] = pedido.puntos.splice(desde, 1), [r] = pedido.refs.splice(desde, 1);
+      pedido.puntos.splice(hasta, 0, p); pedido.refs.splice(hasta, 0, r);
+      pedido.km = null; pedido.filaNueva = hasta;
+      alCambiar(); listo();
+    }));
+  }
+
+  // Cambiar el orden de la ruta: se mantiene apretada la letra de una parada (o de B) y se arrastra
+  // arriba o abajo. El punto A (donde te buscan) no se mueve.
+  function arrastrable(asa, alSoltar) {
+    asa.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      const fila = asa.closest(".parada-fila");
+      const filas = $$("#paradas .parada-fila[data-fila]").filter((f) => Number(f.dataset.fila) > 0);
+      const desde = Number(fila.dataset.fila);
+      const rects = new Map(filas.map((f) => [f, f.getBoundingClientRect()]));
+      const alto = rects.get(fila).height + 8;
+      const y0 = e.clientY;
+      let hasta = desde;
+      asa.setPointerCapture(e.pointerId);
+      fila.classList.add("arrastrando");
+      $("#paradas").classList.add("ordenando");
+      if (navigator.vibrate) navigator.vibrate(15);
+      const mover = (ev) => {
+        const r0 = rects.get(fila);
+        const dy = Math.max(rects.get(filas[0]).top - r0.top - alto * 0.6, Math.min(rects.get(filas[filas.length - 1]).top - r0.top + alto * 0.6, ev.clientY - y0));
+        fila.style.transform = `translateY(${dy}px) scale(1.02)`;
+        const centro = r0.top + r0.height / 2 + dy;
+        const antes = filas.filter((f) => f !== fila && rects.get(f).top + rects.get(f).height / 2 < centro).length;
+        const nuevo = 1 + antes;
+        if (nuevo !== hasta && navigator.vibrate) navigator.vibrate(8);
+        hasta = nuevo;
+        filas.forEach((f) => {
+          if (f === fila) return;
+          const k = Number(f.dataset.fila);
+          const corre = desde < hasta && k > desde && k <= hasta ? -alto : hasta < desde && k >= hasta && k < desde ? alto : 0;
+          f.style.transform = corre ? `translateY(${corre}px)` : "";
+        });
+      };
+      const soltar = () => {
+        asa.removeEventListener("pointermove", mover);
+        asa.removeEventListener("pointerup", soltar);
+        asa.removeEventListener("pointercancel", soltar);
+        filas.forEach((f) => (f.style.transform = ""));
+        fila.classList.remove("arrastrando");
+        $("#paradas").classList.remove("ordenando");
+        if (hasta !== desde) alSoltar(desde, hasta);
+      };
+      asa.addEventListener("pointermove", mover);
+      asa.addEventListener("pointerup", soltar);
+      asa.addEventListener("pointercancel", soltar);
+    });
+  }
+
+  // Ordena las paradas (entre A y B) para que el recorrido sea lo más corto posible.
+  async function ordenarParadas(alCambiar) {
+    const pts = pedido.puntos, n = pts.length;
+    const medio = pts.slice(1, -1).map((p, k) => ({ p, r: pedido.refs[k + 1] }));
+    const largo = (orden) => {
+      const ruta = [pts[0], ...orden.map((x) => x.p), pts[n - 1], ...(pedido.retorno ? [pts[0]] : [])];
+      let d = 0; for (let k = 1; k < ruta.length; k++) d += lineaRecta(ruta[k - 1], ruta[k]); return d;
+    };
+    const permutar = (a) => (a.length <= 1 ? [a] : a.flatMap((x, k) => permutar([...a.slice(0, k), ...a.slice(k + 1)]).map((r) => [x, ...r])));
+    const actual = largo(medio);
+    const mejor = permutar(medio).reduce((m, o) => (largo(o) < largo(m) ? o : m), medio);
+    if (largo(mejor) >= actual - 0.01) return aviso("Las paradas ya están en el mejor orden");
+    mejor.forEach((x, k) => { pts[k + 1] = x.p; pedido.refs[k + 1] = x.r; });
+    pedido.km = null;
+    aviso(`Ordenamos las paradas: ${((actual - largo(mejor)) * 1.3).toFixed(1)} km menos aprox.`);
+    alCambiar();
+    await recalcular();
+    if (enPedido() && !$(".selector")) alCambiar();
   }
 
   // Lista de lugares sugeridos debajo de una casilla, según lo que se va escribiendo.
@@ -575,7 +652,7 @@ function iniciar() {
         const palabras = q.split(/\s+/);
         const puntaje = (l) => {
           const nom = normalizar(l.n);
-          if (!palabras.every((w) => nom.includes(w) || normalizar(tipoLugar(l.t).nombre).includes(w))) return null;
+          if (!coincideLugar(l, palabras)) return null;
           let p = nom.startsWith(q) ? 0 : nom.split(/\s+/).some((w) => w.startsWith(palabras[0])) ? 1 : 2;
           if (l.mio) p -= 3; else if (l.propio) p -= 2; else if (l.t === "sector") p -= 0.5;
           if (cerca) p += Math.min(lineaRecta(cerca, l), 10) / 10;
@@ -758,7 +835,7 @@ function iniciar() {
       lugares = lugares || [];
       const hallados = [
         ...favoritos.leer().filter((f) => normalizar(f.n).includes(q)).map((f) => ({ ...f, t: "favorito" })),
-        ...lugares.filter((l) => normalizar(l.n).includes(q) || normalizar(tipoLugar(l.t).nombre).includes(q)),
+        ...lugares.filter((l) => coincideLugar(l, q.split(/\s+/))),
       ].slice(0, 8);
       res.hidden = false;
       res.innerHTML = hallados.length ? hallados.map((l, i) => `<button data-i="${i}"><span class="lugar" style="background:${tipoLugar(l.t).color}">${icono(tipoLugar(l.t).icono)}</span><span><b>${esc(l.n)}</b><small>${esc(tipoLugar(l.t).nombre)}</small></span></button>`).join("")

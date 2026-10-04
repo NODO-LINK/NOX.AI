@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=42";
-import { icono, pintarIconos } from "./iconos.js?v=42";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=43";
+import { icono, pintarIconos } from "./iconos.js?v=43";
 
 export { icono };
 pintarIconos();
@@ -520,6 +520,28 @@ const TIPOS_LUGAR = {
   favorito: { icono: "casa", color: "#7c3aed", nombre: "Tus lugares" },
 };
 export const tipoLugar = (t) => TIPOS_LUGAR[t] || TIPOS_LUGAR.otro;
+// Palabras con las que la gente busca cada tipo de lugar (escribir "escuela" encuentra la U.E. …).
+const PALABRAS_TIPO = {
+  educacion: "escuela colegio liceo unidad educativa ue universidad preescolar kinder biblioteca",
+  salud: "hospital ambulatorio cdi clinica medico doctor consultorio emergencia",
+  farmacia: "farmacia medicina botica",
+  mercado: "mercado tienda bodega abasto supermercado comercio negocio",
+  comida: "comida restaurante arepera pizzeria panaderia cafe heladeria",
+  playa: "playa mar costa",
+  parque: "parque plaza cancha estadio deporte",
+  iglesia: "iglesia capilla templo",
+  gobierno: "alcaldia policia prefectura bomberos gobierno oficina",
+  banco: "banco cajero",
+  gasolina: "bomba gasolina estacion de servicio combustible",
+  transporte: "parada terminal transporte autobus",
+  sector: "sector barrio urbanizacion",
+  referencia: "referencia",
+};
+// ¿El lugar coincide con todas las palabras buscadas (por nombre, tipo o sinónimos)?
+export const coincideLugar = (l, palabras) => {
+  const texto = normalizar(`${l.n} ${tipoLugar(l.t).nombre} ${PALABRAS_TIPO[l.t] || ""}`);
+  return palabras.every((w) => texto.includes(w));
+};
 
 function clasificar(tag) {
   const a = tag.amenity, sh = tag.shop, l = tag.leisure;

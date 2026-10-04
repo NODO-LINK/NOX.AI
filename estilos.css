@@ -783,3 +783,15 @@ body.con-selector { overflow: hidden; }
 .legal ul { padding-left: 20px; display: grid; gap: 6px; line-height: 1.45; }
 .legal .caja p { line-height: 1.5; }
 .legal .tabla { margin: 12px 0; }
+/* ---------- Cambiar el orden de la ruta ---------- */
+.parada-fila { transition: transform .2s var(--suave); }
+.parada-fila > i.asa { position: relative; cursor: grab; touch-action: none; }
+.parada-fila > i.asa .agarre { position: absolute; left: -11px; top: 50%; transform: translateY(-50%); display: grid; color: var(--texto-2); opacity: .7; }
+.parada-fila > i.asa .agarre .ico { width: 12px; height: 16px; }
+.parada-fila.asa-margen, #paradas:has(.asa) .parada-fila { padding-left: 10px; }
+.parada-fila.arrastrando { z-index: 800; transition: none; filter: drop-shadow(0 10px 18px rgba(76, 29, 149, .25)); }
+.parada-fila.arrastrando > i.asa { cursor: grabbing; }
+.ordenando .parada-fila input { pointer-events: none; }
+.ayuda-orden { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: .78rem; }
+.ayuda-orden .ico { width: 14px; height: 14px; flex: 0 0 auto; }
+#ordenar { margin-top: 8px; }
