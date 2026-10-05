@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=59";
-import { icono, pintarIconos } from "./iconos.js?v=59";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=60";
+import { icono, pintarIconos } from "./iconos.js?v=60";
 
 export { icono };
 pintarIconos();
@@ -80,9 +80,12 @@ export const DOCUMENTOS = [
   { k: "medico", t: "Certificado médico", fecha: "Vence" },
   { k: "rcv", t: "Responsabilidad civil (RCV)", fecha: "Vence" },
   { k: "trimestres", t: "Trimestres", fecha: "Pagado hasta" },
+  // No vence: basta con tener la foto.
+  { k: "origen", t: "Certificado de origen o carnet de circulación", sinVence: true },
 ];
 // Estado de un documento: { c: clase de la píldora, t: texto, n: 0 al día · 1 vence pronto · 2 vencido · 3 falta }
-export function estadoDoc(d) {
+export function estadoDoc(d, tipo) {
+  if (tipo && tipo.sinVence) return d && d.tiene ? { c: "ok", t: "Cargado", n: 0 } : { c: "mal", t: "Falta", n: 3 };
   if (!d || (!d.vence && !d.tiene)) return { c: "mal", t: "Falta", n: 3 };
   if (!d.vence) return { c: "medio", t: "Sin fecha", n: 1 };
   const hoy = hoyLocal();
@@ -94,7 +97,7 @@ export function estadoDoc(d) {
 export const fechaCorta = (iso) => { const [a, m, d] = String(iso).split("-").map(Number); return a ? new Date(a, m - 1, d).toLocaleDateString("es-VE", { day: "numeric", month: "short", year: "numeric" }) : ""; };
 // Resumen para la tarjeta del motorizado: el peor estado de sus documentos.
 export function resumenDocs(docs) {
-  const est = DOCUMENTOS.map((x) => ({ ...x, e: estadoDoc(docs && docs[x.k]) }));
+  const est = DOCUMENTOS.map((x) => ({ ...x, e: estadoDoc(docs && docs[x.k], x) }));
   const vencidos = est.filter((x) => x.e.n === 2).length, faltan = est.filter((x) => x.e.n === 3).length, pronto = est.filter((x) => x.e.n === 1).length;
   if (vencidos) return { c: "mal", t: `${vencidos} documento${vencidos > 1 ? "s" : ""} vencido${vencidos > 1 ? "s" : ""}`, n: 2, est };
   if (faltan) return { c: "mal", t: `Faltan ${faltan} documento${faltan > 1 ? "s" : ""}`, n: 3, est };

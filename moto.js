@@ -9,7 +9,7 @@ import {
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar, escucharTarifas, aBs, lineaRecta,
   hoyLocal,
   DOCUMENTOS, estadoDoc,
-} from "./comun.js?v=59";
+} from "./comun.js?v=60";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -432,7 +432,7 @@ function iniciar() {
       html += `<details class="caja opiniones-mias" id="mis-opiniones" ${opiniones.abiertas ? "open" : ""}><summary>${icono("estrella")} Lo que dicen tus clientes</summary><div id="lista-opiniones">${opiniones.html || `<p class="nota">Cargando…</p>`}</div></details>`;
       html += tuCuota();
       if (misDocs) {
-        const est = DOCUMENTOS.map((x) => ({ ...x, e: estadoDoc(misDocs[x.k]) }));
+        const est = DOCUMENTOS.map((x) => ({ ...x, e: estadoDoc(misDocs[x.k], x) }));
         const mal = est.filter((x) => x.e.n >= 1);
         html += `<h1 class="titulo">${icono("tarjeta")} Tus documentos</h1>
           <div class="caja mis-docs">${est.map((x) => `<div class="fila"><span>${esc(x.t)}</span><b><span class="pildora ${x.e.c}">${x.e.t}</span></b></div>`).join("")}

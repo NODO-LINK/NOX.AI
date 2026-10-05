@@ -15,7 +15,7 @@ import {
   enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad, enlacePublicidad,
   DOCUMENTOS, estadoDoc, resumenDocs,
   filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles,
-} from "./comun.js?v=59";
+} from "./comun.js?v=60";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -341,11 +341,11 @@ function iniciar() {
     const fondo = document.createElement("div");
     fondo.className = "modal";
     const fila = (x) => {
-      const d = resumen[x.k] || {}, e = estadoDoc(d);
+      const d = resumen[x.k] || {}, e = estadoDoc(d, x);
       return `<div class="doc-fila" data-doc="${x.k}">
         <label class="doc-foto" title="Toca para elegir la foto"><span class="foto-vista" data-vista="${x.k}">${icono("tarjeta")}</span><input type="file" accept="image/*" data-archivo="${x.k}" hidden></label>
         <div class="doc-info"><b>${esc(x.t)}</b><span class="pildora ${e.c}" data-estado="${x.k}">${e.t}</span>
-          <label>${x.fecha}</label><input type="date" data-vence="${x.k}" value="${esc(d.vence || "")}">
+          ${x.sinVence ? `<p class="nota">No vence: solo sube la foto.</p>` : `<label>${x.fecha}</label><input type="date" data-vence="${x.k}" value="${esc(d.vence || "")}">`}
           <button type="button" class="enlace" data-ver="${x.k}" hidden>Ver foto grande</button></div></div>`;
     };
     fondo.innerHTML = `<div class="ventana"><h2>Documentos de ${esc(m.nombre)}</h2>
@@ -360,8 +360,8 @@ function iniciar() {
       $(`[data-ver=${k}]`, fondo).hidden = !url;
     };
     const pintarEstado = (k) => {
-      const d = { ...(resumen[k] || {}), vence: $(`[data-vence=${k}]`, fondo).value, tiene: !!(nuevas[k] || fotos[k] || (resumen[k] || {}).tiene) };
-      const e = estadoDoc(d), el = $(`[data-estado=${k}]`, fondo);
+      const d = { ...(resumen[k] || {}), vence: $(`[data-vence=${k}]`, fondo)?.value || null, tiene: !!(nuevas[k] || fotos[k] || (resumen[k] || {}).tiene) };
+      const e = estadoDoc(d, DOCUMENTOS.find((x) => x.k === k)), el = $(`[data-estado=${k}]`, fondo);
       el.className = `pildora ${e.c}`; el.textContent = e.t;
     };
     // Las fotos se cargan aparte (pesan más que las fechas).
@@ -386,7 +386,7 @@ function iniciar() {
         const lote = writeBatch(db);
         const datos = { actualizado: serverTimestamp() };
         DOCUMENTOS.forEach((x) => {
-          datos[x.k] = { vence: $(`[data-vence=${x.k}]`, fondo).value || null, tiene: !!(nuevas[x.k] || fotos[x.k] || (resumen[x.k] || {}).tiene) };
+          datos[x.k] = { vence: $(`[data-vence=${x.k}]`, fondo)?.value || null, tiene: !!(nuevas[x.k] || fotos[x.k] || (resumen[x.k] || {}).tiene) };
           if (nuevas[x.k]) lote.set(doc(db, "documentos", m.id, "fotos", x.k), { foto: nuevas[x.k], actualizado: serverTimestamp() });
         });
         lote.set(doc(db, "documentos", m.id), datos);
