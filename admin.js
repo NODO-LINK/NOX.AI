@@ -14,7 +14,8 @@ import {
   hoyLocal,
   enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad, enlacePublicidad,
   DOCUMENTOS, estadoDoc, resumenDocs,
-} from "./comun.js?v=58";
+  filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles,
+} from "./comun.js?v=59";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -24,7 +25,7 @@ function iniciar() {
   let mapaVivo = null, marcasVivo = {}, filtroClientes = "";
   let lugaresPropios = [], mapaLugares = null, reportesPago = [];
   let anuncio = null, publicidad = null, toquesPub = 0;
-  let documentos = {};   // documentos de cada motorizado (licencia, médico, RCV, trimestres): fechas, sin fotos
+  let documentos = {}, califClientes = [];   // documentos de cada motorizado (licencia, médico, RCV, trimestres): fechas, sin fotos
   const DIA = 864e5;
 
   onAuthStateChanged(auth, async (u) => {
@@ -86,6 +87,7 @@ function iniciar() {
       cedulas = Object.fromEntries(clientes.map((c) => [c.id, c.cedula]));
     });
     escuchar(collection(db, "calificacionesClientes"), (s) => {
+      califClientes = s.docs.map((d) => d.data());
       notasClientes = {};
       s.docs.map((d) => d.data()).sort((a, b) => (fecha(b.fecha) || 0) - (fecha(a.fecha) || 0)).forEach((n) => {
         const x = (notasClientes[n.clienteUid] ??= { suma: 0, cant: 0, ultimo: null });
@@ -551,23 +553,32 @@ function iniciar() {
         const [cl, tx] = ESTADOS[c.estado] || ["", c.estado];
         const cancel = [...(Array.isArray(c.cancelaciones) ? c.cancelaciones : []).map((x) => `${icono("moto")} ${esc(x.motoNombre)} canceló: ${esc(x.motivo)}`),
           c.cancelacion ? `${c.cancelacion.por === "admin" ? `${icono("escudo")} Admin` : `${icono("usuario")} Cliente`} canceló: ${esc(c.cancelacion.motivo)}` : ""].filter(Boolean);
-        return `<article class="tarjeta"><div class="info">
+        return `<article class="tarjeta tocable-carrera" data-ver-carrera="${esc(c.id)}"><div class="info">
           <h3>${c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`} · ${usd(c.precio)} · ${esc(c.km)} km <span class="pildora ${cl}">${tx}</span></h3>
           <p>${icono("usuario")} ${esc(c.clienteNombre)}${cedulas[c.clienteUid] ? ` · C.I. ${esc(cedulas[c.clienteUid])}` : ""} · ${esc(c.clienteTel)}</p>
           <p>${icono("moto")} ${c.motoNombre && c.motoUid ? esc(c.motoNombre) : c.paraMotoNombre ? `Pedida a ${esc(c.paraMotoNombre)}` : "—"}</p>
           <p>A: ${esc(c.origen?.dir)} ${icono("flecha")} B: ${esc(c.destino?.dir)}${c.paradas?.length ? ` · ${c.paradas.length} parada${c.paradas.length > 1 ? "s" : ""}` : ""}${c.retorno ? " · ida y vuelta" : ""}</p>
           <p>${fechaTexto(c.creada)}</p>
-          ${cancel.map((x) => `<p style="color:var(--rojo)">${x}</p>`).join("")}</div>
+          ${cancel.map((x) => `<p style="color:var(--rojo)">${x}</p>`).join("")}${c.sos ? `<p style="color:var(--rojo)"><b>${icono("alerta")} Hubo SOS</b></p>` : ""}
+          <p class="ver-mas">${icono("buscar")} Toca para ver todo</p></div>
           ${c.estado === "esperando" || c.estado === "aceptada" ? `<div class="acciones"><button class="boton peligro" data-cancelar="${esc(c.id)}">Cancelar</button></div>` : ""}
         </article>`;
       }).join("") || `<div class="vacio">${icono("ruta")}Todavía no hay carreras.</div>`}</div>`;
-    $$("[data-cancelar]").forEach((b) => (b.onclick = async () => {
+    $$("[data-ver-carrera]").forEach((t) => (t.onclick = (e) => {
+      if (e.target.closest("[data-cancelar], a")) return;
+      const c = carreras.find((x) => x.id === t.dataset.verCarrera);
+      if (c) detalleCarrera(c);
+    }));
+    $$("[data-cancelar]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); cancelarCarrera(b.dataset.cancelar); }));
+  }
+
+  async function cancelarCarrera(id) {
       const motivo = prompt("Motivo de la cancelación:");
-      if (motivo === null) return;
+      if (motivo === null) return false;
       try {
         // Solo si sigue en curso (pudo terminarse mientras se escribía el motivo); libera al motorizado.
         await runTransaction(db, async (tx) => {
-          const ref = doc(db, "carreras", b.dataset.cancelar);
+          const ref = doc(db, "carreras", id);
           const d = await tx.get(ref);
           const c = d.data();
           if (!c || !["esperando", "aceptada"].includes(c.estado)) throw new Error("La carrera ya cambió de estado");
@@ -577,8 +588,103 @@ function iniciar() {
           if (md?.exists()) tx.update(mRef, { enCarrera: false });
         });
         aviso("Carrera cancelada");
-      } catch (e) { console.error(e); aviso(e.message && !e.code ? e.message : "No se pudo cancelar. Intenta de nuevo."); }
-    }));
+        return true;
+      } catch (e) { console.error(e); aviso(e.message && !e.code ? e.message : "No se pudo cancelar. Intenta de nuevo."); return false; }
+  }
+
+  // ---------- Detalle de una carrera (al tocarla) ----------
+  function detalleCarrera(c) {
+    const [cl, tx] = ESTADOS[c.estado] || ["", c.estado];
+    const tel = (t) => (/^\+58\d{10}$/.test(t || "") ? `0${t.slice(3, 6)}-${t.slice(6)}` : esc(t || "—"));
+    const botonesTel = (t, nombre) => /^\+58\d{10}$/.test(t || "") ? `<div class="botones"><a class="boton secundario chico" href="tel:${esc(t)}">${icono("telefono")} Llamar</a>
+      <a class="boton verde chico" target="_blank" rel="noopener" href="${esc(enlaceWhatsapp(t, `Hola ${String(nombre || "").split(" ")[0]}, te escribe Whereapp sobre la carrera del ${fechaTexto(c.creada)}.`))}">${icono("chat")} WhatsApp</a></div>` : "";
+    const fila = (a, b) => `<div class="fila"><span>${a}</span><b>${b}</b></div>`;
+    const cliente = clientes.find((x) => x.id === c.clienteUid);
+    const moto = motos.find((x) => x.id === c.motoUid);
+    // Línea de tiempo con lo que pasó, en orden.
+    const pasos = [
+      [c.creada, icono("ruta"), `Pedida${c.ofertaCliente ? " (publicada con su precio)" : c.paraMotoNombre ? ` a ${esc(c.paraMotoNombre)}` : ""}`],
+      ...(Array.isArray(c.cancelaciones) ? c.cancelaciones : []).map((x) => [x.fecha, icono("cerrar"), `${esc(x.motoNombre || "Motorizado")} la canceló: ${esc(x.motivo || "")}`]),
+      [c.aceptada, icono("check"), `Aceptada por ${esc(c.motoNombre || "—")}${c.contraoferta ? " (contraoferta)" : ""}`],
+      [c.llegoEn, icono("campana"), "El motorizado llegó al punto A"],
+      [c.recogidoEn, icono("moto"), c.tipo === "mototaxi" ? "Recogió al cliente" : "Buscó el pedido"],
+      [c.sos, icono("alerta"), `<span style="color:var(--rojo)">SOS del cliente</span>${c.sosUbic ? ` · <a href="https://maps.google.com/?q=${Number(c.sosUbic.lat)},${Number(c.sosUbic.lng)}" target="_blank" rel="noopener">ver ubicación</a>` : ""}`],
+      [c.sosAtendido, icono("escudo"), "SOS atendido"],
+      [c.terminada, icono("listo"), "Terminada"],
+      [c.cancelacion && (c.cancelacion.fecha || c.creada), icono("cerrar"), c.cancelacion ? `Cancelada por ${c.cancelacion.por === "admin" ? "el administrador" : "el cliente"}: ${esc(c.cancelacion.motivo || "")}` : ""],
+    ].filter(([t, , txt]) => t && txt).map(([t, i, txt]) => ({ t: fecha(t === true ? null : t), i, txt })).sort((a, b) => (a.t || 0) - (b.t || 0));
+    const duracion = (a, b) => { const x = fecha(a), y = fecha(b); if (!x || !y) return ""; const m = Math.round((y - x) / 60000); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
+    const resena = resenas.find((r) => r.carreraId === c.id);
+    const notaCli = califClientes.find((n) => n.carreraId === c.id);
+    const forma = FORMAS_PAGO[c.formaPago] || FORMAS_PAGO.usd;
+    const fondo = document.createElement("div");
+    fondo.className = "modal";
+    fondo.innerHTML = `<div class="ventana detalle-carrera">
+      <div class="chat-cabeza"><h2>${c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`} <span class="pildora ${cl}">${tx}</span></h2><button class="quitar" data-cerrar aria-label="Cerrar">${icono("cerrar")}</button></div>
+      <p class="nota">${fechaTexto(c.creada)} · N.º ${esc(c.id.slice(0, 6).toUpperCase())}</p>
+      <div class="mapa" id="mapa-detalle"></div>
+      <a class="boton secundario chico" href="${esc(mapsRuta(c))}" target="_blank" rel="noopener" style="margin-top:8px">${icono("pin")} Abrir ruta en Google Maps</a>
+      <h3 class="sub-detalle">${icono("ruta")} Recorrido</h3>
+      <div class="caja-detalle">${filasRecorrido(c)}${fila("Distancia", `${esc(c.km)} km`)}${c.nota ? fila("Qué lleva", esc(c.nota)) : ""}</div>
+      <h3 class="sub-detalle">${icono("dinero")} Cobro</h3>
+      <div class="caja-detalle">${fila("Precio", `${usd(c.precio)}${c.precioBs ? ` · Bs ${Number(c.precioBs).toFixed(2).replace(".", ",")}` : ""}`)}
+        ${fila("Forma de pago", esc(forma.c))}${fila("Cobrar", esc(textoCobro(c)))}
+        ${c.tasa ? fila("Tasa usada", `Bs ${Number(c.tasa).toFixed(2).replace(".", ",")} por $1`) : ""}
+        ${c.ofertaCliente ? fila("Precio del cliente", `${usd(c.precioCliente ?? c.precio)}${c.precioSugerido ? ` (sugerido ${usd(c.precioSugerido)})` : ""}`) : ""}
+        ${c.contraoferta ? fila("Contraoferta aceptada", usd(c.precio)) : ""}
+        ${(c.recargos || []).map((r) => fila(`Recargo ${esc(r.nombre)}`, `+${usd(r.monto)}`)).join("")}</div>
+      <h3 class="sub-detalle">${icono("usuario")} Cliente</h3>
+      <div class="caja-detalle">${fila("Nombre", esc(c.clienteNombre))}${fila("Cédula", esc(cliente?.cedula || cedulas[c.clienteUid] || "—"))}${fila("Teléfono", tel(c.clienteTel))}
+        ${notaCli ? fila("El motorizado lo calificó", `${"★".repeat(notaCli.estrellas)}${notaCli.comentario ? ` “${esc(notaCli.comentario)}”` : ""}`) : ""}
+        ${botonesTel(c.clienteTel, c.clienteNombre)}</div>
+      <h3 class="sub-detalle">${icono("moto")} Motorizado</h3>
+      <div class="caja-detalle">${c.motoUid ? `${fila("Nombre", esc(c.motoNombre || moto?.nombre || "—"))}${fila("Moto", esc(c.motoMoto || moto?.moto || "—"))}${fila("Placa", `<span class="placa">${esc(c.motoPlaca || moto?.placa || "—")}</span>`)}${fila("Teléfono", tel(c.motoTel || moto?.telefono))}
+        ${botonesTel(c.motoTel || moto?.telefono, c.motoNombre)}` : `<p class="nota">${c.paraMotoNombre ? `Pedida a ${esc(c.paraMotoNombre)}; todavía no la acepta.` : "Todavía ningún motorizado la acepta."}</p>`}</div>
+      <h3 class="sub-detalle">${icono("reloj")} Qué pasó</h3>
+      <div class="caja-detalle linea-tiempo">${pasos.map((p) => `<div class="paso">${p.i}<div><b>${p.txt}</b><small>${p.t ? p.t.toLocaleString("es-VE", { hour: "numeric", minute: "2-digit", day: "numeric", month: "short" }) : ""}</small></div></div>`).join("")}
+        ${c.aceptada && c.terminada ? `<p class="nota">Duración desde que la aceptó: ${duracion(c.aceptada, c.terminada)}${c.recogidoEn ? ` · viaje: ${duracion(c.recogidoEn, c.terminada)}` : ""}</p>` : ""}</div>
+      ${resena ? `<h3 class="sub-detalle">${icono("estrella")} Calificación del cliente</h3>
+      <div class="caja-detalle">${fila("Estrellas", "★".repeat(resena.estrellas) + "☆".repeat(5 - resena.estrellas))}${fila("¿Viaje seguro?", resena.seguro === false ? `<span style="color:var(--rojo)">No</span>` : "Sí")}
+        ${resena.comentario ? `<p>“${esc(resena.comentario)}”</p>` : ""}${resena.aprobada ? "" : `<p class="nota">Pendiente de aprobar en Reseñas.</p>`}</div>` : ""}
+      <h3 class="sub-detalle">${icono("chat")} Chat</h3>
+      <div class="caja-detalle" id="chat-detalle"><button class="boton secundario chico" id="ver-chat">${icono("chat")} Ver mensajes</button></div>
+      ${c.estado === "esperando" || c.estado === "aceptada" ? `<button class="boton peligro" id="cancelar-detalle">Cancelar esta carrera</button>` : ""}
+      <button class="boton secundario" data-cerrar>Cerrar</button></div>`;
+    document.body.append(fondo);
+    let quitarVivo = null, mapa = null;
+    const cerrar = () => { if (quitarVivo) quitarVivo(); if (mapa) mapa.remove(); fondo.remove(); };
+    $$("[data-cerrar]", fondo).forEach((b) => (b.onclick = cerrar));
+    fondo.addEventListener("click", (e) => { if (e.target === fondo) cerrar(); });
+    // Mapa con la ruta por calles (y la moto en vivo si está en curso).
+    setTimeout(() => {
+      if (!document.body.contains(fondo)) return;
+      mapa = nuevoMapa("mapa-detalle");
+      const limites = marcarRecorrido(mapa, c);
+      mapa.fitBounds(limites.pad(0.25), { animate: false });
+      const pts = [c.origen, ...(c.paradas || []), c.destino, ...(c.retorno ? [c.origen] : [])];
+      rutaCalles(pts).then((r) => { if (mapa) window.L.polyline(r.linea, { color: "#7c3aed", weight: 5, opacity: .8 }).addTo(mapa); }).catch(() => {});
+      if (c.estado === "aceptada" && c.motoUid) {
+        let marca = null;
+        quitarVivo = onSnapshot(doc(db, "ubicaciones", c.motoUid), (d) => {
+          const u = d.exists() ? d.data() : moto?.ubicacion;
+          if (!mapa || !u || !Number.isFinite(Number(u.lat))) return;
+          const ll = [Number(u.lat), Number(u.lng)];
+          if (!marca) marca = window.L.marker(ll, { icon: ICONOS.moto, zIndexOffset: 900 }).bindTooltip("Motorizado ahora").addTo(mapa);
+          else marca.setLatLng(ll);
+        }, () => {});
+      }
+    }, 60);
+    $("#ver-chat", fondo).onclick = async () => {
+      const caja = $("#chat-detalle", fondo);
+      caja.innerHTML = `<p class="nota">Cargando…</p>`;
+      try {
+        const s = await getDocs(query(collection(db, "carreras", c.id, "mensajes"), orderBy("fecha"), limit(200)));
+        const msgs = s.docs.map((d) => d.data());
+        caja.innerHTML = msgs.length ? msgs.map((m) => `<div class="msg-detalle ${m.de === c.clienteUid ? "de-cliente" : "de-moto"}"><b>${esc(m.nombre || (m.de === c.clienteUid ? "Cliente" : "Motorizado"))}</b> ${esc(m.texto)}<small>${fecha(m.fecha) ? fecha(m.fecha).toLocaleTimeString("es-VE", { hour: "numeric", minute: "2-digit" }) : ""}</small></div>`).join("")
+          : `<p class="nota">No escribieron nada en el chat.</p>`;
+      } catch (e) { console.error(e); caja.innerHTML = `<p class="nota">No se pudo cargar el chat.</p>`; }
+    };
+    if ($("#cancelar-detalle", fondo)) $("#cancelar-detalle", fondo).onclick = async () => { if (await cancelarCarrera(c.id)) cerrar(); };
   }
 
   // ---------- Clientes ----------
