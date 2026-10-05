@@ -9,7 +9,8 @@ import {
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar, escucharTarifas, aBs, lineaRecta,
   hoyLocal,
   DOCUMENTOS, estadoDoc,
-} from "./comun.js?v=62";
+  enApp,
+} from "./comun.js?v=63";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -58,6 +59,14 @@ function iniciar() {
       const turnoAntes = perfil ? perfil.deTurno !== false : null;
       const firmaAntes = firma(perfil);
       perfil = { id: s.id, ...s.data() };
+      // Una vez al día: que usó la app y si es la instalada (APK).
+      try {
+        const marca = `${hoyLocal()}:${enApp()}`;
+        if (localStorage.getItem("whereapp.uso.moto") !== marca) {
+          localStorage.setItem("whereapp.uso.moto", marca);
+          updateDoc(doc(db, "motorizados", u.uid), { ultimaVez: serverTimestamp(), ...(enApp() ? { enApp: true } : {}) }).catch(() => {});
+        }
+      } catch {}
       if (antes !== habilitado(perfil) || turnoAntes !== (perfil.deTurno !== false) || !subsCarreras.length) escucharCarreras();
       gpsSegunEstado();
       // Los cambios de ubicación (cada pocos segundos) no redibujan la pantalla.
@@ -75,7 +84,7 @@ function iniciar() {
 
   function firma(p) {
     if (!p) return "";
-    const { ubicacion, ...resto } = p;
+    const { ubicacion, ultimaVez, ...resto } = p;
     return JSON.stringify(resto);
   }
 

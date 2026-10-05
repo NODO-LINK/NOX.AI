@@ -33,7 +33,10 @@ service cloud.firestore {
     match /motorizados/{uid} {
       allow read: if dentro();
       allow create, delete: if esAdmin();
-      allow update: if esAdmin() || (dentro() && request.auth.uid == uid && soloCambia(['ubicacion', 'enCarrera', 'deTurno', 'pagoMovil'])
+      allow update: if esAdmin() || (dentro() && request.auth.uid == uid && soloCambia(['ubicacion', 'enCarrera', 'deTurno', 'pagoMovil', 'enApp', 'ultimaVez'])
+        && request.resource.data.get('enApp', true) is bool
+        && (!('ultimaVez' in request.resource.data) || request.resource.data.ultimaVez == request.time
+            || request.resource.data.ultimaVez == resource.data.get('ultimaVez', null))
         && (!('ubicacion' in request.resource.data) || request.resource.data.ubicacion == null
             || (request.resource.data.ubicacion.lat is number && request.resource.data.ubicacion.lng is number))
         && (!('pagoMovil' in request.resource.data) || request.resource.data.pagoMovil == null
@@ -83,7 +86,10 @@ service cloud.firestore {
         && request.resource.data.nombre is string && request.resource.data.nombre.size() >= 5 && request.resource.data.nombre.size() <= 80
         && request.resource.data.cedula is string && request.resource.data.cedula.matches('^[VE]-[0-9]{6,9}$')
         && request.resource.data.telefono is string && request.resource.data.telefono.matches('^[+]58[0-9]{10}$')
-        && request.resource.data.keys().hasOnly(['nombre', 'cedula', 'telefono', 'creado', 'politicas', 'ultimaCarrera'])
+        && request.resource.data.keys().hasOnly(['nombre', 'cedula', 'telefono', 'creado', 'politicas', 'ultimaCarrera', 'enApp', 'ultimaVez'])
+        && request.resource.data.get('enApp', true) is bool
+        && (!('ultimaVez' in request.resource.data) || request.resource.data.ultimaVez == request.time
+            || (resource != null && request.resource.data.ultimaVez == resource.data.get('ultimaVez', null)))
         && (resource == null || request.resource.data.cedula == resource.data.cedula)
         // La hora de su última carrera solo la pone el servidor (y no se puede borrar para saltarse la espera).
         && (!('ultimaCarrera' in request.resource.data) || request.resource.data.ultimaCarrera == request.time

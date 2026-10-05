@@ -12,7 +12,7 @@ import {
   pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
-} from "./comun.js?v=62";
+} from "./comun.js?v=63";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -186,6 +186,7 @@ function iniciar() {
       else vistaPedir();
     }));
     contarVisita();
+    marcarUso();
     // Anuncio del administrador (ej.: "pide la app por WhatsApp"): solo para quien usa la página web.
     if (!enApp()) cancelarSubs.push(onSnapshot(doc(db, "config", "anuncio"), (d) => {
       anuncio = d.exists() ? d.data() : null;
@@ -1718,6 +1719,13 @@ function iniciar() {
     }
   }
 
+  // Una vez al día se anota que usó Whereapp y si fue desde la app instalada (APK) o desde la página.
+  function marcarUso() {
+    const hoy = hoyLocal(), app = enApp();
+    try { if (localStorage.getItem("whereapp.uso") === `${hoy}:${app}`) return; } catch {}
+    setDoc(doc(db, "clientes", usuario.uid), { ultimaVez: serverTimestamp(), ...(app ? { enApp: true } : {}) }, { merge: true })
+      .then(() => { try { localStorage.setItem("whereapp.uso", `${hoy}:${app}`); } catch {} }).catch(() => {});
+  }
   function contarVisita() {
     try { if (sessionStorage.getItem("whereapp.visita")) return; sessionStorage.setItem("whereapp.visita", "1"); } catch {}
     const hoy = hoyLocal();

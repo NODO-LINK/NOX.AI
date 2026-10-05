@@ -15,7 +15,7 @@ import {
   enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad, enlacePublicidad,
   DOCUMENTOS, estadoDoc, resumenDocs,
   filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles,
-} from "./comun.js?v=62";
+} from "./comun.js?v=63";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -713,7 +713,7 @@ function iniciar() {
       <div class="lista" style="margin-top:12px">${lista.map((c) => {
         const b = !!bloqueados[c.cedula];
         return `<article class="tarjeta"><div class="info">
-          <h3>${esc(c.nombre)} ${b ? `<span class="pildora mal">${icono("bloquear")} Bloqueado</span>` : ""}</h3>
+          <h3>${esc(c.nombre)} ${b ? `<span class="pildora mal">${icono("bloquear")} Bloqueado</span>` : ""}${c.enApp ? ` <span class="pildora ok">${icono("descargar")} App</span>` : ` <span class="pildora">Página web</span>`}</h3>
           <p>C.I. ${esc(c.cedula || "—")} · ${icono("telefono")} ${esc(c.telefono || "—")}</p>
           <p>Desde ${fechaTexto(c.creado)} · ${cuenta(c.id)} carrera${cuenta(c.id) === 1 ? "" : "s"} recientes</p>
           ${notasClientes[c.id] ? `<p><span class="rating">${icono("estrella")} ${(notasClientes[c.id].suma / notasClientes[c.id].cant).toFixed(1)} (${notasClientes[c.id].cant})</span> según los motorizados${notasClientes[c.id].ultimo ? ` · “${esc(notasClientes[c.id].ultimo.comentario)}” — ${esc(notasClientes[c.id].ultimo.motoNombre)}` : ""}</p>` : `<p>Sin calificaciones de motorizados</p>`}</div>
@@ -1058,7 +1058,21 @@ function iniciar() {
     const totalCobrado = pagos.reduce((s, p) => s + (p.monto || 0), 0);
     const ranking = motos.map((m) => ({ m, n: llamadas[m.id] || 0, c: carreras.filter((c) => c.motoUid === m.id && c.estado === "terminada").length }))
       .sort((a, b) => b.n - a.n);
+    const haceDias = (n) => Date.now() - n * DIA;
+    const cliApp = clientes.filter((c) => c.enApp).length;
+    const cliActivos = clientes.filter((c) => (fecha(c.ultimaVez) || 0) > haceDias(7)).length;
+    const motosReales = motos.filter((m) => m.usuario !== "prueba");
+    const motoApp = motosReales.filter((m) => m.enApp).length;
+    const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
     $("#vista").innerHTML = `
+      <h1 class="titulo">${icono("descargar")} App instalada</h1>
+      <div class="cifras">
+        <div class="cifra"><b>${cliApp}</b><span>Clientes con la app (${pct(cliApp, clientes.length)}%)</span></div>
+        <div class="cifra"><b>${clientes.length}</b><span>Clientes registrados</span></div>
+        <div class="cifra"><b>${cliActivos}</b><span>Usaron Whereapp (7 días)</span></div>
+      </div>
+      <div class="cifras"><div class="cifra"><b>${motoApp} de ${motosReales.length}</b><span>Motorizados con la app</span></div></div>
+      <p class="nota">Cuenta a quien abrió Whereapp desde la app instalada (APK) al menos una vez, desde el 5 de octubre en adelante. Si alguien la desinstala, no se puede saber. En Clientes ves quién la tiene (${icono("descargar")} App).</p>
       <h1 class="titulo">Visitas a la app</h1>
       <div class="cifras">
         <div class="cifra"><b>${Number(dias[hoy]) || 0}</b><span>Hoy</span></div>
