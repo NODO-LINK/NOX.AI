@@ -13,7 +13,7 @@ import {
   leerTarifas, escucharTarifas, aviso, avisoSinConfigurar, bs, sonarAlerta, mostrarLugares, tipoLugar, TIPOS_PARA_AGREGAR, ASPECTOS, insigniasSeguridad, opinionPublica, fotosDe, olvidarFotos, achicarFoto, pintarFotos,
   hoyLocal,
   enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad, enlacePublicidad,
-} from "./comun.js?v=55";
+} from "./comun.js?v=56";
 
 if (!avisoSinConfigurar()) iniciar();
 
