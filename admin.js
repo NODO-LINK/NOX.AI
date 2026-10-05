@@ -14,7 +14,7 @@ import {
   hoyLocal,
   enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad, enlacePublicidad,
   DOCUMENTOS, estadoDoc, resumenDocs,
-} from "./comun.js?v=57";
+} from "./comun.js?v=58";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -192,8 +192,10 @@ function iniciar() {
       <div class="leyenda"><span><i style="background:#16a34a"></i>Disponible</span><span><i style="background:#f59e0b"></i>En carrera</span><span><i style="background:#6b7280"></i>Descansando</span><span><i style="background:#9ca3af"></i>No sale</span></div>
       <p class="nota">${conUbic ? `Se ve la última ubicación de ${conUbic} motorizado${conUbic === 1 ? "" : "s"} (se actualiza mientras tienen carrera o la app abierta).` : "Todavía ningún motorizado ha compartido su ubicación."}</p>
       <h1 class="titulo">Motorizados (${motos.length}) · ${motos.filter(habilitado).length} saliendo en la app</h1>
-      ${(() => { const mal = motos.filter((m) => resumenDocs(documentos[m.id]).n >= 1 && m.usuario !== "prueba");
-        return mal.length ? `<div class="banner-aviso">${icono("alerta")}<span><b>Documentos por revisar:</b> ${mal.map((m) => `${esc(m.nombre)} (${resumenDocs(documentos[m.id]).t.toLowerCase()})`).join(" · ")}</span></div>` : ""; })()}
+      ${(() => { const mal = motosConFallas();
+        return mal.length ? `<div class="banner-aviso docs-aviso">${icono("alerta")}<div><span><b>Documentos por revisar:</b> ${mal.map((m) => `${esc(m.nombre)} (${resumenDocs(documentos[m.id]).t.toLowerCase()})`).join(" · ")}</span>
+          <div class="botones"><button class="boton chico" id="copiar-docs">${icono("copiar")} Copiar lista</button>
+          <a class="boton chico verde" target="_blank" rel="noopener" href="${esc("https://wa.me/?text=" + encodeURIComponent(listaFallas(mal)))}">${icono("chat")} Enviar por WhatsApp</a></div></div></div>` : ""; })()}
       <button class="boton" id="nuevo">+ Agregar motorizado</button>
       ${motos.some((x) => x.usuario === "prueba") ? "" : `<button class="boton secundario" id="prueba">${icono("moto")} Crear motorizado de prueba</button>`}
       <div class="lista" style="margin-top:12px">${motos.map((m) => `
@@ -201,7 +203,8 @@ function iniciar() {
           <h3>${esc(m.nombre)} ${habilitado(m) ? `<span class="pildora ok">En la app</span>` : `<span class="pildora mal">No sale</span>`}${m.enCarrera ? ` <span class="pildora ocupado">Carrera en curso</span>` : m.deTurno === false ? ` <span class="pildora">Descansando</span>` : ""}</h3>
           <p>Usuario: <b>${esc(m.usuario)}</b> · ${icono("telefono")} ${esc(m.telefono)}</p>
           <p>${icono("moto")} ${esc(m.moto)}${m.color ? ` · ${esc(m.color)}` : ""} · Placa ${esc(m.placa)} · <span class="rating">${estrellas(m)}</span></p>
-          ${(() => { const r = resumenDocs(documentos[m.id]); return `<p><span class="pildora ${r.c}" style="cursor:pointer" data-docs="${m.id}">${icono("tarjeta")} ${r.t}</span></p>`; })()}
+          ${(() => { const r = resumenDocs(documentos[m.id]); return `<p><span class="pildora ${r.c}" style="cursor:pointer" data-docs="${m.id}">${icono("tarjeta")} ${r.t}</span>
+            ${r.n >= 1 && /^\+58\d{10}$/.test(m.telefono || "") ? ` <a class="pildora wa-docs" target="_blank" rel="noopener" href="${esc(enlaceWhatsapp(m.telefono, mensajeFallas(m)))}">${icono("chat")} Pedirle por WhatsApp</a>` : ""}</p>`; })()}
           ${m.pagoMovil && m.pagoMovil.telefono ? `<p>${icono("telefono")} Pago móvil: ${esc(m.pagoMovil.banco)} · ${esc(m.pagoMovil.telefono)} · ${esc(m.pagoMovil.cedula)}</p>` : ""}
           ${insigniasSeguridad(m) || Object.keys(m.malos || {}).length ? `<div class="etiquetas">${insigniasSeguridad(m, 3)}${Object.entries(m.malos || {}).filter(([, n]) => n > 0).map(([k, n]) => `<span class="pildora riesgo">${icono("alerta")} ${esc((ASPECTOS.malos.find((a) => a.k === k) || { t: k }).t)} (${n})</span>`).join("")}</div>` : ""}
           <p>${estadoPago(m)} · ${llamadas[m.id] || 0} llamadas</p></div>
@@ -225,6 +228,11 @@ function iniciar() {
     $$("[data-editar]").forEach((b) => (b.onclick = () => formularioMoto(motos.find((x) => x.id === b.dataset.editar))));
     $$("[data-fotos]").forEach((b) => (b.onclick = () => fotosMoto(motos.find((x) => x.id === b.dataset.fotos))));
     $$("[data-docs]").forEach((b) => (b.onclick = () => documentosMoto(motos.find((x) => x.id === b.dataset.docs))));
+    if ($("#copiar-docs")) $("#copiar-docs").onclick = async () => {
+      const texto = listaFallas(motosConFallas());
+      try { await navigator.clipboard.writeText(texto); aviso("Lista copiada: pégala en WhatsApp"); }
+      catch { prompt("Copia la lista:", texto); }
+    };
     pintarFotos();
   }
 
@@ -308,6 +316,20 @@ function iniciar() {
       } catch (e) { console.error(e); aviso("No se pudieron guardar. ¿Publicaste las reglas nuevas?"); }
     };
   }
+
+  // ---------- Lista de documentos pendientes (para pedirlos por WhatsApp) ----------
+  const motosConFallas = () => motos.filter((m) => m.usuario !== "prueba" && resumenDocs(documentos[m.id]).n >= 1);
+  const telLocal = (t) => (/^\+58\d{10}$/.test(t || "") ? `0${t.slice(3, 6)}-${t.slice(6)}` : t || "");
+  // Solo lo que falta, está vencido o vence pronto.
+  const pendientes = (m) => resumenDocs(documentos[m.id]).est.filter((x) => x.e.n >= 1)
+    .map((x) => `• ${x.t}: ${x.e.n === 3 ? "falta" : x.e.t.charAt(0).toLowerCase() + x.e.t.slice(1)}`);
+  function listaFallas(lista) {
+    const hoy = new Date().toLocaleDateString("es-VE", { day: "numeric", month: "long", year: "numeric" });
+    return `*Whereapp · Documentos pendientes*\n_${hoy}_\n\n`
+      + lista.map((m) => `*${m.nombre}*${m.telefono ? ` (${telLocal(m.telefono)})` : ""}\n${pendientes(m).join("\n")}`).join("\n\n")
+      + `\n\nPor favor, traigan o envíen foto de los documentos pendientes para tenerlos al día. ¡Gracias! 🏍️`;
+  }
+  const mensajeFallas = (m) => `Hola ${String(m.nombre).split(" ")[0]}, te escribe Whereapp. Para seguir trabajando con la app necesitamos que tengas al día estos documentos:\n\n${pendientes(m).join("\n")}\n\nEnvíanos la foto por aquí o tráelos cuando puedas. ¡Gracias! 🏍️`;
 
   // Documentos del motorizado: foto de cada uno y su fecha de vencimiento (solo los ve el admin y el motorizado).
   async function documentosMoto(m) {

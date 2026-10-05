@@ -9,7 +9,7 @@ import {
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar, escucharTarifas, aBs, lineaRecta,
   hoyLocal,
   DOCUMENTOS, estadoDoc,
-} from "./comun.js?v=57";
+} from "./comun.js?v=58";
 
 if (!avisoSinConfigurar()) iniciar();
 
