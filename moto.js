@@ -9,7 +9,7 @@ import {
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar, escucharTarifas, aBs, lineaRecta,
   hoyLocal,
   DOCUMENTOS, estadoDoc,
-} from "./comun.js?v=60";
+} from "./comun.js?v=61";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -685,7 +685,8 @@ function iniciar() {
     fondo.querySelector("[data-ok]").onclick = async () => {
       fondo.querySelector("[data-ok]").disabled = true;
       try {
-        await addDoc(collection(db, "calificacionesClientes"), {
+        // Una sola calificación por carrera (su id es el de la carrera).
+        await setDoc(doc(db, "calificacionesClientes", c.id), {
           carreraId: c.id, motoUid: yo.uid, motoNombre: perfil.nombre, clienteUid: c.clienteUid, clienteNombre: c.clienteNombre,
           estrellas: puntos, comentario: fondo.querySelector("#nota-cliente").value.trim().slice(0, 300), fecha: serverTimestamp(),
         });

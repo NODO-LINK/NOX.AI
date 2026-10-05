@@ -15,6 +15,11 @@ service cloud.firestore {
     function idNormal(id) { return id.matches('^[A-Za-z0-9]{20}$'); }
     function punto(p) { return p is map && p.lat is number && p.lng is number && p.dir is string && p.dir.size() <= 200; }
     function motoData(uid) { return get(/databases/$(database)/documents/motorizados/$(uid)).data; }
+    function clienteData() { return get(/databases/$(database)/documents/clientes/$(request.auth.uid)).data; }
+    function tarifas() { return get(/databases/$(database)/documents/config/general).data; }
+    function texto(v, max) { return v is string && v.size() <= max; }
+    // Hora puesta por el servidor (no se puede inventar una fecha desde la consola).
+    function ahora(campo) { return request.resource.data[campo] == request.time; }
 
     match /admins/{uid} {
       allow read: if dentro() && request.auth.uid == uid;
@@ -30,7 +35,12 @@ service cloud.firestore {
       allow create, delete: if esAdmin();
       allow update: if esAdmin() || (dentro() && request.auth.uid == uid && soloCambia(['ubicacion', 'enCarrera', 'deTurno', 'pagoMovil'])
         && (!('ubicacion' in request.resource.data) || request.resource.data.ubicacion == null
-            || (request.resource.data.ubicacion.lat is number && request.resource.data.ubicacion.lng is number)));
+            || (request.resource.data.ubicacion.lat is number && request.resource.data.ubicacion.lng is number))
+        && (!('pagoMovil' in request.resource.data) || request.resource.data.pagoMovil == null
+            || (request.resource.data.pagoMovil.keys().hasOnly(['banco', 'telefono', 'cedula'])
+                && texto(request.resource.data.pagoMovil.banco, 60)
+                && request.resource.data.pagoMovil.telefono.matches('^0[24][0-9]{2}-[0-9]{7}$')
+                && request.resource.data.pagoMovil.cedula.matches('^[VEJ]-[0-9]{6,9}$'))));
     }
 
     // Ubicación en vivo del motorizado durante una carrera (la escribe él, cada pocos segundos).
@@ -38,7 +48,7 @@ service cloud.firestore {
       allow read: if dentro();
       allow create, update: if esMoto() && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['lat', 'lng', 't'])
-        && request.resource.data.lat is number && request.resource.data.lng is number;
+        && request.resource.data.lat is number && request.resource.data.lng is number && request.resource.data.t is timestamp;
       // Al terminar la carrera el motorizado la borra (y el admin al eliminarlo).
       allow delete: if esAdmin() || (dentro() && request.auth.uid == uid);
     }
@@ -73,7 +83,12 @@ service cloud.firestore {
         && request.resource.data.nombre is string && request.resource.data.nombre.size() >= 5 && request.resource.data.nombre.size() <= 80
         && request.resource.data.cedula is string && request.resource.data.cedula.matches('^[VE]-[0-9]{6,9}$')
         && request.resource.data.telefono is string && request.resource.data.telefono.matches('^[+]58[0-9]{10}$')
-        && (resource == null || request.resource.data.cedula == resource.data.cedula);
+        && request.resource.data.keys().hasOnly(['nombre', 'cedula', 'telefono', 'creado', 'politicas', 'ultimaCarrera'])
+        && (resource == null || request.resource.data.cedula == resource.data.cedula)
+        // La hora de su última carrera solo la pone el servidor (y no se puede borrar para saltarse la espera).
+        && (!('ultimaCarrera' in request.resource.data) || request.resource.data.ultimaCarrera == request.time
+            || (resource != null && request.resource.data.ultimaCarrera == resource.data.get('ultimaCarrera', null)))
+        && (resource == null || !('ultimaCarrera' in resource.data) || 'ultimaCarrera' in request.resource.data);
       allow read, update: if esAdmin();
     }
 
@@ -117,13 +132,38 @@ service cloud.firestore {
         && request.resource.data.get('precioCliente', request.resource.data.precio) == request.resource.data.precio
         && request.resource.data.get('precioBsCliente', null) == request.resource.data.get('precioBs', null)
         && request.resource.data.get('calificada', false) == false
-        && request.resource.data.clienteNombre is string && request.resource.data.clienteNombre.size() <= 80;
+        && request.resource.data.clienteNombre is string && request.resource.data.clienteNombre.size() <= 80
+        // Desde la consola no se puede: usar otro nombre o teléfono, inventar la hora, ni pedir varias seguidas.
+        && request.resource.data.clienteNombre == clienteData().nombre
+        && request.resource.data.clienteTel == clienteData().telefono
+        && ahora('creada')
+        && getAfter(/databases/$(database)/documents/clientes/$(request.auth.uid)).data.get('ultimaCarrera', null) == request.time
+        && (!('ultimaCarrera' in clienteData()) || clienteData().ultimaCarrera < request.time - duration.value(20, 's'))
+        && request.resource.data.tipo in ['mototaxi', 'delivery']
+        && request.resource.data.get('formaPago', 'usd') in ['usd', 'bs', 'pagomovil']
+        && texto(request.resource.data.get('nota', ''), 300)
+        && request.resource.data.get('cancelaciones', []).size() == 0
+        // Precio normal: no menos que la tarifa por distancia (publicada: el cliente pone su precio).
+        && (request.resource.data.get('ofertaCliente', false) == true || !exists(/databases/$(database)/documents/config/general)
+            || request.resource.data.precio >= tarifas()[request.resource.data.tipo].base
+                 + tarifas()[request.resource.data.tipo].porKm * (request.resource.data.km - 0.06) - 0.02)
+        // En Bs: con la tasa del día y que cuadre con el precio en $.
+        && (request.resource.data.get('precioBs', null) == null
+            || (request.resource.data.tasa is number && request.resource.data.tasa > 0
+                && (!exists(/databases/$(database)/documents/config/general) || request.resource.data.tasa == tarifas().get('tasa', 0))
+                && request.resource.data.precioBs is number
+                && math.abs(request.resource.data.precioBs - request.resource.data.precio * request.resource.data.tasa) <= request.resource.data.tasa * 0.02 + 1))
+        // Pedida a un motorizado: que exista y con su nombre real.
+        && (request.resource.data.get('paraMoto', null) == null
+            || request.resource.data.get('paraMotoNombre', null) == motoData(request.resource.data.paraMoto).nombre);
 
       allow update: if esAdmin()
         // El cliente cancela su carrera…
         || (dentro() && resource.data.clienteUid == request.auth.uid
             && resource.data.estado in ['esperando', 'aceptada']
             && request.resource.data.estado == 'cancelada'
+            && request.resource.data.cancelacion.keys().hasOnly(['por', 'motivo', 'fecha'])
+            && request.resource.data.cancelacion.por == 'cliente' && texto(request.resource.data.cancelacion.motivo, 300)
             && soloCambia(['estado', 'cancelacion']))
         // …acepta la contraoferta de un motorizado (con el precio que él ofreció)…
         || (dentro() && resource.data.clienteUid == request.auth.uid
@@ -138,11 +178,13 @@ service cloud.firestore {
             && request.resource.data.motoNombre == motoData(request.resource.data.motoUid).nombre
             && request.resource.data.motoTel == motoData(request.resource.data.motoUid).get('telefono', '')
             && motoData(request.resource.data.motoUid).get('deTurno', true) != false
+            && ahora('aceptada')
             && soloCambia(['estado', 'motoUid', 'motoNombre', 'motoTel', 'motoMoto', 'motoPlaca', 'aceptada', 'precio', 'precioBs', 'contraoferta']))
         // …avisa una emergencia (SOS) durante el viaje…
         || (dentro() && resource.data.clienteUid == request.auth.uid
             && resource.data.estado == 'aceptada'
             && (!('sosUbic' in request.resource.data) || (request.resource.data.sosUbic.lat is number && request.resource.data.sosUbic.lng is number))
+            && ahora('sos')
             && soloCambia(['sos', 'sosUbic']))
         // …o la califica cuando terminó.
         || (dentro() && resource.data.clienteUid == request.auth.uid
@@ -160,12 +202,13 @@ service cloud.firestore {
             && request.resource.data.motoTel == motoData(request.auth.uid).get('telefono', '')
             && request.resource.data.motoPlaca == motoData(request.auth.uid).get('placa', '')
             && motoData(request.auth.uid).get('enCarrera', false) != true
+            && ahora('aceptada')
             && soloCambia(['estado', 'motoUid', 'motoNombre', 'motoTel', 'motoMoto', 'motoPlaca', 'aceptada']))
         // El motorizado avisa que ya recogió, termina o cancela su carrera (al cancelar vuelve a quedar disponible).
         || (esMoto() && resource.data.motoUid == request.auth.uid && resource.data.estado == 'aceptada'
-            && ((request.resource.data.estado == 'aceptada' && request.resource.data.recogido == true && soloCambia(['recogido', 'recogidoEn']))
-             || (request.resource.data.estado == 'aceptada' && soloCambia(['llegoEn']))
-             || (request.resource.data.estado == 'terminada' && soloCambia(['estado', 'terminada']))
+            && ((request.resource.data.estado == 'aceptada' && request.resource.data.recogido == true && ahora('recogidoEn') && soloCambia(['recogido', 'recogidoEn']))
+             || (request.resource.data.estado == 'aceptada' && ahora('llegoEn') && soloCambia(['llegoEn']))
+             || (request.resource.data.estado == 'terminada' && ahora('terminada') && soloCambia(['estado', 'terminada']))
              // Cancelar: solo antes de recoger; vuelve al precio original del cliente (si hubo contraoferta).
              || (request.resource.data.estado == 'esperando' && request.resource.data.motoUid == null
                  && resource.data.get('recogido', false) != true
@@ -187,7 +230,11 @@ service cloud.firestore {
       allow create, update: if esMoto() && request.auth.uid == motoId && motoHabilitado()
         && carreraO().estado == 'esperando' && carreraO().paraMoto == null
         && request.resource.data.motoUid == motoId
-        && request.resource.data.precio is number && request.resource.data.precio > 0;
+        && request.resource.data.precio is number && request.resource.data.precio > 0 && request.resource.data.precio < 1000
+        && request.resource.data.keys().hasOnly(['motoUid', 'nombre', 'telefono', 'moto', 'placa', 'ratingSum', 'ratingCount', 'seguroSi', 'seguroN', 'precio', 'precioBs', 'fecha'])
+        && request.resource.data.nombre == motoData(motoId).nombre
+        && (request.resource.data.get('precioBs', null) == null || request.resource.data.precioBs is number)
+        && ahora('fecha');
       allow delete: if dentro() && request.auth.uid == motoId;
     }
 
@@ -208,9 +255,14 @@ service cloud.firestore {
 
     // El motorizado califica al cliente al terminar (solo el admin las ve).
     match /calificacionesClientes/{id} {
-      allow create: if esMoto()
+      // Una por carrera (su id es el de la carrera) y solo cuando terminó.
+      allow create: if esMoto() && id == request.resource.data.carreraId
         && request.resource.data.motoUid == request.auth.uid
         && get(/databases/$(database)/documents/carreras/$(request.resource.data.carreraId)).data.motoUid == request.auth.uid
+        && get(/databases/$(database)/documents/carreras/$(request.resource.data.carreraId)).data.estado == 'terminada'
+        && request.resource.data.clienteUid == get(/databases/$(database)/documents/carreras/$(request.resource.data.carreraId)).data.clienteUid
+        && request.resource.data.keys().hasOnly(['carreraId', 'motoUid', 'motoNombre', 'clienteUid', 'clienteNombre', 'estrellas', 'comentario', 'fecha'])
+        && texto(request.resource.data.get('comentario', ''), 300) && ahora('fecha')
         && request.resource.data.estrellas is int
         && request.resource.data.estrellas >= 1 && request.resource.data.estrellas <= 5;
       allow read: if esAdmin();
@@ -238,7 +290,10 @@ service cloud.firestore {
     match /reportesPago/{id} {
       allow create: if esMoto() && idNormal(id) && request.resource.data.motoUid == request.auth.uid && request.resource.data.estado == 'pendiente'
         && request.resource.data.referencia is string && request.resource.data.referencia.size() <= 20
-        && request.resource.data.monto is number;
+        && request.resource.data.monto is number && request.resource.data.monto > 0 && request.resource.data.monto < 100000
+        && request.resource.data.keys().hasOnly(['motoUid', 'nombre', 'referencia', 'monto', 'moneda', 'fechaPago', 'estado', 'creado'])
+        && request.resource.data.moneda in ['bs', 'usd'] && texto(request.resource.data.get('fechaPago', ''), 10)
+        && request.resource.data.nombre == motoData(request.auth.uid).nombre && ahora('creado');
       allow read: if esAdmin() || (dentro() && resource.data.motoUid == request.auth.uid);
       allow update, delete: if esAdmin();
     }

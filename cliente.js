@@ -4,7 +4,7 @@ import {
   signInAnonymously, onAuthStateChanged, signOut,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  doc, getDoc, setDoc, addDoc, updateDoc, collection, query, where, onSnapshot, serverTimestamp, increment,
+  doc, getDoc, setDoc, addDoc, updateDoc, writeBatch, collection, query, where, onSnapshot, serverTimestamp, increment,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
@@ -12,7 +12,7 @@ import {
   pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
-} from "./comun.js?v=60";
+} from "./comun.js?v=61";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -139,7 +139,7 @@ function iniciar() {
       usuario = cred.user;
       aceptarPoliticas();
       cliente = { ...datos, creado: serverTimestamp(), politicas: VERSION_POLITICAS };
-      await setDoc(doc(db, "clientes", usuario.uid), cliente);
+      await setDoc(doc(db, "clientes", usuario.uid), cliente, { merge: true });
       recordados.guardar(datos);
       registrando = false;
       arrancar();
@@ -1079,7 +1079,10 @@ function iniciar() {
     pedirPermisoAvisos();
     const punto = (i) => ({ lat: pedido.puntos[i].lat, lng: pedido.puntos[i].lng, dir: pedido.refs[i].trim().slice(0, 200) });
     try {
-      await addDoc(collection(db, "carreras"), {
+      // La carrera y la hora de la última carrera del cliente van juntas (las reglas no dejan pedir varias seguidas).
+      const lote = writeBatch(db);
+      lote.update(doc(db, "clientes", usuario.uid), { ultimaCarrera: serverTimestamp() });
+      lote.set(doc(collection(db, "carreras")), {
         clienteUid: usuario.uid,
         clienteNombre: cliente.nombre,
         clienteTel: cliente.telefono,
@@ -1107,11 +1110,12 @@ function iniciar() {
         cancelaciones: [],
         creada: serverTimestamp(),
       });
+      await lote.commit();
       Object.assign(pedido, { puntos: [], refs: [], retorno: false, agregando: false, km: null, linea: null, nota: "", para: null, oferta: null, ofertaBs: null, ofertaTocada: false, paradaPendiente: false, yoIntentado: false });
       ir("carrera");
     } catch (e) {
       console.error(e);
-      aviso("No se pudo pedir la carrera. Intenta de nuevo.");
+      aviso(e && e.code === "permission-denied" ? "No se pudo pedir la carrera. Espera unos segundos e intenta de nuevo." : "No se pudo pedir la carrera. Revisa tu internet e intenta de nuevo.");
       $("#pedir").disabled = false;
     }
   }
