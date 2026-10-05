@@ -12,7 +12,7 @@ import {
   pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
-} from "./comun.js?v=61";
+} from "./comun.js?v=62";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -1233,7 +1233,13 @@ function iniciar() {
       }
       ofertas.primera = false;
       pintarOfertas();
-    }, () => {});
+    }, () => {
+      // Recién publicada, la carrera puede no estar todavía en el servidor y la lectura se rechaza:
+      // se vuelve a intentar en un momento (si no, el cliente nunca vería las ofertas).
+      const id = ofertas.id;
+      Object.assign(ofertas, { id: null, quitar: null });
+      setTimeout(() => { const c2 = carreraActual(); if (c2 && c2.id === id && !ofertas.id) escucharOfertas(c2); }, 2000);
+    });
   }
   function pintarOfertas() {
     const caja = $("#ofertas");
