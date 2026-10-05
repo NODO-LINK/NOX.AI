@@ -49,6 +49,17 @@ service cloud.firestore {
       allow write: if esAdmin();
     }
 
+    // Documentos del motorizado (licencia, certificado médico, RCV, trimestres): los sube el administrador;
+    // solo los ven el administrador y el propio motorizado.
+    match /documentos/{uid} {
+      allow read: if esAdmin() || (dentro() && request.auth.uid == uid);
+      allow write: if esAdmin();
+      match /fotos/{tipo} {
+        allow read: if esAdmin() || (dentro() && request.auth.uid == uid);
+        allow write: if esAdmin();
+      }
+    }
+
     // Fotos del motorizado y de su moto (las sube el administrador).
     match /fotos/{uid} {
       allow read: if dentro();

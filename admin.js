@@ -13,7 +13,8 @@ import {
   leerTarifas, escucharTarifas, aviso, avisoSinConfigurar, bs, sonarAlerta, mostrarLugares, tipoLugar, TIPOS_PARA_AGREGAR, ASPECTOS, insigniasSeguridad, opinionPublica, fotosDe, olvidarFotos, achicarFoto, pintarFotos,
   hoyLocal,
   enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad, enlacePublicidad,
-} from "./comun.js?v=56";
+  DOCUMENTOS, estadoDoc, resumenDocs,
+} from "./comun.js?v=57";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -23,6 +24,7 @@ function iniciar() {
   let mapaVivo = null, marcasVivo = {}, filtroClientes = "";
   let lugaresPropios = [], mapaLugares = null, reportesPago = [];
   let anuncio = null, publicidad = null, toquesPub = 0;
+  let documentos = {};   // documentos de cada motorizado (licencia, médico, RCV, trimestres): fechas, sin fotos
   const DIA = 864e5;
 
   onAuthStateChanged(auth, async (u) => {
@@ -72,6 +74,7 @@ function iniciar() {
     escuchar(query(collection(db, "resenas"), orderBy("fecha", "desc"), limit(100)), (s) => { resenas = s.docs.map((d) => ({ id: d.id, ...d.data() })); publicarAprobadasViejas(); });
     escuchar(query(collection(db, "pagos"), orderBy("fecha", "desc"), limit(500)), (s) => { pagos = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
     escuchar(collection(db, "llamadas"), (s) => { llamadas = Object.fromEntries(s.docs.map((d) => [d.id, Number(d.data().n) || 0])); return ruta === "mas"; });
+    escuchar(collection(db, "documentos"), (s) => { documentos = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); });
     escuchar(doc(db, "config", "anuncio"), (d) => { anuncio = d.exists() ? d.data() : null; });
     escuchar(doc(db, "config", "publicidad"), (d) => { publicidad = d.exists() ? d.data() : null; });
     subs.push(onSnapshot(doc(db, "stats", "publicidad"), (d) => {
@@ -189,20 +192,24 @@ function iniciar() {
       <div class="leyenda"><span><i style="background:#16a34a"></i>Disponible</span><span><i style="background:#f59e0b"></i>En carrera</span><span><i style="background:#6b7280"></i>Descansando</span><span><i style="background:#9ca3af"></i>No sale</span></div>
       <p class="nota">${conUbic ? `Se ve la última ubicación de ${conUbic} motorizado${conUbic === 1 ? "" : "s"} (se actualiza mientras tienen carrera o la app abierta).` : "Todavía ningún motorizado ha compartido su ubicación."}</p>
       <h1 class="titulo">Motorizados (${motos.length}) · ${motos.filter(habilitado).length} saliendo en la app</h1>
+      ${(() => { const mal = motos.filter((m) => resumenDocs(documentos[m.id]).n >= 1 && m.usuario !== "prueba");
+        return mal.length ? `<div class="banner-aviso">${icono("alerta")}<span><b>Documentos por revisar:</b> ${mal.map((m) => `${esc(m.nombre)} (${resumenDocs(documentos[m.id]).t.toLowerCase()})`).join(" · ")}</span></div>` : ""; })()}
       <button class="boton" id="nuevo">+ Agregar motorizado</button>
       ${motos.some((x) => x.usuario === "prueba") ? "" : `<button class="boton secundario" id="prueba">${icono("moto")} Crear motorizado de prueba</button>`}
       <div class="lista" style="margin-top:12px">${motos.map((m) => `
         <article class="tarjeta"><div class="avatar" data-foto-moto="${m.id}">${esc(String(m.nombre).split(" ").slice(0, 2).map((x) => x[0] || "").join("").toUpperCase())}</div><div class="info">
           <h3>${esc(m.nombre)} ${habilitado(m) ? `<span class="pildora ok">En la app</span>` : `<span class="pildora mal">No sale</span>`}${m.enCarrera ? ` <span class="pildora ocupado">Carrera en curso</span>` : m.deTurno === false ? ` <span class="pildora">Descansando</span>` : ""}</h3>
           <p>Usuario: <b>${esc(m.usuario)}</b> · ${icono("telefono")} ${esc(m.telefono)}</p>
-          <p>${icono("moto")} ${esc(m.moto)} · Placa ${esc(m.placa)} · <span class="rating">${estrellas(m)}</span></p>
+          <p>${icono("moto")} ${esc(m.moto)}${m.color ? ` · ${esc(m.color)}` : ""} · Placa ${esc(m.placa)} · <span class="rating">${estrellas(m)}</span></p>
+          ${(() => { const r = resumenDocs(documentos[m.id]); return `<p><span class="pildora ${r.c}" style="cursor:pointer" data-docs="${m.id}">${icono("tarjeta")} ${r.t}</span></p>`; })()}
           ${m.pagoMovil && m.pagoMovil.telefono ? `<p>${icono("telefono")} Pago móvil: ${esc(m.pagoMovil.banco)} · ${esc(m.pagoMovil.telefono)} · ${esc(m.pagoMovil.cedula)}</p>` : ""}
           ${insigniasSeguridad(m) || Object.keys(m.malos || {}).length ? `<div class="etiquetas">${insigniasSeguridad(m, 3)}${Object.entries(m.malos || {}).filter(([, n]) => n > 0).map(([k, n]) => `<span class="pildora riesgo">${icono("alerta")} ${esc((ASPECTOS.malos.find((a) => a.k === k) || { t: k }).t)} (${n})</span>`).join("")}</div>` : ""}
           <p>${estadoPago(m)} · ${llamadas[m.id] || 0} llamadas</p></div>
           <div class="acciones">
             <button class="boton ${m.activo ? "peligro" : "verde"}" data-activo="${m.id}">${m.activo ? "Desactivar" : "Activar"}</button>
             <button class="boton secundario" data-editar="${m.id}">Editar</button>
-            <button class="boton secundario" data-fotos="${m.id}">${icono("usuario")} Fotos</button></div>
+            <button class="boton secundario" data-fotos="${m.id}">${icono("usuario")} Fotos</button>
+            <button class="boton secundario" data-docs="${m.id}">${icono("tarjeta")} Documentos</button></div>
         </article>`).join("") || `<div class="vacio">${icono("moto")}Aún no hay motorizados.</div>`}</div>`;
     mapaVivo = nuevoMapa("mapa-vivo");
     moverMapaVivo();
@@ -217,6 +224,7 @@ function iniciar() {
     }));
     $$("[data-editar]").forEach((b) => (b.onclick = () => formularioMoto(motos.find((x) => x.id === b.dataset.editar))));
     $$("[data-fotos]").forEach((b) => (b.onclick = () => fotosMoto(motos.find((x) => x.id === b.dataset.fotos))));
+    $$("[data-docs]").forEach((b) => (b.onclick = () => documentosMoto(motos.find((x) => x.id === b.dataset.docs))));
     pintarFotos();
   }
 
@@ -298,6 +306,69 @@ function iniciar() {
         await setDoc(doc(db, "fotos", m.id), { persona: nuevas.persona || null, moto: nuevas.moto || null, actualizado: serverTimestamp() });
         olvidarFotos(m.id); fondo.remove(); aviso("Fotos guardadas"); ir(ruta, true);
       } catch (e) { console.error(e); aviso("No se pudieron guardar. ¿Publicaste las reglas nuevas?"); }
+    };
+  }
+
+  // Documentos del motorizado: foto de cada uno y su fecha de vencimiento (solo los ve el admin y el motorizado).
+  async function documentosMoto(m) {
+    if (!m) return;
+    const resumen = { ...(documentos[m.id] || {}) };
+    const fotos = {}, nuevas = {};
+    const fondo = document.createElement("div");
+    fondo.className = "modal";
+    const fila = (x) => {
+      const d = resumen[x.k] || {}, e = estadoDoc(d);
+      return `<div class="doc-fila" data-doc="${x.k}">
+        <label class="doc-foto" title="Toca para elegir la foto"><span class="foto-vista" data-vista="${x.k}">${icono("tarjeta")}</span><input type="file" accept="image/*" data-archivo="${x.k}" hidden></label>
+        <div class="doc-info"><b>${esc(x.t)}</b><span class="pildora ${e.c}" data-estado="${x.k}">${e.t}</span>
+          <label>${x.fecha}</label><input type="date" data-vence="${x.k}" value="${esc(d.vence || "")}">
+          <button type="button" class="enlace" data-ver="${x.k}" hidden>Ver foto grande</button></div></div>`;
+    };
+    fondo.innerHTML = `<div class="ventana"><h2>Documentos de ${esc(m.nombre)}</h2>
+      <p class="nota">Toca el cuadro de cada documento para subir su foto y pon la fecha. Solo los ves tú; el motorizado ve si los tiene al día.</p>
+      <div class="docs-lista">${DOCUMENTOS.map(fila).join("")}</div>
+      <button class="boton" data-ok>Guardar documentos</button><button class="boton secundario" data-no>Cerrar</button></div>`;
+    document.body.append(fondo);
+    const pintarFoto = (k) => {
+      const url = nuevas[k] || fotos[k];
+      const v = $(`[data-vista=${k}]`, fondo);
+      if (url) { v.style.backgroundImage = `url('${url}')`; v.innerHTML = ""; }
+      $(`[data-ver=${k}]`, fondo).hidden = !url;
+    };
+    const pintarEstado = (k) => {
+      const d = { ...(resumen[k] || {}), vence: $(`[data-vence=${k}]`, fondo).value, tiene: !!(nuevas[k] || fotos[k] || (resumen[k] || {}).tiene) };
+      const e = estadoDoc(d), el = $(`[data-estado=${k}]`, fondo);
+      el.className = `pildora ${e.c}`; el.textContent = e.t;
+    };
+    // Las fotos se cargan aparte (pesan más que las fechas).
+    DOCUMENTOS.forEach((x) => getDoc(doc(db, "documentos", m.id, "fotos", x.k)).then((d) => { if (d.exists() && d.data().foto) { fotos[x.k] = d.data().foto; pintarFoto(x.k); } }).catch(() => {}));
+    $$("[data-archivo]", fondo).forEach((inp) => (inp.onchange = async () => {
+      const a = inp.files[0]; if (!a) return;
+      // Más grande que las fotos de perfil para poder leer el documento.
+      try { nuevas[inp.dataset.archivo] = await achicarFoto(a, 1280); pintarFoto(inp.dataset.archivo); pintarEstado(inp.dataset.archivo); }
+      catch { aviso("No se pudo leer esa imagen"); }
+    }));
+    $$("[data-vence]", fondo).forEach((i) => (i.oninput = () => pintarEstado(i.dataset.vence)));
+    $$("[data-ver]", fondo).forEach((b) => (b.onclick = () => {
+      const url = nuevas[b.dataset.ver] || fotos[b.dataset.ver]; if (!url) return;
+      const v = document.createElement("div"); v.className = "modal visor-doc";
+      v.innerHTML = `<img src="${url}" alt=""><button class="boton secundario" data-cerrar>Cerrar</button>`;
+      document.body.append(v); $("[data-cerrar]", v).onclick = () => v.remove();
+    }));
+    $("[data-no]", fondo).onclick = () => fondo.remove();
+    $("[data-ok]", fondo).onclick = async () => {
+      const bt = $("[data-ok]", fondo); bt.disabled = true;
+      try {
+        const lote = writeBatch(db);
+        const datos = { actualizado: serverTimestamp() };
+        DOCUMENTOS.forEach((x) => {
+          datos[x.k] = { vence: $(`[data-vence=${x.k}]`, fondo).value || null, tiene: !!(nuevas[x.k] || fotos[x.k] || (resumen[x.k] || {}).tiene) };
+          if (nuevas[x.k]) lote.set(doc(db, "documentos", m.id, "fotos", x.k), { foto: nuevas[x.k], actualizado: serverTimestamp() });
+        });
+        lote.set(doc(db, "documentos", m.id), datos);
+        await lote.commit();
+        fondo.remove(); aviso("Documentos guardados");
+      } catch (e) { console.error(e); aviso("No se pudieron guardar. ¿Publicaste las reglas nuevas?"); bt.disabled = false; }
     };
   }
 
@@ -387,6 +458,7 @@ function iniciar() {
       <label>Teléfono</label><input name="telefono" type="tel" value="${esc(m?.telefono)}" placeholder="0414-1234567" required>
       <div class="dos"><div><label>Moto</label><input name="moto" value="${esc(m?.moto)}" placeholder="Bera SBR 150"></div>
       <div><label>Placa</label><input name="placa" value="${esc(m?.placa)}"></div></div>
+      <label>Color de la moto</label><input name="color" maxlength="30" placeholder="Ej.: Roja con negro" value="${esc(m?.color)}">
       ${m ? `<p class="nota">Usuario: <b>${esc(m.usuario)}</b>. Para cambiar la clave, hazlo en la consola de Firebase (Authentication → Usuarios). Si lo borras, ese usuario no se puede volver a crear.</p>` : `
       <div class="dos"><div><label>Usuario</label><input name="usuario" autocapitalize="none" required></div>
       <div><label>Clave (mín. 6)</label><input name="clave" minlength="6" required></div></div>
@@ -408,6 +480,8 @@ function iniciar() {
         const b = writeBatch(db);
         ["motorizados", "fotos", "ubicaciones", "llamadas"].forEach((c) => b.delete(doc(db, c, m.id)));
         (await getDocs(collection(db, "motorizados", m.id, "opiniones"))).forEach((d) => b.delete(d.ref));
+        (await getDocs(collection(db, "documentos", m.id, "fotos"))).forEach((d) => b.delete(d.ref));
+        b.delete(doc(db, "documentos", m.id));
         reportesPago.filter((r) => r.motoUid === m.id && r.estado === "pendiente")
           .forEach((r) => b.update(doc(db, "reportesPago", r.id), { estado: "rechazado", motivo: "Motorizado eliminado", revisado: serverTimestamp() }));
         carreras.filter((c) => c.estado === "esperando" && c.paraMoto === m.id)
@@ -421,7 +495,7 @@ function iniciar() {
       const v = Object.fromEntries(new FormData(f));
       const telefono = normalizarTel(v.telefono);
       if (!telefono) return aviso("Teléfono no válido");
-      const datos = { nombre: v.nombre.trim(), telefono, moto: v.moto.trim(), placa: v.placa.trim().toUpperCase() };
+      const datos = { nombre: v.nombre.trim(), telefono, moto: v.moto.trim(), placa: v.placa.trim().toUpperCase(), color: String(v.color || "").trim().slice(0, 30) };
       $("button", f).disabled = true;
       try {
         if (m) {

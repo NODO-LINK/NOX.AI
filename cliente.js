@@ -12,7 +12,7 @@ import {
   pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
-} from "./comun.js?v=56";
+} from "./comun.js?v=57";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -1155,7 +1155,7 @@ function iniciar() {
         <article class="tarjeta">
           <div class="avatar tocable" data-foto-moto="${m.id}" data-perfil="${m.id}">${esc(iniciales(m.nombre))}</div>
           <div class="info"><h3 class="tocable" data-perfil="${m.id}">${esc(m.nombre)}</h3>
-            <p>${icono("moto")} ${esc(m.moto || "")}${m.placa ? ` · Placa ${esc(m.placa)}` : ""}</p>
+            <p>${icono("moto")} ${esc(m.moto || "")}${m.color ? ` ${esc(m.color.toLowerCase())}` : ""}${m.placa ? ` · Placa ${esc(m.placa)}` : ""}</p>
             <button class="ver-perfil" data-perfil="${m.id}">${icono("estrella")} Ver perfil y opiniones</button>
             <div class="etiquetas">${m.enCarrera ? `<span class="pildora ocupado">${icono("ruta")} Carrera en curso</span>` : `<span class="pildora ok">Disponible</span>`}
             ${cerca ? `<span class="pildora cerca">${icono("pin")} a ${cerca.min} min</span>` : ""}
@@ -1264,7 +1264,7 @@ function iniciar() {
         if (!md.exists()) throw new Error("no existe");
         const m = md.data();
         await updateDoc(doc(db, "carreras", c.id), {
-          estado: "aceptada", motoUid: o.motoUid, motoNombre: m.nombre, motoTel: m.telefono || "", motoMoto: m.moto || "", motoPlaca: m.placa || "",
+          estado: "aceptada", motoUid: o.motoUid, motoNombre: m.nombre, motoTel: m.telefono || "", motoMoto: [m.moto, m.color].filter(Boolean).join(" · "), motoPlaca: m.placa || "",
           aceptada: serverTimestamp(), precio: o.precio, precioBs: o.precioBs ?? null, contraoferta: true,
         });
       } catch (e) {
@@ -1336,6 +1336,7 @@ function iniciar() {
       <div class="ficha">
         <div class="fila"><span>${icono("usuario")} Nombre</span><b>${esc(m.nombre)}</b></div>
         <div class="fila"><span>${icono("moto")} Moto</span><b>${esc(m.moto || "—")}</b></div>
+        ${m.color ? `<div class="fila"><span>${icono("moto")} Color</span><b>${esc(m.color)}</b></div>` : ""}
         <div class="fila"><span>${icono("tarjeta")} Placa</span>${m.placa ? `<b class="placa">${esc(m.placa)}</b>` : "<b>—</b>"}</div>
         <div class="fila"><span>${icono("ruta")} Estado</span><b>${m.enCarrera ? "En una carrera" : "Disponible"}</b></div>
       </div>

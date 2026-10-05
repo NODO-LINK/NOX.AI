@@ -8,14 +8,15 @@ import {
   pedirAvisosAlTocar, leerOpiniones, listaOpiniones, ENLACE_POLITICAS, sonarAlerta, ASPECTOS, insigniasSeguridad, textoCobro, FORMAS_PAGO, bs, auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar, escucharTarifas, aBs, lineaRecta,
   hoyLocal,
-} from "./comun.js?v=56";
+  DOCUMENTOS, estadoDoc,
+} from "./comun.js?v=57";
 
 if (!avisoSinConfigurar()) iniciar();
 
 function iniciar() {
   const L = window.L;
   let yo = null, perfil = null, subs = [], subsCarreras = [];
-  let tarifas = null, reportes = [];
+  let tarifas = null, reportes = [], misDocs = null;
   // Contraofertas: lo que ofreció este motorizado en carreras con precio del cliente, y las que aceptó él mismo.
   const misOfertas = new Map(), aceptadasPorMi = new Set();   // tarifas (cuota, tasa, datos de cobro) y pagos de cuota reportados
   const opiniones = { abiertas: false, html: "" };   // se recuerda si la lista está abierta al redibujar
@@ -46,7 +47,7 @@ function iniciar() {
     cerrarChat(); cerradasPorMi.clear();
     misOfertas.clear(); aceptadasPorMi.clear(); revisadas.clear(); conocidas = new Set();
     Object.assign(opiniones, { abiertas: false, html: "" });
-    terminadas = []; reportes = []; tarifas = null; primeraCarga = true;
+    terminadas = []; reportes = []; tarifas = null; misDocs = null; primeraCarga = true;
     $$(".modal").forEach((m) => m.remove());
     yo = u; perfil = null; miCarrera = null; disponibles = []; ultimoModo = null;
     if (!u) return pantallaEntrada();
@@ -64,6 +65,8 @@ function iniciar() {
     }));
     // Con una carrera en curso no se redibuja (el mapa perdería el zoom); se verá al terminarla.
     subs.push(escucharTarifas((t) => { tarifas = t; if (perfil && !miCarrera) pintar(); }));
+    // Sus documentos (licencia, médico, RCV, trimestres): solo las fechas, para avisarle si algo vence.
+    subs.push(onSnapshot(doc(db, "documentos", u.uid), (d) => { misDocs = d.exists() ? d.data() : {}; if (perfil && !miCarrera) pintar(); }, () => {}));
     subs.push(onSnapshot(query(collection(db, "reportesPago"), where("motoUid", "==", u.uid)), (s) => {
       reportes = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (fecha(b.creado) || new Date()) - (fecha(a.creado) || new Date()));
       if (perfil && !miCarrera) pintar();
@@ -428,6 +431,13 @@ function iniciar() {
         <p class="nota" style="margin-top:10px">Maneja con prudencia y lleva casco para tu pasajero: los clientes lo ven en tu perfil.</p></div>`;
       html += `<details class="caja opiniones-mias" id="mis-opiniones" ${opiniones.abiertas ? "open" : ""}><summary>${icono("estrella")} Lo que dicen tus clientes</summary><div id="lista-opiniones">${opiniones.html || `<p class="nota">Cargando…</p>`}</div></details>`;
       html += tuCuota();
+      if (misDocs) {
+        const est = DOCUMENTOS.map((x) => ({ ...x, e: estadoDoc(misDocs[x.k]) }));
+        const mal = est.filter((x) => x.e.n >= 1);
+        html += `<h1 class="titulo">${icono("tarjeta")} Tus documentos</h1>
+          <div class="caja mis-docs">${est.map((x) => `<div class="fila"><span>${esc(x.t)}</span><b><span class="pildora ${x.e.c}">${x.e.t}</span></b></div>`).join("")}
+          <p class="nota" style="margin-top:10px">${mal.length ? "Lleva al administrador los documentos que faltan o están por vencer para tenerlos al día." : "¡Todo al día! Gracias por mantener tus papeles en regla."}</p></div>`;
+      }
       const pm = perfil.pagoMovil || {};
       html += `<h1 class="titulo">${icono("telefono")} Tu pago móvil</h1>
         <div class="caja">${pm.telefono
@@ -560,7 +570,7 @@ function iniciar() {
         if (!s.exists() || s.data().estado !== "esperando") throw new Error("tomada");
         tx.update(ref, {
           estado: "aceptada", motoUid: yo.uid, motoNombre: perfil.nombre, motoTel: perfil.telefono || "",
-          motoMoto: perfil.moto || "", motoPlaca: perfil.placa || "", aceptada: serverTimestamp(),
+          motoMoto: [perfil.moto, perfil.color].filter(Boolean).join(" · "), motoPlaca: perfil.placa || "", aceptada: serverTimestamp(),
         });
         tx.update(doc(db, "motorizados", yo.uid), { enCarrera: true });
       });

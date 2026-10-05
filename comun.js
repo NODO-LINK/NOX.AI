@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=56";
-import { icono, pintarIconos } from "./iconos.js?v=56";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=57";
+import { icono, pintarIconos } from "./iconos.js?v=57";
 
 export { icono };
 pintarIconos();
@@ -73,6 +73,34 @@ export const conBs = (montoUsd, tasa) => (tasa > 0 ? `${usd(montoUsd)} · ${bs(a
 export const fecha = (t) => (t ? (t.toDate ? t.toDate() : new Date(t)) : null);
 // Fecha de hoy (AAAA-MM-DD) en hora de Venezuela, no en UTC (que cambia de día a las 8 p. m.).
 export const hoyLocal = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Caracas" });
+
+// Documentos del motorizado (solo los ve el administrador y el propio motorizado).
+export const DOCUMENTOS = [
+  { k: "licencia", t: "Licencia de conducir", fecha: "Vence" },
+  { k: "medico", t: "Certificado médico", fecha: "Vence" },
+  { k: "rcv", t: "Responsabilidad civil (RCV)", fecha: "Vence" },
+  { k: "trimestres", t: "Trimestres", fecha: "Pagado hasta" },
+];
+// Estado de un documento: { c: clase de la píldora, t: texto, n: 0 al día · 1 vence pronto · 2 vencido · 3 falta }
+export function estadoDoc(d) {
+  if (!d || (!d.vence && !d.tiene)) return { c: "mal", t: "Falta", n: 3 };
+  if (!d.vence) return { c: "medio", t: "Sin fecha", n: 1 };
+  const hoy = hoyLocal();
+  if (d.vence < hoy) return { c: "mal", t: `Vencido (${fechaCorta(d.vence)})`, n: 2 };
+  const dias = Math.round((new Date(d.vence + "T12:00") - new Date(hoy + "T12:00")) / 864e5);
+  if (dias <= 30) return { c: "alerta", t: `Vence ${dias === 0 ? "hoy" : `en ${dias} día${dias === 1 ? "" : "s"}`}`, n: 1 };
+  return { c: "ok", t: `Al día hasta ${fechaCorta(d.vence)}`, n: 0 };
+}
+export const fechaCorta = (iso) => { const [a, m, d] = String(iso).split("-").map(Number); return a ? new Date(a, m - 1, d).toLocaleDateString("es-VE", { day: "numeric", month: "short", year: "numeric" }) : ""; };
+// Resumen para la tarjeta del motorizado: el peor estado de sus documentos.
+export function resumenDocs(docs) {
+  const est = DOCUMENTOS.map((x) => ({ ...x, e: estadoDoc(docs && docs[x.k]) }));
+  const vencidos = est.filter((x) => x.e.n === 2).length, faltan = est.filter((x) => x.e.n === 3).length, pronto = est.filter((x) => x.e.n === 1).length;
+  if (vencidos) return { c: "mal", t: `${vencidos} documento${vencidos > 1 ? "s" : ""} vencido${vencidos > 1 ? "s" : ""}`, n: 2, est };
+  if (faltan) return { c: "mal", t: `Faltan ${faltan} documento${faltan > 1 ? "s" : ""}`, n: 3, est };
+  if (pronto) return { c: "alerta", t: `${pronto} documento${pronto > 1 ? "s" : ""} por vencer`, n: 1, est };
+  return { c: "ok", t: "Documentos al día", n: 0, est };
+}
 export const fechaTexto = (t) => { const f = fecha(t); return f ? f.toLocaleString("es-VE", { dateStyle: "medium", timeStyle: "short" }) : "—"; };
 export const estrellas = (m) => {
   const n = Number(m.ratingCount) || 0;
