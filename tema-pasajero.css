@@ -1,6 +1,6 @@
-/* Whereapp — app de pasajeros: efectos visuales con los colores originales (morado). Se carga solo en index.html, después de estilos.css. */
+/* Whereapp — app de pasajeros: efectos visuales con los colores de la marca (blanco y azul rey). Se carga solo en index.html, después de estilos.css. */
 
-/* Botón principal: destello morado que pasa cada tanto. */
+/* Botón principal: destello azul que pasa cada tanto. */
 [data-app="pasajero"] .boton:not(.secundario):not(.peligro):not(.verde)::after {
   content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
   background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, .55) 50%, transparent 65%);
@@ -10,7 +10,7 @@
 @media (prefers-reduced-motion: reduce) { [data-app="pasajero"] .boton::after { animation: none !important; } }
 
 /* ================= Efectos (ver efectos.js) ================= */
-/* Vórtice morado detrás de la pantalla de entrada */
+/* Vórtice azul detrás de la pantalla de entrada */
 .vortice { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: -1; pointer-events: none; transition: opacity .6s; }
 .vortice.fuera { opacity: 0; }
 [data-app="pasajero"]:not([data-tema="oscuro"]) .vortice { opacity: .8; }
@@ -19,9 +19,9 @@
 [data-app="pasajero"] body::after {
   content: ""; position: fixed; left: -20%; right: -20%; top: -12vh; height: 46vh; z-index: -1; pointer-events: none;
   background:
-    linear-gradient(100deg, transparent 10%, rgba(167, 139, 250, .20) 30%, transparent 46%),
-    linear-gradient(80deg, transparent 30%, rgba(124, 58, 237, .16) 52%, transparent 70%),
-    linear-gradient(110deg, transparent 50%, rgba(221, 214, 254, .12) 68%, transparent 86%);
+    linear-gradient(100deg, transparent 10%, rgba(96, 165, 250, .20) 30%, transparent 46%),
+    linear-gradient(80deg, transparent 30%, rgba(29, 78, 216, .16) 52%, transparent 70%),
+    linear-gradient(110deg, transparent 50%, rgba(191, 219, 254, .12) 68%, transparent 86%);
   filter: blur(26px); opacity: .9; transform-origin: 50% 0;
   animation: aurora 14s ease-in-out infinite alternate;
   -webkit-mask-image: linear-gradient(#000 30%, transparent); mask-image: linear-gradient(#000 30%, transparent);
@@ -39,24 +39,24 @@
   border: 2.5px solid transparent;
   background:
     var(--degradado) padding-box,
-    conic-gradient(from var(--giro), #4c1d95 0deg, #ede9fe 40deg, #7c3aed 80deg, #4c1d95 140deg, #4c1d95 220deg, #ede9fe 260deg, #7c3aed 300deg, #4c1d95 360deg) border-box;
+    conic-gradient(from var(--giro), #172554 0deg, #dbeafe 40deg, #1d4ed8 80deg, #172554 140deg, #172554 220deg, #dbeafe 260deg, #1d4ed8 300deg, #172554 360deg) border-box;
   animation: anillo 2.8s linear infinite;
 }
 @keyframes anillo { to { --giro: 360deg; } }
 
 /* Onda rosada al tocar */
-[data-app="pasajero"] .onda { background: radial-gradient(circle, rgba(243, 237, 255, .7), rgba(124, 58, 237, .35) 45%, transparent 70%); }
+[data-app="pasajero"] .onda { background: radial-gradient(circle, rgba(234, 240, 255, .7), rgba(29, 78, 216, .35) 45%, transparent 70%); }
 
-/* Radar de búsqueda: tres ondas moradas con brillo */
-[data-app="pasajero"] .latido { box-shadow: 0 0 30px rgba(124, 58, 237, .45), var(--brillo); }
+/* Radar de búsqueda: tres ondas azules con brillo */
+[data-app="pasajero"] .latido { box-shadow: 0 0 30px rgba(29, 78, 216, .45), var(--brillo); }
 [data-app="pasajero"] .latido::before, [data-app="pasajero"] .latido::after {
-  border: 2px solid rgba(167, 139, 250, .9); box-shadow: 0 0 18px rgba(124, 58, 237, .55), inset 0 0 12px rgba(124, 58, 237, .35);
+  border: 2px solid rgba(96, 165, 250, .9); box-shadow: 0 0 18px rgba(29, 78, 216, .55), inset 0 0 12px rgba(29, 78, 216, .35);
   animation: radar-oro 2.4s cubic-bezier(.2, .6, .3, 1) infinite;
 }
 [data-app="pasajero"] .latido::after { animation-delay: .8s; }
-[data-app="pasajero"] .estado-carrera .grande.latido { outline: 2px solid rgba(167, 139, 250, .5); outline-offset: 0; animation: radar-tercera 2.4s cubic-bezier(.2, .6, .3, 1) 1.6s infinite; }
+[data-app="pasajero"] .estado-carrera .grande.latido { outline: 2px solid rgba(96, 165, 250, .5); outline-offset: 0; animation: radar-tercera 2.4s cubic-bezier(.2, .6, .3, 1) 1.6s infinite; }
 @keyframes radar-oro { from { transform: scale(1); opacity: .95; } to { transform: scale(2.6); opacity: 0; } }
-@keyframes radar-tercera { 0% { outline-offset: 0; outline-color: rgba(167, 139, 250, .7); } 100% { outline-offset: 60px; outline-color: rgba(167, 139, 250, 0); } }
+@keyframes radar-tercera { 0% { outline-offset: 0; outline-color: rgba(96, 165, 250, .7); } 100% { outline-offset: 60px; outline-color: rgba(96, 165, 250, 0); } }
 
 /* Pin que cae desde arriba y rebota */
 [data-app="pasajero"] .pin { animation: caer-oro .8s cubic-bezier(.3, 1.4, .5, 1) both; filter: drop-shadow(0 8px 6px rgba(0, 0, 0, .35)); border-color: #ffffff; }
@@ -69,14 +69,14 @@
 }
 
 /* Ruta que se dibuja: brilla mientras se traza */
-[data-app="pasajero"] path.trazando { filter: drop-shadow(0 0 6px rgba(167, 139, 250, .9)); }
+[data-app="pasajero"] path.trazando { filter: drop-shadow(0 0 6px rgba(96, 165, 250, .9)); }
 /* Moto con estela rosada */
-[data-app="pasajero"] path.estela { filter: drop-shadow(0 0 5px rgba(167, 139, 250, .8)); }
-[data-app="pasajero"] .moto-viva .pin { box-shadow: 0 0 0 0 rgba(124, 58, 237, .7); animation: caer-oro .8s cubic-bezier(.3, 1.4, .5, 1) both, latir-moto 1.8s ease-out .8s infinite; }
-@keyframes latir-moto { 0% { box-shadow: 0 0 0 0 rgba(124, 58, 237, .7); } 100% { box-shadow: 0 0 0 18px rgba(124, 58, 237, 0); } }
+[data-app="pasajero"] path.estela { filter: drop-shadow(0 0 5px rgba(96, 165, 250, .8)); }
+[data-app="pasajero"] .moto-viva .pin { box-shadow: 0 0 0 0 rgba(29, 78, 216, .7); animation: caer-oro .8s cubic-bezier(.3, 1.4, .5, 1) both, latir-moto 1.8s ease-out .8s infinite; }
+@keyframes latir-moto { 0% { box-shadow: 0 0 0 0 rgba(29, 78, 216, .7); } 100% { box-shadow: 0 0 0 18px rgba(29, 78, 216, 0); } }
 
-/* Barra: la píldora la mueve efectos.js (sin la transición vieja) y brilla en morado */
-[data-app="pasajero"] .barra .indicador { transition: none; background: linear-gradient(135deg, rgba(167, 139, 250, .22), rgba(109, 40, 217, .18)); box-shadow: inset 0 0 0 1px rgba(124, 58, 237, .35), 0 0 18px rgba(124, 58, 237, .18); }
+/* Barra: la píldora la mueve efectos.js (sin la transición vieja) y brilla en azul */
+[data-app="pasajero"] .barra .indicador { transition: none; background: linear-gradient(135deg, rgba(96, 165, 250, .22), rgba(30, 64, 175, .18)); box-shadow: inset 0 0 0 1px rgba(29, 78, 216, .35), 0 0 18px rgba(29, 78, 216, .18); }
 
 /* Confeti */
 .confeti { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 3000; pointer-events: none; }
@@ -84,18 +84,18 @@
 /* Aviso tipo "isla": cápsula negra que baja y se expande */
 .isla {
   position: fixed; left: 50%; top: calc(10px + env(safe-area-inset-top)); z-index: 2500; transform: translate(-50%, -140%);
-  width: 120px; height: 38px; border-radius: 22px; background: #1a1530; color: #f5f3ff; overflow: hidden; cursor: pointer;
-  display: flex; align-items: center; gap: 12px; padding: 0 14px; box-shadow: 0 12px 34px rgba(0, 0, 0, .45), inset 0 0 0 1px rgba(124, 58, 237, .35);
+  width: 120px; height: 38px; border-radius: 22px; background: #0f1a3a; color: #eff6ff; overflow: hidden; cursor: pointer;
+  display: flex; align-items: center; gap: 12px; padding: 0 14px; box-shadow: 0 12px 34px rgba(0, 0, 0, .45), inset 0 0 0 1px rgba(29, 78, 216, .35);
   transition: transform .5s cubic-bezier(.3, 1.3, .5, 1), width .55s cubic-bezier(.3, 1.2, .5, 1) .18s, height .55s cubic-bezier(.3, 1.2, .5, 1) .18s, border-radius .55s .18s;
 }
 .isla.abierta { transform: translate(-50%, 0); width: min(92vw, 420px); height: 68px; border-radius: 26px; }
 .isla.cerrando { transition: transform .45s cubic-bezier(.5, 0, .7, .3), width .3s, height .3s; transform: translate(-50%, -140%); width: 120px; height: 38px; }
-.isla-icono { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; color: #ffffff; background: linear-gradient(135deg, #ddd6fe, #7c3aed 50%, #6d28d9); box-shadow: 0 0 16px rgba(124, 58, 237, .55); opacity: 0; transition: opacity .3s .45s; }
+.isla-icono { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; color: #ffffff; background: linear-gradient(135deg, #bfdbfe, #1d4ed8 50%, #1e40af); box-shadow: 0 0 16px rgba(29, 78, 216, .55); opacity: 0; transition: opacity .3s .45s; }
 .isla-icono .ico { width: 22px; height: 22px; }
 .isla-texto { min-width: 0; opacity: 0; transition: opacity .3s .5s; }
 .isla.abierta .isla-icono, .isla.abierta .isla-texto { opacity: 1; }
-.isla-texto b { display: block; font-size: .95rem; font-weight: 900; color: #a78bfa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.isla-texto span { display: block; font-size: .8rem; color: #ddd6fe; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.isla-texto b { display: block; font-size: .95rem; font-weight: 900; color: #60a5fa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.isla-texto span { display: block; font-size: .8rem; color: #bfdbfe; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Logo que se escribe: letras una por una y el subrayado se dibuja después */
 .logo.escribiendo .letra { display: inline-block; opacity: 0; animation: letra-aparece .45s cubic-bezier(.3, 1.4, .5, 1) both; }

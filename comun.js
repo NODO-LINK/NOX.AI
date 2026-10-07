@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=69";
-import { icono, pintarIconos } from "./iconos.js?v=69";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=70";
+import { icono, pintarIconos } from "./iconos.js?v=70";
 
 export { icono };
 pintarIconos();
@@ -317,8 +317,8 @@ if (window.L && window.L.Map && !window.L.Map.prototype._quitarSeguro) {
   window.L.Map.prototype._quitarSeguro = true;
 }
 
-// Color de la marca (morado en todas las apps).
-export const colorMarca = () => "#7c3aed";
+// Color de la marca (azul en todas las apps).
+export const colorMarca = () => "#1d4ed8";
 
 // Íconos de mapa (Leaflet).
 const pin = (color, letra) => window.L.divIcon({
@@ -619,7 +619,7 @@ const TIPOS_LUGAR = {
   comida: { icono: "comida", color: "#d97706", nombre: "Comida" },
   playa: { icono: "olas", color: "#0891b2", nombre: "Playa" },
   parque: { icono: "arbol", color: "#15803d", nombre: "Parques y deporte" },
-  iglesia: { icono: "iglesia", color: "#7c3aed", nombre: "Iglesia" },
+  iglesia: { icono: "iglesia", color: "#1d4ed8", nombre: "Iglesia" },
   gobierno: { icono: "institucion", color: "#475569", nombre: "Instituciones" },
   banco: { icono: "institucion", color: "#0f766e", nombre: "Banco" },
   gasolina: { icono: "gasolina", color: "#b91c1c", nombre: "Gasolina" },
@@ -627,7 +627,7 @@ const TIPOS_LUGAR = {
   referencia: { icono: "pin", color: "#db2777", nombre: "Punto de referencia" },
   sector: { icono: "casa", color: "#334155", nombre: "Sector o barrio" },
   otro: { icono: "pin", color: "#6b7280", nombre: "Lugar" },
-  favorito: { icono: "casa", color: "#7c3aed", nombre: "Tus lugares" },
+  favorito: { icono: "casa", color: "#1d4ed8", nombre: "Tus lugares" },
 };
 export const tipoLugar = (t) => TIPOS_LUGAR[t] || TIPOS_LUGAR.otro;
 // Palabras con las que la gente busca cada tipo de lugar (escribir "escuela" encuentra la U.E. …).
@@ -790,7 +790,7 @@ export function aplicarTema() {
   if (!t) t = matchMedia("(prefers-color-scheme: dark)").matches ? "oscuro" : "claro";
   document.documentElement.dataset.tema = t;
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = t === "oscuro" ? "#141021" : "#ffffff";
+  if (meta) meta.content = t === "oscuro" ? "#0b1220" : "#ffffff";
   return t;
 }
 aplicarTema();

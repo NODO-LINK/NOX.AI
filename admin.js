@@ -15,7 +15,7 @@ import {
   enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad, enlacePublicidad,
   DOCUMENTOS, estadoDoc, resumenDocs,
   filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles,
-} from "./comun.js?v=69";
+} from "./comun.js?v=70";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -662,7 +662,7 @@ function iniciar() {
       const limites = marcarRecorrido(mapa, c);
       mapa.fitBounds(limites.pad(0.25), { animate: false });
       const pts = [c.origen, ...(c.paradas || []), c.destino, ...(c.retorno ? [c.origen] : [])];
-      rutaCalles(pts).then((r) => { if (mapa) window.L.polyline(r.linea, { color: "#7c3aed", weight: 5, opacity: .8 }).addTo(mapa); }).catch(() => {});
+      rutaCalles(pts).then((r) => { if (mapa) window.L.polyline(r.linea, { color: "#1d4ed8", weight: 5, opacity: .8 }).addTo(mapa); }).catch(() => {});
       if (c.estado === "aceptada" && c.motoUid) {
         let marca = null;
         quitarVivo = onSnapshot(doc(db, "ubicaciones", c.motoUid), (d) => {

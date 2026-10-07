@@ -13,8 +13,8 @@ import {
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca,
-} from "./comun.js?v=69";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana } from "./efectos.js?v=69";
+} from "./comun.js?v=70";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana } from "./efectos.js?v=70";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -529,9 +529,9 @@ function iniciar() {
 
   // Mis lugares (Mi casa, Trabajo, casa de un amigo…), guardados en este teléfono.
   const TIPOS_MIOS = {
-    casa: { nombre: "Mi casa", icono: "casa", color: "#7c3aed", sugerido: "Mi casa" },
+    casa: { nombre: "Mi casa", icono: "casa", color: "#1d4ed8", sugerido: "Mi casa" },
     trabajo: { nombre: "Trabajo", icono: "trabajo", color: "#0ea5e9", sugerido: "Trabajo" },
-    amigo: { nombre: "Familia o amigo", icono: "amigos", color: "#7c3aed", sugerido: "Casa de " },
+    amigo: { nombre: "Familia o amigo", icono: "amigos", color: "#1d4ed8", sugerido: "Casa de " },
     otro: { nombre: "Otro", icono: "favorito", color: "#f59e0b", sugerido: "" },
   };
   const tipoMio = (f) => TIPOS_MIOS[f.tipo] || TIPOS_MIOS.otro;
@@ -792,7 +792,7 @@ function iniciar() {
         return `<button type="button" data-k="${k}"><span class="lugar" style="background:${color}">${icono(ic)}</span><span><b>${esc(l.n)}</b><small>${esc(sub)}</small></span></button>`;
       }).join("")
         + (q.length >= 2 && !lista.length ? `<p class="nota">No encontramos «${esc(input.value.trim())}». Márcalo en el mapa con el botón ${icono("pin")}.</p>` : "")
-        + `<button type="button" data-mapa><span class="lugar" style="background:#7c3aed">${icono("pin")}</span><span><b>Marcar en el mapa</b><small>Toca el lugar exacto</small></span></button>`;
+        + `<button type="button" data-mapa><span class="lugar" style="background:#1d4ed8">${icono("pin")}</span><span><b>Marcar en el mapa</b><small>Toca el lugar exacto</small></span></button>`;
       caja.hidden = false;
       // Se elige al soltar (click), no al poner el dedo: así se puede deslizar la lista sin elegir nada.
       // El mousedown se frena para que el campo no pierda el foco antes del click.
@@ -1460,7 +1460,7 @@ function iniciar() {
       $("#vivo").after($(".mapa-vivo-caja"), $(".leyenda-mapa"));
       let marcaMoto = null, centrado = false, siguiendo = true, animando = null;
       const camino = L.polyline([], { color: colorMarca(), weight: 5, opacity: 0.85, dashArray: "2 9", lineCap: "round" }).addTo(mapa);
-      const rastro = L.polyline([], { color: "#a78bfa", weight: 5, opacity: 0.8, className: "estela", lineCap: "round" }).addTo(mapa);
+      const rastro = L.polyline([], { color: "#60a5fa", weight: 5, opacity: 0.8, className: "estela", lineCap: "round" }).addTo(mapa);
       const botonSeguir = $("#seguir-moto");
       const pintarSeguir = () => botonSeguir.classList.toggle("activo", siguiendo);
       botonSeguir.onclick = () => { siguiendo = !siguiendo; pintarSeguir(); if (siguiendo) encuadrarMoto(true); };
