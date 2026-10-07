@@ -15,7 +15,7 @@ import {
   enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad, enlacePublicidad,
   DOCUMENTOS, estadoDoc, resumenDocs,
   filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles,
-} from "./comun.js?v=67";
+} from "./comun.js?v=68";
 
 if (!avisoSinConfigurar()) iniciar();
 

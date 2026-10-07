@@ -1,101 +1,6 @@
-/* Whereapp — app de pasajeros: blanco y rosado. Se carga solo en index.html, después de estilos.css. */
-[data-app="pasajero"] {
-  --oro: #ec4899;                    /* color de acento (rosado); se llama "oro" por historia del archivo */
-  --oro-claro: #f9a8d4;
-  --oro-oscuro: #db2777;
-  --sobre-oro: #ffffff;              /* texto sobre fondos rosados */
-  --marca: #db2777;                  /* en blanco: rosado intenso para que se lea bien */
-  --marca-oscura: #be185d;
-  --marca-clara: #f472b6;
-  --rosa: #ec4899;
-  --marca-suave: #fde7f1;
-  --degradado: linear-gradient(135deg, #f9a8d4 0%, #ec4899 50%, #db2777 100%);
-  --texto: #2a1620;
-  --texto-2: #7d6370;
-  --fondo: #ffffff;
-  --fondo-2: #fdf2f7;
-  --superficie: #ffffff;
-  --fondo-pagina: #fff8fb;
-  --borde: rgba(219, 39, 119, .12);
-  --vidrio: rgba(255, 255, 255, .78);
-  --vidrio-fuerte: rgba(255, 255, 255, .94);
-  --borde-vidrio: rgba(255, 255, 255, .8);
-  --sombra-1: 0 1px 2px rgba(80, 10, 45, .05), 0 4px 14px rgba(157, 23, 77, .07);
-  --sombra-2: 0 2px 4px rgba(80, 10, 45, .05), 0 10px 30px rgba(157, 23, 77, .11);
-  --sombra-3: 0 4px 8px rgba(80, 10, 45, .07), 0 22px 50px rgba(157, 23, 77, .18);
-  --brillo: 0 8px 24px rgba(236, 72, 153, .32), inset 0 1px 0 rgba(255, 255, 255, .35);
-  --precio-fondo: linear-gradient(135deg, #fff1f7, #fde7f1);
-  --apagado: #ead9e1;
-}
-[data-app="pasajero"][data-tema="oscuro"] {
-  --oro: #f472b6;
-  --oro-claro: #fbcfe8;
-  --oro-oscuro: #db2777;
-  --marca: #f472b6;
-  --marca-oscura: #ec4899;
-  --marca-clara: #f9a8d4;
-  --marca-suave: #3a1a2b;
-  --texto: #fbeef4;
-  --texto-2: #c6a7b6;
-  --fondo: #1c1118;
-  --fondo-2: #26161f;
-  --superficie: #1c1118;
-  --fondo-pagina: #120a0f;
-  --borde: rgba(244, 114, 182, .16);
-  --vidrio: rgba(28, 17, 24, .78);
-  --vidrio-fuerte: rgba(28, 17, 24, .94);
-  --borde-vidrio: rgba(244, 114, 182, .12);
-  --precio-fondo: linear-gradient(135deg, #2a1622, #1f1119);
-  --apagado: #4a3540;
-  --brillo: 0 8px 26px rgba(236, 72, 153, .3), inset 0 1px 0 rgba(255, 255, 255, .3);
-}
+/* Whereapp — app de pasajeros: efectos visuales con los colores originales (morado). Se carga solo en index.html, después de estilos.css. */
 
-/* Fondo vivo: luces rosadas suaves. */
-[data-app="pasajero"] body::before {
-  background:
-    radial-gradient(38% 30% at 20% 15%, rgba(236, 72, 153, .22), transparent 70%),
-    radial-gradient(30% 26% at 85% 25%, rgba(249, 168, 212, .14), transparent 70%),
-    radial-gradient(40% 34% at 70% 85%, rgba(219, 39, 119, .16), transparent 70%),
-    radial-gradient(30% 30% at 10% 80%, rgba(236, 72, 153, .10), transparent 70%);
-}
-
-/* Logo con brillo rosado. */
-[data-app="pasajero"] .logo { background-image: linear-gradient(110deg, #db2777, #f9a8d4, #ec4899, #db2777); }
-[data-app="pasajero"] .logo::after { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 70' preserveAspectRatio='none'%3E%3Cpath d='M14 40 C 260 14, 640 6, 986 22 L 980 56 C 640 42, 270 48, 26 72 Z' fill='%23f472b6'/%3E%3C/svg%3E"); }
-
-/* Texto blanco sobre el degradado rosado. */
-[data-app="pasajero"] .boton:not(.secundario):not(.peligro):not(.verde),
-[data-app="pasajero"] .segmento button.activo,
-[data-app="pasajero"] .avatar,
-[data-app="pasajero"] .letra-b,
-[data-app="pasajero"] .estado-carrera .grande,
-[data-app="pasajero"] .vivo,
-[data-app="pasajero"] .widget-icono,
-[data-app="pasajero"] #agregar.activo,
-[data-app="pasajero"] #sel-agregar.activo,
-[data-app="pasajero"] .controles-mapa a.activo,
-[data-app="pasajero"] .burbuja.mia,
-[data-app="pasajero"] .chip-fav.nuevo,
-[data-app="pasajero"] .seguir-moto.activo,
-[data-app="pasajero"] .anuncio { color: var(--sobre-oro) !important; }
-[data-app="pasajero"] .vivo .ico, [data-app="pasajero"] .anuncio .quitar { color: var(--sobre-oro); }
-[data-app="pasajero"] .anuncio .boton:not(.verde) { background: #ffffff; color: #db2777 !important; }
-[data-app="pasajero"] .avatar { box-shadow: 0 0 0 3px var(--superficie), 0 0 0 5px rgba(236, 72, 153, .5), var(--sombra-1); }
-[data-app="pasajero"] input:focus, [data-app="pasajero"] select:focus, [data-app="pasajero"] textarea:focus { box-shadow: 0 0 0 5px rgba(236, 72, 153, .18); }
-[data-app="pasajero"] .msg-detalle.de-cliente { background: #fde7f1; }
-
-/* En oscuro: borde rosado fino en barra, cabecera y tarjetas. */
-[data-app="pasajero"][data-tema="oscuro"] .tarjeta,
-[data-app="pasajero"][data-tema="oscuro"] .caja,
-[data-app="pasajero"][data-tema="oscuro"] .cabecera,
-[data-app="pasajero"][data-tema="oscuro"] .barra { border: 1px solid rgba(236, 72, 153, .14); }
-[data-app="pasajero"][data-tema="oscuro"] .barra button.activo { color: var(--oro); text-shadow: 0 0 12px rgba(236, 72, 153, .45); }
-[data-app="pasajero"][data-tema="oscuro"] .leaflet-container { background: #1a1016; }
-[data-app="pasajero"][data-tema="oscuro"] .aviso { background: rgba(251, 238, 244, .96); color: #1c1118; }
-[data-app="pasajero"][data-tema="oscuro"] .leaflet-control-attribution { background: rgba(28, 17, 24, .7) !important; }
-[data-app="pasajero"][data-tema="oscuro"] .leaflet-tooltip.nombre-lugar { background: rgba(28, 17, 24, .92); }
-
-/* Botón principal: destello rosado que pasa cada tanto. */
+/* Botón principal: destello morado que pasa cada tanto. */
 [data-app="pasajero"] .boton:not(.secundario):not(.peligro):not(.verde)::after {
   content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
   background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, .55) 50%, transparent 65%);
@@ -105,7 +10,7 @@
 @media (prefers-reduced-motion: reduce) { [data-app="pasajero"] .boton::after { animation: none !important; } }
 
 /* ================= Efectos (ver efectos.js) ================= */
-/* Vórtice rosado detrás de la pantalla de entrada */
+/* Vórtice morado detrás de la pantalla de entrada */
 .vortice { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: -1; pointer-events: none; transition: opacity .6s; }
 .vortice.fuera { opacity: 0; }
 [data-app="pasajero"]:not([data-tema="oscuro"]) .vortice { opacity: .8; }
@@ -114,9 +19,9 @@
 [data-app="pasajero"] body::after {
   content: ""; position: fixed; left: -20%; right: -20%; top: -12vh; height: 46vh; z-index: -1; pointer-events: none;
   background:
-    linear-gradient(100deg, transparent 10%, rgba(249, 168, 212, .20) 30%, transparent 46%),
-    linear-gradient(80deg, transparent 30%, rgba(236, 72, 153, .16) 52%, transparent 70%),
-    linear-gradient(110deg, transparent 50%, rgba(251, 207, 232, .12) 68%, transparent 86%);
+    linear-gradient(100deg, transparent 10%, rgba(167, 139, 250, .20) 30%, transparent 46%),
+    linear-gradient(80deg, transparent 30%, rgba(124, 58, 237, .16) 52%, transparent 70%),
+    linear-gradient(110deg, transparent 50%, rgba(221, 214, 254, .12) 68%, transparent 86%);
   filter: blur(26px); opacity: .9; transform-origin: 50% 0;
   animation: aurora 14s ease-in-out infinite alternate;
   -webkit-mask-image: linear-gradient(#000 30%, transparent); mask-image: linear-gradient(#000 30%, transparent);
@@ -134,24 +39,24 @@
   border: 2.5px solid transparent;
   background:
     var(--degradado) padding-box,
-    conic-gradient(from var(--giro), #9d174d 0deg, #ffe4f1 40deg, #ec4899 80deg, #9d174d 140deg, #9d174d 220deg, #ffe4f1 260deg, #ec4899 300deg, #9d174d 360deg) border-box;
+    conic-gradient(from var(--giro), #4c1d95 0deg, #ede9fe 40deg, #7c3aed 80deg, #4c1d95 140deg, #4c1d95 220deg, #ede9fe 260deg, #7c3aed 300deg, #4c1d95 360deg) border-box;
   animation: anillo 2.8s linear infinite;
 }
 @keyframes anillo { to { --giro: 360deg; } }
 
 /* Onda rosada al tocar */
-[data-app="pasajero"] .onda { background: radial-gradient(circle, rgba(252, 231, 243, .7), rgba(236, 72, 153, .35) 45%, transparent 70%); }
+[data-app="pasajero"] .onda { background: radial-gradient(circle, rgba(243, 237, 255, .7), rgba(124, 58, 237, .35) 45%, transparent 70%); }
 
-/* Radar de búsqueda: tres ondas rosadas con brillo */
-[data-app="pasajero"] .latido { box-shadow: 0 0 30px rgba(236, 72, 153, .45), var(--brillo); }
+/* Radar de búsqueda: tres ondas moradas con brillo */
+[data-app="pasajero"] .latido { box-shadow: 0 0 30px rgba(124, 58, 237, .45), var(--brillo); }
 [data-app="pasajero"] .latido::before, [data-app="pasajero"] .latido::after {
-  border: 2px solid rgba(249, 168, 212, .9); box-shadow: 0 0 18px rgba(236, 72, 153, .55), inset 0 0 12px rgba(236, 72, 153, .35);
+  border: 2px solid rgba(167, 139, 250, .9); box-shadow: 0 0 18px rgba(124, 58, 237, .55), inset 0 0 12px rgba(124, 58, 237, .35);
   animation: radar-oro 2.4s cubic-bezier(.2, .6, .3, 1) infinite;
 }
 [data-app="pasajero"] .latido::after { animation-delay: .8s; }
-[data-app="pasajero"] .estado-carrera .grande.latido { outline: 2px solid rgba(249, 168, 212, .5); outline-offset: 0; animation: radar-tercera 2.4s cubic-bezier(.2, .6, .3, 1) 1.6s infinite; }
+[data-app="pasajero"] .estado-carrera .grande.latido { outline: 2px solid rgba(167, 139, 250, .5); outline-offset: 0; animation: radar-tercera 2.4s cubic-bezier(.2, .6, .3, 1) 1.6s infinite; }
 @keyframes radar-oro { from { transform: scale(1); opacity: .95; } to { transform: scale(2.6); opacity: 0; } }
-@keyframes radar-tercera { 0% { outline-offset: 0; outline-color: rgba(249, 168, 212, .7); } 100% { outline-offset: 60px; outline-color: rgba(249, 168, 212, 0); } }
+@keyframes radar-tercera { 0% { outline-offset: 0; outline-color: rgba(167, 139, 250, .7); } 100% { outline-offset: 60px; outline-color: rgba(167, 139, 250, 0); } }
 
 /* Pin que cae desde arriba y rebota */
 [data-app="pasajero"] .pin { animation: caer-oro .8s cubic-bezier(.3, 1.4, .5, 1) both; filter: drop-shadow(0 8px 6px rgba(0, 0, 0, .35)); border-color: #ffffff; }
@@ -164,14 +69,14 @@
 }
 
 /* Ruta que se dibuja: brilla mientras se traza */
-[data-app="pasajero"] path.trazando { filter: drop-shadow(0 0 6px rgba(249, 168, 212, .9)); }
+[data-app="pasajero"] path.trazando { filter: drop-shadow(0 0 6px rgba(167, 139, 250, .9)); }
 /* Moto con estela rosada */
-[data-app="pasajero"] path.estela { filter: drop-shadow(0 0 5px rgba(249, 168, 212, .8)); }
-[data-app="pasajero"] .moto-viva .pin { box-shadow: 0 0 0 0 rgba(236, 72, 153, .7); animation: caer-oro .8s cubic-bezier(.3, 1.4, .5, 1) both, latir-moto 1.8s ease-out .8s infinite; }
-@keyframes latir-moto { 0% { box-shadow: 0 0 0 0 rgba(236, 72, 153, .7); } 100% { box-shadow: 0 0 0 18px rgba(236, 72, 153, 0); } }
+[data-app="pasajero"] path.estela { filter: drop-shadow(0 0 5px rgba(167, 139, 250, .8)); }
+[data-app="pasajero"] .moto-viva .pin { box-shadow: 0 0 0 0 rgba(124, 58, 237, .7); animation: caer-oro .8s cubic-bezier(.3, 1.4, .5, 1) both, latir-moto 1.8s ease-out .8s infinite; }
+@keyframes latir-moto { 0% { box-shadow: 0 0 0 0 rgba(124, 58, 237, .7); } 100% { box-shadow: 0 0 0 18px rgba(124, 58, 237, 0); } }
 
-/* Barra: la píldora la mueve efectos.js (sin la transición vieja) y brilla en rosado */
-[data-app="pasajero"] .barra .indicador { transition: none; background: linear-gradient(135deg, rgba(249, 168, 212, .22), rgba(219, 39, 119, .18)); box-shadow: inset 0 0 0 1px rgba(236, 72, 153, .35), 0 0 18px rgba(236, 72, 153, .18); }
+/* Barra: la píldora la mueve efectos.js (sin la transición vieja) y brilla en morado */
+[data-app="pasajero"] .barra .indicador { transition: none; background: linear-gradient(135deg, rgba(167, 139, 250, .22), rgba(109, 40, 217, .18)); box-shadow: inset 0 0 0 1px rgba(124, 58, 237, .35), 0 0 18px rgba(124, 58, 237, .18); }
 
 /* Confeti */
 .confeti { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 3000; pointer-events: none; }
@@ -179,18 +84,18 @@
 /* Aviso tipo "isla": cápsula negra que baja y se expande */
 .isla {
   position: fixed; left: 50%; top: calc(10px + env(safe-area-inset-top)); z-index: 2500; transform: translate(-50%, -140%);
-  width: 120px; height: 38px; border-radius: 22px; background: #1f1218; color: #fbeef4; overflow: hidden; cursor: pointer;
-  display: flex; align-items: center; gap: 12px; padding: 0 14px; box-shadow: 0 12px 34px rgba(0, 0, 0, .45), inset 0 0 0 1px rgba(236, 72, 153, .35);
+  width: 120px; height: 38px; border-radius: 22px; background: #1a1530; color: #f5f3ff; overflow: hidden; cursor: pointer;
+  display: flex; align-items: center; gap: 12px; padding: 0 14px; box-shadow: 0 12px 34px rgba(0, 0, 0, .45), inset 0 0 0 1px rgba(124, 58, 237, .35);
   transition: transform .5s cubic-bezier(.3, 1.3, .5, 1), width .55s cubic-bezier(.3, 1.2, .5, 1) .18s, height .55s cubic-bezier(.3, 1.2, .5, 1) .18s, border-radius .55s .18s;
 }
 .isla.abierta { transform: translate(-50%, 0); width: min(92vw, 420px); height: 68px; border-radius: 26px; }
 .isla.cerrando { transition: transform .45s cubic-bezier(.5, 0, .7, .3), width .3s, height .3s; transform: translate(-50%, -140%); width: 120px; height: 38px; }
-.isla-icono { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; color: #ffffff; background: linear-gradient(135deg, #fbcfe8, #ec4899 50%, #db2777); box-shadow: 0 0 16px rgba(236, 72, 153, .55); opacity: 0; transition: opacity .3s .45s; }
+.isla-icono { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; color: #ffffff; background: linear-gradient(135deg, #ddd6fe, #7c3aed 50%, #6d28d9); box-shadow: 0 0 16px rgba(124, 58, 237, .55); opacity: 0; transition: opacity .3s .45s; }
 .isla-icono .ico { width: 22px; height: 22px; }
 .isla-texto { min-width: 0; opacity: 0; transition: opacity .3s .5s; }
 .isla.abierta .isla-icono, .isla.abierta .isla-texto { opacity: 1; }
-.isla-texto b { display: block; font-size: .95rem; font-weight: 900; color: #f9a8d4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.isla-texto span { display: block; font-size: .8rem; color: #e9cbd9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.isla-texto b { display: block; font-size: .95rem; font-weight: 900; color: #a78bfa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.isla-texto span { display: block; font-size: .8rem; color: #ddd6fe; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Logo que se escribe: letras una por una y el subrayado se dibuja después */
 .logo.escribiendo .letra { display: inline-block; opacity: 0; animation: letra-aparece .45s cubic-bezier(.3, 1.4, .5, 1) both; }
@@ -201,9 +106,9 @@
 /* Precio: brillo al terminar de contar */
 [data-app="pasajero"] .precio-caja b .contando { display: inline-block; }
 
-/* Estrellas que se llenan de oro, una tras otra, con destello */
-[data-app="pasajero"] .estrellas button.on { color: #f9a8d4; }
-[data-app="pasajero"] .estrellas button.on .ico { fill: #ec4899; filter: drop-shadow(0 0 10px rgba(249, 168, 212, .75)); animation: estrella-oro .55s cubic-bezier(.3, 1.6, .5, 1) both; }
+/* Estrellas que se llenan (amarillas), una tras otra, con destello */
+[data-app="pasajero"] .estrellas button.on { color: #f59e0b; }
+[data-app="pasajero"] .estrellas button.on .ico { fill: #f59e0b; filter: drop-shadow(0 0 10px rgba(245, 158, 11, .6)); animation: estrella-oro .55s cubic-bezier(.3, 1.6, .5, 1) both; }
 [data-app="pasajero"] .estrellas button:nth-child(2).on .ico { animation-delay: .06s; }
 [data-app="pasajero"] .estrellas button:nth-child(3).on .ico { animation-delay: .12s; }
 [data-app="pasajero"] .estrellas button:nth-child(4).on .ico { animation-delay: .18s; }

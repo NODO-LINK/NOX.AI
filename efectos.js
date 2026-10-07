@@ -2,7 +2,7 @@
 // Todo respeta "reducir movimiento" del teléfono y se apaga solo cuando no se ve.
 
 const quieto = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
-const ORO = ["#f9a8d4", "#ec4899", "#db2777", "#fbcfe8"];
+const ORO = ["#a78bfa", "#7c3aed", "#c026d3", "#ddd6fe"];
 
 // ---------- Vibración suave ----------
 export function vibrar(patron = 12) {
@@ -14,7 +14,7 @@ document.addEventListener("pointerdown", (e) => {
 }, { passive: true });
 
 // ---------- Vórtice dorado (pantalla de entrada) ----------
-// Partículas de oro girando lento alrededor del centro. Solo mientras se ve la pantalla de entrada.
+// Partículas moradas girando lento alrededor del centro. Solo mientras se ve la pantalla de entrada.
 let vortice = null;
 function iniciarVortice() {
   if (vortice || quieto()) return;
@@ -123,7 +123,7 @@ export function volar(origen, destino) {
   Object.assign(clon.style, {
     position: "fixed", left: a.left + "px", top: a.top + "px", width: a.width + "px", height: a.height + "px", margin: 0,
     zIndex: 2000, pointerEvents: "none", backgroundImage: cs.backgroundImage, backgroundSize: "cover", backgroundPosition: "center",
-    borderRadius: cs.borderRadius, transformOrigin: "0 0", boxShadow: "0 0 30px 4px rgba(236,72,153,.45)",
+    borderRadius: cs.borderRadius, transformOrigin: "0 0", boxShadow: "0 0 30px 4px rgba(124,58,237,.45)",
   });
   document.body.append(clon);
   destino.style.opacity = "0";
@@ -142,7 +142,7 @@ export function volar(origen, destino) {
     clon.animate([
       { transform: "translate(0,0) scale(1.15)", borderRadius: cs.borderRadius },
       { transform: `translate(${dx * 0.55}px,${dy * 0.55 - 40}px) scale(${(1 + sx) / 2},${(1 + sy) / 2})`, offset: 0.55 },
-      { transform: `translate(${dx}px,${dy}px) scale(${sx},${sy})`, borderRadius: radioFin, boxShadow: "0 0 0 0 rgba(236,72,153,0)" },
+      { transform: `translate(${dx}px,${dy}px) scale(${sx},${sy})`, borderRadius: radioFin, boxShadow: "0 0 0 0 rgba(124,58,237,0)" },
     ], { duration: 480, easing: "cubic-bezier(.22,1,.36,1)", fill: "forwards" }).onfinish = () => {
       destino.style.opacity = ""; destino.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160 });
       clon.remove();
