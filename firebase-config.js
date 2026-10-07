@@ -11,4 +11,4 @@ export const firebaseConfig = {
 
 // App Check (protección extra): pega aquí la "clave del sitio" de reCAPTCHA v3 entre las comillas.
 // Mientras esté vacía, App Check queda apagado y la app funciona igual.
-export const appCheckClave = "";
+export const appCheckClave = "6LeGEeQtAAAAAAwMkrevdYosJF7Ufrd60e2BdMvm";

@@ -13,8 +13,8 @@ import {
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca,
-} from "./comun.js?v=71";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana } from "./efectos.js?v=71";
+} from "./comun.js?v=72";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana } from "./efectos.js?v=72";
 
 if (!avisoSinConfigurar()) iniciar();
 
