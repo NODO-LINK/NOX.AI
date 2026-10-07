@@ -38,6 +38,8 @@
 }
 
 * { box-sizing: border-box; }
+/* Sello de reCAPTCHA (App Check): se oculta porque tapa la barra; el aviso está en la política de privacidad. */
+.grecaptcha-badge { visibility: hidden !important; }
 html {
   touch-action: manipulation;          /* sin zoom con doble toque */
   -webkit-text-size-adjust: 100%;

@@ -5,8 +5,9 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=70";
-import { icono, pintarIconos } from "./iconos.js?v=70";
+import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
+import { firebaseConfig as configReal, appCheckClave } from "./firebase-config.js?v=71";
+import { icono, pintarIconos } from "./iconos.js?v=71";
 
 export { icono };
 pintarIconos();
@@ -21,7 +22,13 @@ export const configurado = simulador || !String(configReal.apiKey).startsWith("P
 // Cada parte (cliente, motorizado, administrador) guarda su propia sesión. Así, abrir el panel
 // en el mismo navegador no cierra la sesión del cliente ni la del motorizado, y viceversa.
 const ROL = /admin\.html$/.test(location.pathname) ? "admin" : /moto\.html$/.test(location.pathname) ? "moto" : "cliente";
+// App Check: la base de datos solo atiende a esta página y al APK (no a programas hechos por otros).
+function protegerApp(a) {
+  if (simulador || !appCheckClave) return;
+  try { initializeAppCheck(a, { provider: new ReCaptchaV3Provider(appCheckClave), isTokenAutoRefreshEnabled: true }); } catch (e) { console.warn("App Check", e); }
+}
 export const app = initializeApp(firebaseConfig, ROL);
+protegerApp(app);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 if (simulador) {
@@ -31,7 +38,9 @@ if (simulador) {
 
 // Segunda conexión de Firebase: permite al admin crear cuentas sin cerrar su propia sesión.
 export function authSecundaria() {
-  const a = getAuth(initializeApp(firebaseConfig, "crear-" + Date.now()));
+  const otra = initializeApp(firebaseConfig, "crear-" + Date.now());
+  protegerApp(otra);
+  const a = getAuth(otra);
   if (simulador) connectAuthEmulator(a, "http://127.0.0.1:9099", { disableWarnings: true });
   return a;
 }

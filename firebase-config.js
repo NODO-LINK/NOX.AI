@@ -8,3 +8,7 @@ export const firebaseConfig = {
   messagingSenderId: "774042478509",
   appId: "1:774042478509:web:643775ddca658774aba324",
 };
+
+// App Check (protección extra): pega aquí la "clave del sitio" de reCAPTCHA v3 entre las comillas.
+// Mientras esté vacía, App Check queda apagado y la app funciona igual.
+export const appCheckClave = "";
