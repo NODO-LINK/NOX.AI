@@ -5,8 +5,8 @@ import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig as configReal } from "./firebase-config.js?v=63";
-import { icono, pintarIconos } from "./iconos.js?v=63";
+import { firebaseConfig as configReal } from "./firebase-config.js?v=64";
+import { icono, pintarIconos } from "./iconos.js?v=64";
 
 export { icono };
 pintarIconos();
@@ -317,6 +317,9 @@ if (window.L && window.L.Map && !window.L.Map.prototype._quitarSeguro) {
   window.L.Map.prototype._quitarSeguro = true;
 }
 
+// Color de la marca según la app (morado; en la de pasajeros, dorado).
+export const colorMarca = () => (typeof document !== "undefined" && document.documentElement.dataset.app === "pasajero" ? "#d4af37" : "#7c3aed");
+
 // Íconos de mapa (Leaflet).
 const pin = (color, letra) => window.L.divIcon({
   className: "",
@@ -326,7 +329,7 @@ const pin = (color, letra) => window.L.divIcon({
 });
 export const ICONOS = {
   get origen() { return pin("#16a34a", "A"); },
-  get destino() { return pin("#7c3aed", "B"); },
+  get destino() { return pin(colorMarca(), "B"); },
   get moto() { return pin("#111827", icono("moto")); },
   parada(n) { return pin("#f59e0b", n); },
 };
@@ -784,10 +787,12 @@ const CLAVE_TEMA = "whereapp.tema";
 export function aplicarTema() {
   let t = null;
   try { t = localStorage.getItem(CLAVE_TEMA); } catch {}
-  if (!t) t = matchMedia("(prefers-color-scheme: dark)").matches ? "oscuro" : "claro";
+  // La app de pasajeros (negro y dorado) arranca en oscuro; las demás siguen al teléfono.
+  const pasajero = document.documentElement.dataset.app === "pasajero";
+  if (!t) t = pasajero || matchMedia("(prefers-color-scheme: dark)").matches ? "oscuro" : "claro";
   document.documentElement.dataset.tema = t;
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = t === "oscuro" ? "#141021" : "#ffffff";
+  if (meta) meta.content = t === "oscuro" ? (pasajero ? "#070707" : "#141021") : (pasajero ? "#faf8f2" : "#ffffff");
   return t;
 }
 aplicarTema();

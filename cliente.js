@@ -12,7 +12,8 @@ import {
   pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
-} from "./comun.js?v=63";
+  colorMarca,
+} from "./comun.js?v=64";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -495,7 +496,7 @@ function iniciar() {
       if (editable) marca.on("dragend", (e) => { pedido.puntos[i] = e.target.getLatLng(); alMover && alMover(); });
       if (alTocar) marca.on("click", () => alTocar(i));
     });
-    if (pedido.linea && n >= 2) L.polyline(pedido.linea, { color: "#7c3aed", weight: 5, opacity: .75 }).addTo(capa);
+    if (pedido.linea && n >= 2) L.polyline(pedido.linea, { color: colorMarca(), weight: 5, opacity: .75 }).addTo(capa);
   }
 
   let vueltaRuta = 0;
@@ -510,7 +511,7 @@ function iniciar() {
 
   // Mis lugares (Mi casa, Trabajo, casa de un amigo…), guardados en este teléfono.
   const TIPOS_MIOS = {
-    casa: { nombre: "Mi casa", icono: "casa", color: "#7c3aed", sugerido: "Mi casa" },
+    casa: { nombre: "Mi casa", icono: "casa", color: "#d4af37", sugerido: "Mi casa" },
     trabajo: { nombre: "Trabajo", icono: "trabajo", color: "#0ea5e9", sugerido: "Trabajo" },
     amigo: { nombre: "Familia o amigo", icono: "amigos", color: "#ec4899", sugerido: "Casa de " },
     otro: { nombre: "Otro", icono: "favorito", color: "#f59e0b", sugerido: "" },
@@ -773,7 +774,7 @@ function iniciar() {
         return `<button type="button" data-k="${k}"><span class="lugar" style="background:${color}">${icono(ic)}</span><span><b>${esc(l.n)}</b><small>${esc(sub)}</small></span></button>`;
       }).join("")
         + (q.length >= 2 && !lista.length ? `<p class="nota">No encontramos «${esc(input.value.trim())}». Márcalo en el mapa con el botón ${icono("pin")}.</p>` : "")
-        + `<button type="button" data-mapa><span class="lugar" style="background:#7c3aed">${icono("pin")}</span><span><b>Marcar en el mapa</b><small>Toca el lugar exacto</small></span></button>`;
+        + `<button type="button" data-mapa><span class="lugar" style="background:#d4af37">${icono("pin")}</span><span><b>Marcar en el mapa</b><small>Toca el lugar exacto</small></span></button>`;
       caja.hidden = false;
       // Se elige al soltar (click), no al poner el dedo: así se puede deslizar la lista sin elegir nada.
       // El mousedown se frena para que el campo no pierda el foco antes del click.
@@ -847,9 +848,9 @@ function iniciar() {
     // Qué letra y color lleva la mira: la del punto que se va a poner o mover.
     const letraMira = () => {
       const n = pedido.puntos.length;
-      if (ajustando != null) return { l: letraPunto(ajustando, n), c: ajustando === 0 ? "#16a34a" : ajustando === n - 1 ? "#7c3aed" : "#f59e0b", q: ajustando === 0 ? "el punto A" : ajustando === n - 1 ? "el punto B" : `la parada ${ajustando}` };
+      if (ajustando != null) return { l: letraPunto(ajustando, n), c: ajustando === 0 ? "#16a34a" : ajustando === n - 1 ? colorMarca() : "#f59e0b", q: ajustando === 0 ? "el punto A" : ajustando === n - 1 ? "el punto B" : `la parada ${ajustando}` };
       if (n === 0) return { l: "A", c: "#16a34a", q: "A" };
-      if (n === 1) return { l: "B", c: "#7c3aed", q: "B" };
+      if (n === 1) return { l: "B", c: colorMarca(), q: "B" };
       return { l: String(n - 1), c: "#f59e0b", q: "la parada" };
     };
     // Mover un punto ya puesto: el mapa se centra en él y la mira toma su lugar.
@@ -1442,7 +1443,7 @@ function iniciar() {
       // El mapa va antes de la tarjeta del motorizado: es lo primero que se quiere ver.
       $("#vivo").after($(".mapa-vivo-caja"), $(".leyenda-mapa"));
       let marcaMoto = null, centrado = false, siguiendo = true, animando = null;
-      const camino = L.polyline([], { color: "#7c3aed", weight: 5, opacity: 0.85, dashArray: "2 9", lineCap: "round" }).addTo(mapa);
+      const camino = L.polyline([], { color: colorMarca(), weight: 5, opacity: 0.85, dashArray: "2 9", lineCap: "round" }).addTo(mapa);
       const rastro = L.polyline([], { color: "#64748b", weight: 4, opacity: 0.7 }).addTo(mapa);
       const botonSeguir = $("#seguir-moto");
       const pintarSeguir = () => botonSeguir.classList.toggle("activo", siguiendo);

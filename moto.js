@@ -10,7 +10,7 @@ import {
   hoyLocal,
   DOCUMENTOS, estadoDoc,
   enApp,
-} from "./comun.js?v=63";
+} from "./comun.js?v=64";
 
 if (!avisoSinConfigurar()) iniciar();
 

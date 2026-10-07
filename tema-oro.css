@@ -1,0 +1,100 @@
+/* Whereapp — app de pasajeros: negro y dorado. Se carga solo en index.html, después de estilos.css. */
+[data-app="pasajero"] {
+  --oro: #d4af37;
+  --oro-claro: #f5d77a;
+  --oro-oscuro: #a8801a;
+  --sobre-oro: #1a1406;              /* texto sobre fondos dorados */
+  --marca: #b8901f;                  /* en claro: dorado más oscuro para que se lea sobre blanco */
+  --marca-oscura: #8a6a12;
+  --marca-clara: #e3c25b;
+  --rosa: #d4af37;
+  --marca-suave: #f7efd6;
+  --degradado: linear-gradient(135deg, #f7e08a 0%, #d4af37 48%, #a8801a 100%);
+  --texto: #121212;
+  --texto-2: #6b6450;
+  --fondo: #ffffff;
+  --fondo-2: #f5f1e6;
+  --superficie: #ffffff;
+  --fondo-pagina: #faf8f2;
+  --borde: rgba(168, 128, 26, .16);
+  --vidrio: rgba(255, 255, 255, .74);
+  --vidrio-fuerte: rgba(255, 255, 255, .93);
+  --sombra-1: 0 1px 2px rgba(20, 16, 4, .06), 0 4px 14px rgba(20, 16, 4, .07);
+  --sombra-2: 0 2px 4px rgba(20, 16, 4, .06), 0 10px 30px rgba(20, 16, 4, .12);
+  --sombra-3: 0 4px 8px rgba(20, 16, 4, .08), 0 22px 50px rgba(20, 16, 4, .2);
+  --brillo: 0 8px 24px rgba(212, 175, 55, .35), inset 0 1px 0 rgba(255, 255, 255, .45);
+  --precio-fondo: linear-gradient(135deg, #fbf5e2, #f6ecd0);
+  --apagado: #ddd6c4;
+}
+[data-app="pasajero"][data-tema="oscuro"] {
+  --marca: #d4af37;
+  --marca-oscura: #b8901f;
+  --marca-clara: #f5d77a;
+  --marca-suave: #262012;
+  --texto: #f6efd9;
+  --texto-2: #b3a98c;
+  --fondo: #121212;
+  --fondo-2: #1b1a17;
+  --superficie: #121212;
+  --fondo-pagina: #070707;
+  --borde: rgba(212, 175, 55, .18);
+  --vidrio: rgba(16, 16, 16, .78);
+  --vidrio-fuerte: rgba(16, 16, 16, .94);
+  --borde-vidrio: rgba(212, 175, 55, .14);
+  --precio-fondo: linear-gradient(135deg, #1f1a0e, #14110a);
+  --apagado: #3a362c;
+  --brillo: 0 8px 26px rgba(212, 175, 55, .28), inset 0 1px 0 rgba(255, 255, 255, .35);
+}
+
+/* Fondo vivo: luces doradas suaves (en negro se ven como reflejos de oro). */
+[data-app="pasajero"] body::before {
+  background:
+    radial-gradient(38% 30% at 20% 15%, rgba(212, 175, 55, .22), transparent 70%),
+    radial-gradient(30% 26% at 85% 25%, rgba(245, 215, 122, .14), transparent 70%),
+    radial-gradient(40% 34% at 70% 85%, rgba(168, 128, 26, .16), transparent 70%),
+    radial-gradient(30% 30% at 10% 80%, rgba(212, 175, 55, .10), transparent 70%);
+}
+
+/* Logo con brillo dorado. */
+[data-app="pasajero"] .logo { background-image: linear-gradient(110deg, #a8801a, #f5d77a, #d4af37, #a8801a); }
+
+/* Todo lo que va sobre el degradado dorado lleva texto oscuro (el blanco no se lee sobre oro). */
+[data-app="pasajero"] .boton:not(.secundario):not(.peligro):not(.verde),
+[data-app="pasajero"] .segmento button.activo,
+[data-app="pasajero"] .avatar,
+[data-app="pasajero"] .letra-b,
+[data-app="pasajero"] .estado-carrera .grande,
+[data-app="pasajero"] .vivo,
+[data-app="pasajero"] .widget-icono,
+[data-app="pasajero"] #agregar.activo,
+[data-app="pasajero"] #sel-agregar.activo,
+[data-app="pasajero"] .controles-mapa a.activo,
+[data-app="pasajero"] .burbuja.mia,
+[data-app="pasajero"] .chip-fav.nuevo,
+[data-app="pasajero"] .seguir-moto.activo,
+[data-app="pasajero"] .anuncio { color: var(--sobre-oro) !important; }
+[data-app="pasajero"] .vivo .ico, [data-app="pasajero"] .anuncio .quitar { color: var(--sobre-oro); }
+[data-app="pasajero"] .anuncio .boton:not(.verde) { background: #121212; color: var(--oro-claro) !important; }
+[data-app="pasajero"] .avatar { box-shadow: 0 0 0 3px var(--superficie), 0 0 0 5px rgba(212, 175, 55, .5), var(--sombra-1); }
+[data-app="pasajero"] input:focus, [data-app="pasajero"] select:focus, [data-app="pasajero"] textarea:focus { box-shadow: 0 0 0 5px rgba(212, 175, 55, .18); }
+[data-app="pasajero"] .msg-detalle.de-cliente { background: #f7efd6; }
+
+/* En oscuro: barra, cabecera y tarjetas negras con borde de oro fino. */
+[data-app="pasajero"][data-tema="oscuro"] .tarjeta,
+[data-app="pasajero"][data-tema="oscuro"] .caja,
+[data-app="pasajero"][data-tema="oscuro"] .cabecera,
+[data-app="pasajero"][data-tema="oscuro"] .barra { border: 1px solid rgba(212, 175, 55, .14); }
+[data-app="pasajero"][data-tema="oscuro"] .barra button.activo { color: var(--oro); text-shadow: 0 0 12px rgba(212, 175, 55, .45); }
+[data-app="pasajero"][data-tema="oscuro"] .leaflet-container { background: #0d0d0d; }
+[data-app="pasajero"][data-tema="oscuro"] .aviso { background: rgba(246, 239, 217, .96); color: #121212; }
+[data-app="pasajero"][data-tema="oscuro"] .leaflet-control-attribution { background: rgba(10, 10, 10, .7) !important; }
+[data-app="pasajero"][data-tema="oscuro"] .leaflet-tooltip.nombre-lugar { background: rgba(14, 14, 14, .92); }
+
+/* Botón principal: destello dorado que pasa cada tanto. */
+[data-app="pasajero"] .boton:not(.secundario):not(.peligro):not(.verde)::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, .55) 50%, transparent 65%);
+  background-size: 250% 100%; animation: destello-oro 4.5s ease-in-out infinite;
+}
+@keyframes destello-oro { 0%, 60% { background-position: 150% 0; } 100% { background-position: -50% 0; } }
+@media (prefers-reduced-motion: reduce) { [data-app="pasajero"] .boton::after { animation: none !important; } }
