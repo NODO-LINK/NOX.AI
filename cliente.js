@@ -13,7 +13,8 @@ import {
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca,
-} from "./comun.js?v=64";
+} from "./comun.js?v=66";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar } from "./efectos.js?v=66";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -221,13 +222,13 @@ function iniciar() {
       escucharOfertas(ahora);
       if (ahora && antes && ahora.id === antes.id && ahora.llegoEn && !antes.llegoEn && !ahora.recogido) {
         const quien = (ahora.motoNombre || "Tu motorizado").split(" ")[0];
-        aviso(`¡${quien} llegó! Está afuera esperándote`);
+        isla(`¡${quien} llegó!`, "Está afuera esperándote en el punto A", icono("campana"));
         notificarCarrera(`¡${quien} llegó!`, "Está afuera esperándote en el punto A", { sonar: true });
       }
       if (ahora && antes && antes.estado !== ahora.estado) {
-        if (ahora.estado === "aceptada") aviso(`¡${ahora.motoNombre} aceptó tu carrera!`);
+        if (ahora.estado === "aceptada") { isla(`¡${String(ahora.motoNombre || "Tu motorizado").split(" ")[0]} aceptó tu carrera!`, `${ahora.motoMoto || "Moto"}${ahora.motoPlaca ? ` · Placa ${ahora.motoPlaca}` : ""}`, icono("moto")); confeti(); }
         if (ahora.estado === "esperando" && antes.estado === "aceptada") aviso("El motorizado canceló. Buscando otro…");
-        if (ahora.estado === "terminada") aviso("Carrera terminada");
+        if (ahora.estado === "terminada") { isla("¡Llegaste!", "Carrera terminada. Gracias por viajar con Whereapp", icono("check")); confeti(); }
         if (rutaActual !== "carrera") return ir("carrera");
       }
       // Al abrir la app con una carrera activa, se va directo a "Mi carrera".
@@ -247,7 +248,7 @@ function iniciar() {
   }
 
   // "pedir" (a un motorizado) y "publicar" (a todos, con el precio que pone el cliente) usan la misma pantalla.
-  let cerrarSelector = null;
+  let cerrarSelector = null, ultimoPrecio = 0;
   let anuncio = null, publicidad = null;
   const clavePublicidad = () => "whereapp.publicidad." + ((publicidad && fecha(publicidad.actualizado)?.getTime()) || 0);
   const verPublicidad = () => { try { if (localStorage.getItem(clavePublicidad()) === "x") return ""; } catch {} return htmlPublicidad(publicidad); };
@@ -356,10 +357,13 @@ function iniciar() {
     const t = tarifas[pedido.tipo];
     const extras = recargos(tarifas);
     $("#precio").innerHTML = (pedido.km != null && n >= 2
-      ? `<span>${resumenRecorrido()}</span><b>${usd(precio(tarifas, pedido.tipo, pedido.km))}${tarifas.tasa > 0 ? `<small class="en-bs">${bs(aBs(precio(tarifas, pedido.tipo, pedido.km), tarifas.tasa))}</small>` : ""}</b>`
+      ? `<span>${resumenRecorrido()}</span><b><span class="monto">${usd(precio(tarifas, pedido.tipo, pedido.km))}</span>${tarifas.tasa > 0 ? `<small class="en-bs">${bs(aBs(precio(tarifas, pedido.tipo, pedido.km), tarifas.tasa))}</small>` : ""}</b>`
       : n >= 2 ? `<span>${icono("ruta")} Calculando el precio…</span><span class="calculando"></span>`
       : `<span>${usd(t.base)} + ${usd(t.porKm)} por km</span><span class="nota">Marca A y B</span>`)
       + (extras.length ? `<small class="recargo">${icono(extras.some((x) => /lluvia/i.test(x.nombre)) ? "lluvia" : "luna")} Incluye ${extras.map((x) => `${x.nombre.toLowerCase()} (+${usd(x.monto)})`).join(" y ")}</small>` : "");
+    // El precio "cuenta" hasta su valor cuando cambia.
+    const monto = $("#precio .monto");
+    if (monto) { const v = precio(tarifas, pedido.tipo, pedido.km); monto.dataset.valor = ultimoPrecio; contar(monto, v, usd); ultimoPrecio = v; }
     if (pub) $("#precio").hidden = true;   // al publicar, el precio lo pone el cliente (abajo se muestra el sugerido)
     if (bloqueado) $("#pedir").outerHTML = `<p class="pildora mal" style="margin-top:14px">Tu cédula está bloqueada. Comunícate con el administrador.</p>`;
     $$("#tipo button").forEach((b) => b.classList.toggle("activo", b.dataset.t === pedido.tipo));
@@ -496,7 +500,10 @@ function iniciar() {
       if (editable) marca.on("dragend", (e) => { pedido.puntos[i] = e.target.getLatLng(); alMover && alMover(); });
       if (alTocar) marca.on("click", () => alTocar(i));
     });
-    if (pedido.linea && n >= 2) L.polyline(pedido.linea, { color: colorMarca(), weight: 5, opacity: .75 }).addTo(capa);
+    if (pedido.linea && n >= 2) {
+      const pl = L.polyline(pedido.linea, { color: colorMarca(), weight: 5, opacity: .75 }).addTo(capa);
+      dibujarLinea(pl, pedido.linea.length + ":" + pedido.linea[0] + ":" + pedido.linea[pedido.linea.length - 1]);
+    }
   }
 
   let vueltaRuta = 0;
@@ -1113,6 +1120,7 @@ function iniciar() {
         creada: serverTimestamp(),
       });
       await lote.commit();
+      vibrar([30, 60, 30]);
       Object.assign(pedido, { puntos: [], refs: [], retorno: false, agregando: false, km: null, linea: null, nota: "", para: null, oferta: null, ofertaBs: null, ofertaTocada: false, paradaPendiente: false, yoIntentado: false });
       ir("carrera");
     } catch (e) {
@@ -1174,7 +1182,7 @@ function iniciar() {
         </article>`).join("") : `<div class="vacio">${icono("moto")}<b>No hay motorizados de turno ahora.</b><br>Intenta en un rato; esta lista se actualiza sola.</div>`}
       </div>`;
     $("#vista").insertAdjacentHTML("beforeend", `<p class="nota pie-legal">${ENLACE_POLITICAS}</p>`);
-    $$("[data-perfil]").forEach((b) => (b.onclick = () => verPerfil(motos.find((x) => x.id === b.dataset.perfil))));
+    $$("[data-perfil]").forEach((b) => (b.onclick = () => verPerfil(motos.find((x) => x.id === b.dataset.perfil), b.closest("article")?.querySelector(".avatar"))));
     pintarFotos($("#vista"));
     if ($("#cerrar-publicidad")) $("#cerrar-publicidad").onclick = () => { try { localStorage.setItem(clavePublicidad(), "x"); } catch {} $(".publicidad").remove(); };
     // Cuenta los toques del botón (para decirle al negocio cuánta gente se interesó).
@@ -1231,7 +1239,7 @@ function iniciar() {
         const o = nuevas[0], m = motos.find((x) => x.id === o.motoUid);
         const quien = String(m.nombre).split(" ")[0];
         notificar(`${quien} te ofrece ${usd(o.precio)}`, "Toca para ver las ofertas de los motorizados", { sonar: true });
-        aviso(`Nueva oferta: ${quien} · ${usd(o.precio)}`);
+        isla(`Nueva oferta: ${quien}`, `Te ofrece ${usd(o.precio)} · tócala para verla`, icono("dinero"));
       }
       ofertas.primera = false;
       pintarOfertas();
@@ -1333,7 +1341,7 @@ function iniciar() {
   }
 
   // Perfil del motorizado: datos, seguridad y opiniones de otros clientes.
-  async function verPerfil(m) {
+  async function verPerfil(m, origen = null) {
     if (!m) return;
     const fondo = document.createElement("div");
     fondo.className = "modal";
@@ -1357,6 +1365,8 @@ function iniciar() {
       <div class="opiniones" id="opiniones"><p class="nota">Cargando…</p></div>
       <button class="boton secundario" data-no>Cerrar</button></div>`;
     document.body.append(fondo);
+    // La foto del motorizado "vuela" desde la lista hasta su perfil.
+    if (origen) volar(origen, fondo.querySelector(".foto-perfil"));
     pintarFotos(fondo);
     const cerrar = () => fondo.remove();
     $("[data-no]", fondo).onclick = cerrar;
@@ -1444,7 +1454,7 @@ function iniciar() {
       $("#vivo").after($(".mapa-vivo-caja"), $(".leyenda-mapa"));
       let marcaMoto = null, centrado = false, siguiendo = true, animando = null;
       const camino = L.polyline([], { color: colorMarca(), weight: 5, opacity: 0.85, dashArray: "2 9", lineCap: "round" }).addTo(mapa);
-      const rastro = L.polyline([], { color: "#64748b", weight: 4, opacity: 0.7 }).addTo(mapa);
+      const rastro = L.polyline([], { color: "#f5d77a", weight: 5, opacity: 0.8, className: "estela", lineCap: "round" }).addTo(mapa);
       const botonSeguir = $("#seguir-moto");
       const pintarSeguir = () => botonSeguir.classList.toggle("activo", siguiendo);
       botonSeguir.onclick = () => { siguiendo = !siguiendo; pintarSeguir(); if (siguiendo) encuadrarMoto(true); };
@@ -1479,7 +1489,7 @@ function iniciar() {
         // Camino que le falta (por calles), si ya se calculó.
         const real = seguimiento.memoria.real;
         camino.setLatLngs(real && real.linea && !info.llego ? real.linea : []);
-        if (!marcaMoto) marcaMoto = L.marker([u.lat, u.lng], { icon: ICONOS.moto, zIndexOffset: 1000 }).addTo(mapa);
+        if (!marcaMoto) { marcaMoto = L.marker([u.lat, u.lng], { icon: ICONOS.moto, zIndexOffset: 1000 }).addTo(mapa); marcaMoto.getElement()?.classList.add("moto-viva"); }
         else { const a = marcaMoto.getLatLng(); if (a.lat !== u.lat || a.lng !== u.lng) deslizar(a, u); }
         if (!centrado) { mapa.fitBounds(limites.extend([u.lat, u.lng]).pad(0.3), { animate: false }); centrado = true; }
         else if (siguiendo) encuadrarMoto(true);
