@@ -6,8 +6,8 @@ import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
-import { firebaseConfig as configReal, appCheckClave } from "./firebase-config.js?v=73";
-import { icono, pintarIconos } from "./iconos.js?v=73";
+import { firebaseConfig as configReal, appCheckClave } from "./firebase-config.js?v=74";
+import { icono, pintarIconos } from "./iconos.js?v=74";
 
 export { icono };
 pintarIconos();
@@ -225,9 +225,11 @@ export const TARIFAS_BASE = {
   // Recargos: el nocturno se aplica solo en su horario; el de lluvia, mientras el admin lo tenga encendido.
   nocturna: { activa: false, desde: "20:00", hasta: "05:00", extra: 0.5 },
   lluvia: { activa: false, extra: 0.5 },
+  // Descuento del 50% para todas las carreras (lo enciende el admin, con su motivo).
+  descuento: { activa: false, motivo: "" },
   tasa: 0,
 };
-const conBase = (d) => ({ ...TARIFAS_BASE, ...d, nocturna: { ...TARIFAS_BASE.nocturna, ...(d.nocturna || {}) }, lluvia: { ...TARIFAS_BASE.lluvia, ...(d.lluvia || {}) } });
+const conBase = (d) => ({ ...TARIFAS_BASE, ...d, nocturna: { ...TARIFAS_BASE.nocturna, ...(d.nocturna || {}) }, lluvia: { ...TARIFAS_BASE.lluvia, ...(d.lluvia || {}) }, descuento: { ...TARIFAS_BASE.descuento, ...(d.descuento || {}) } });
 export async function leerTarifas() {
   try {
     const s = await getDoc(doc(db, "config", "general"));
@@ -251,8 +253,17 @@ export function recargos(t, cuando = new Date()) {
   if (t.lluvia && t.lluvia.activa) r.push({ nombre: "Recargo por lluvia", monto: Number(t.lluvia.extra) || 0 });
   return r.filter((x) => x.monto > 0);
 }
-export const precio = (t, tipo, km, cuando = new Date()) =>
+// Descuento que aplica ahora: { pct: 50, motivo } o null.
+export const descuento = (t) => (t && t.descuento && t.descuento.activa && String(t.descuento.motivo || "").trim() ? { pct: 50, motivo: String(t.descuento.motivo).trim() } : null);
+// Precio sin descuento (para mostrarlo tachado).
+export const precioLleno = (t, tipo, km, cuando = new Date()) =>
   Math.round((t[tipo].base + t[tipo].porKm * km + recargos(t, cuando).reduce((s, x) => s + x.monto, 0)) * 100) / 100;
+export const precio = (t, tipo, km, cuando = new Date()) => {
+  const p = precioLleno(t, tipo, km, cuando);
+  return descuento(t) ? Math.round(p * 50) / 100 : p;
+};
+// Aviso del descuento en una carrera (para el motorizado, el admin y el cliente).
+export const textoDescuento = (c) => (c && c.descuento ? `50% de descuento · ${c.descuento.motivo}` : "");
 
 // Distancia por calle (OSRM, gratis). Si falla, línea recta × 1,3.
 export function lineaRecta(a, b) {

@@ -9,8 +9,8 @@ import {
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar, escucharTarifas, aBs, lineaRecta,
   hoyLocal,
   DOCUMENTOS, estadoDoc,
-  enApp,
-} from "./comun.js?v=73";
+  enApp, textoDescuento,
+} from "./comun.js?v=74";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -166,7 +166,7 @@ function iniciar() {
         nuevas.forEach((c) => {
           const titulo = c.paraMoto ? "🏍️ ¡Un cliente te pidió a ti!" : c.ofertaCliente ? "🏍️ Carrera publicada · precio del cliente" : "🏍️ ¡Carrera nueva!";
           const ruta = `${c.origen.dir} → ${c.destino.dir}${(c.paradas || []).length ? ` (+${c.paradas.length} parada${c.paradas.length > 1 ? "s" : ""})` : ""}`;
-          notificar(titulo, `${textoCobro(c)} · ${Number(c.km) || 0} km\n${ruta}`, { tag: "carrera-" + c.id, urgente: true });
+          notificar(titulo, `${textoCobro(c)} · ${Number(c.km) || 0} km${c.descuento ? " · -50%" : ""}\n${ruta}`, { tag: "carrera-" + c.id, urgente: true });
         });
       }
       primeraCarga = false;
@@ -503,7 +503,8 @@ function iniciar() {
   const tipoTexto = (c) => (c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`);
   const tarjetaCarrera = (c) => `
     <article class="tarjeta"><div class="info">
-      <h3>${tipoTexto(c)} · ${usd(c.precio)} · ${esc(c.km)} km ${c.paraMoto ? `<span class="pildora">Para ti</span>` : ""}${c.ofertaCliente ? `<span class="pildora oferta-pill">Precio del cliente</span>` : ""}</h3>
+      <h3>${tipoTexto(c)} · ${usd(c.precio)} · ${esc(c.km)} km ${c.paraMoto ? `<span class="pildora">Para ti</span>` : ""}${c.ofertaCliente ? `<span class="pildora oferta-pill">Precio del cliente</span>` : ""}${c.descuento ? `<span class="pildora pill-descuento">-50%</span>` : ""}</h3>
+      ${c.descuento ? `<p class="aviso-descuento">${icono("dinero")} <b>Carrera con 50% de descuento.</b> Motivo: ${esc(c.descuento.motivo)}</p>` : ""}
       <p class="cobro">${icono((FORMAS_PAGO[c.formaPago] || FORMAS_PAGO.usd).icono)} <b>Cobrar:</b> ${esc(textoCobro(c))}</p>
       <p><b>A:</b> ${esc(c.origen.dir)}</p>
       ${(c.paradas || []).map((p, i) => `<p><b>Parada ${i + 1}:</b> ${esc(p.dir)}</p>`).join("")}
@@ -655,6 +656,7 @@ function iniciar() {
         <div class="fila"><span>Servicio</span><b>${tipoTexto(c)}</b></div>
         <div class="fila"><span>Cliente</span><span>${esc(c.clienteNombre)}</span></div>
         <div class="fila cobrar"><span>Cobrar</span><b>${esc(textoCobro(c))}</b></div>
+        ${c.descuento ? `<div class="fila"><span>Descuento</span><b class="texto-descuento">${esc(textoDescuento(c))}</b></div>` : ""}
         <div class="fila"><span>Distancia</span><span>${esc(c.km)} km</span></div>
         ${c.nota ? `<div class="fila"><span>Llevar</span><span>${esc(c.nota)}</span></div>` : ""}
       </div>

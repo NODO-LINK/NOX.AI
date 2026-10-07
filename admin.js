@@ -14,8 +14,8 @@ import {
   hoyLocal,
   enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad, enlacePublicidad,
   DOCUMENTOS, estadoDoc, resumenDocs,
-  filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles,
-} from "./comun.js?v=73";
+  filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles, textoDescuento,
+} from "./comun.js?v=74";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -554,7 +554,7 @@ function iniciar() {
         const cancel = [...(Array.isArray(c.cancelaciones) ? c.cancelaciones : []).map((x) => `${icono("moto")} ${esc(x.motoNombre)} canceló: ${esc(x.motivo)}`),
           c.cancelacion ? `${c.cancelacion.por === "admin" ? `${icono("escudo")} Admin` : `${icono("usuario")} Cliente`} canceló: ${esc(c.cancelacion.motivo)}` : ""].filter(Boolean);
         return `<article class="tarjeta tocable-carrera" data-ver-carrera="${esc(c.id)}"><div class="info">
-          <h3>${c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`} · ${usd(c.precio)} · ${esc(c.km)} km <span class="pildora ${cl}">${tx}</span></h3>
+          <h3>${c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`} · ${usd(c.precio)} · ${esc(c.km)} km <span class="pildora ${cl}">${tx}</span>${c.descuento ? ` <span class="pildora pill-descuento">-50%</span>` : ""}</h3>
           <p>${icono("usuario")} ${esc(c.clienteNombre)}${cedulas[c.clienteUid] ? ` · C.I. ${esc(cedulas[c.clienteUid])}` : ""} · ${esc(c.clienteTel)}</p>
           <p>${icono("moto")} ${c.motoNombre && c.motoUid ? esc(c.motoNombre) : c.paraMotoNombre ? `Pedida a ${esc(c.paraMotoNombre)}` : "—"}</p>
           <p>A: ${esc(c.origen?.dir)} ${icono("flecha")} B: ${esc(c.destino?.dir)}${c.paradas?.length ? ` · ${c.paradas.length} parada${c.paradas.length > 1 ? "s" : ""}` : ""}${c.retorno ? " · ida y vuelta" : ""}</p>
@@ -632,6 +632,7 @@ function iniciar() {
         ${c.tasa ? fila("Tasa usada", `Bs ${Number(c.tasa).toFixed(2).replace(".", ",")} por $1`) : ""}
         ${c.ofertaCliente ? fila("Precio del cliente", `${usd(c.precioCliente ?? c.precio)}${c.precioSugerido ? ` (sugerido ${usd(c.precioSugerido)})` : ""}`) : ""}
         ${c.contraoferta ? fila("Contraoferta aceptada", usd(c.precio)) : ""}
+        ${c.descuento ? fila("Descuento", esc(textoDescuento(c))) : ""}
         ${(c.recargos || []).map((r) => fila(`Recargo ${esc(r.nombre)}`, `+${usd(r.monto)}`)).join("")}</div>
       <h3 class="sub-detalle">${icono("usuario")} Cliente</h3>
       <div class="caja-detalle">${fila("Nombre", esc(c.clienteNombre))}${fila("Cédula", esc(cliente?.cedula || cedulas[c.clienteUid] || "—"))}${fila("Teléfono", tel(c.clienteTel))}
@@ -856,6 +857,10 @@ function iniciar() {
         <div class="dos"><div><label>Desde</label><input name="nocheDesde" type="time" value="${esc(t.nocturna.desde)}"></div>
         <div><label>Hasta</label><input name="nocheHasta" type="time" value="${esc(t.nocturna.hasta)}"></div></div>
         <label>Monto extra ($)</label><input name="nocheExtra" type="number" step="0.01" min="0" value="${t.nocturna.extra}"></div>
+      <div class="caja"><h2>${icono("dinero")} Descuento del 50%</h2>
+        <label class="opcion"><input type="checkbox" name="descuentoActiva" ${t.descuento.activa ? "checked" : ""}><span>Activar 50% de descuento en todas las carreras</span></label>
+        <label>Motivo (lo ven los clientes y los motorizados)</label><input name="descuentoMotivo" maxlength="80" value="${esc(t.descuento.motivo || "")}" placeholder="Ej.: Inicio de clases, Día del niño…">
+        <p class="nota">Los clientes ven el precio a la mitad y el motivo. El motorizado ve "50% de descuento" y el motivo antes de aceptar, y cobra la mitad. Apágalo cuando termine la promoción.</p></div>
       <div class="caja"><h2>${icono("lluvia")} Recargo por lluvia</h2>
         <label class="opcion"><input type="checkbox" name="lluviaActiva" ${t.lluvia.activa ? "checked" : ""}><span>Está lloviendo: cobrar recargo ahora</span></label>
         <label>Monto extra ($)</label><input name="lluviaExtra" type="number" step="0.01" min="0" value="${t.lluvia.extra}">
@@ -870,10 +875,12 @@ function iniciar() {
         delivery: { base: num("db"), porKm: num("dk") }, mototaxi: { base: num("mb"), porKm: num("mk") }, cuota: num("cuota"), diasCuota: num("dias") || 15,
         nocturna: { activa: fd.get("nocheActiva") === "on", desde: fd.get("nocheDesde") || "20:00", hasta: fd.get("nocheHasta") || "05:00", extra: num("nocheExtra") },
         lluvia: { activa: fd.get("lluviaActiva") === "on", extra: num("lluviaExtra") },
+        descuento: { activa: fd.get("descuentoActiva") === "on", motivo: String(fd.get("descuentoMotivo") || "").trim().slice(0, 80) },
         tasa: num("tasa"),
         cobro: { banco: String(fd.get("cobroBanco") || "").trim(), telefono: String(fd.get("cobroTel") || "").trim(), cedula: String(fd.get("cobroCed") || "").trim() },
         tasaFecha: num("tasa") !== (t.tasa || 0) ? new Date() : (t.tasaFecha || new Date()),
       };
+      if (nuevas.descuento.activa && !nuevas.descuento.motivo) return aviso("Escribe el motivo del descuento");
       const bt = $("button", e.target); bt.disabled = true;
       try {
         await setDoc(doc(db, "config", "general"), nuevas);

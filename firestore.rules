@@ -134,7 +134,7 @@ service cloud.firestore {
         && (!('paradas' in request.resource.data) || (request.resource.data.paradas is list && request.resource.data.paradas.size() <= 5))
         && request.resource.data.keys().hasOnly(['clienteUid', 'clienteNombre', 'clienteTel', 'tipo', 'origen', 'destino', 'paradas', 'retorno', 'nota',
              'km', 'precio', 'recargos', 'ofertaCliente', 'precioSugerido', 'precioCliente', 'formaPago', 'tasa', 'precioBs', 'precioBsCliente',
-             'estado', 'paraMoto', 'paraMotoNombre', 'motoUid', 'calificada', 'cancelaciones', 'creada'])
+             'estado', 'paraMoto', 'paraMotoNombre', 'motoUid', 'calificada', 'cancelaciones', 'creada', 'descuento'])
         && request.resource.data.get('precioCliente', request.resource.data.precio) == request.resource.data.precio
         && request.resource.data.get('precioBsCliente', null) == request.resource.data.get('precioBs', null)
         && request.resource.data.get('calificada', false) == false
@@ -149,10 +149,15 @@ service cloud.firestore {
         && request.resource.data.get('formaPago', 'usd') in ['usd', 'bs', 'pagomovil']
         && texto(request.resource.data.get('nota', ''), 300)
         && request.resource.data.get('cancelaciones', []).size() == 0
-        // Precio normal: no menos que la tarifa por distancia (publicada: el cliente pone su precio).
+        // Descuento del 50%: solo si el admin lo tiene encendido, y con su mismo motivo.
+        && (!('descuento' in request.resource.data)
+            || (exists(/databases/$(database)/documents/config/general)
+                && tarifas().get('descuento', {}).get('activa', false) == true
+                && request.resource.data.descuento == { 'pct': 50, 'motivo': tarifas().descuento.get('motivo', '') }))
+        // Precio normal: no menos que la tarifa por distancia (la mitad con descuento; publicada: el cliente pone su precio).
         && (request.resource.data.get('ofertaCliente', false) == true || !exists(/databases/$(database)/documents/config/general)
-            || request.resource.data.precio >= tarifas()[request.resource.data.tipo].base
-                 + tarifas()[request.resource.data.tipo].porKm * (request.resource.data.km - 0.06) - 0.02)
+            || request.resource.data.precio >= (tarifas()[request.resource.data.tipo].base
+                 + tarifas()[request.resource.data.tipo].porKm * (request.resource.data.km - 0.06)) * ('descuento' in request.resource.data ? 0.5 : 1) - 0.02)
         // En Bs: con la tasa del día y que cuadre con el precio en $.
         && (request.resource.data.get('precioBs', null) == null
             || (request.resource.data.tasa is number && request.resource.data.tasa > 0

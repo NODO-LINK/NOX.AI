@@ -7,14 +7,14 @@ import {
   doc, getDoc, setDoc, addDoc, updateDoc, writeBatch, collection, query, where, onSnapshot, serverTimestamp, increment,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
+  auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, precioLleno, descuento, textoDescuento, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
   pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca,
-} from "./comun.js?v=73";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana } from "./efectos.js?v=73";
+} from "./comun.js?v=74";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana } from "./efectos.js?v=74";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -311,6 +311,7 @@ function iniciar() {
         <p class="nota">Marca a dónde vas y pon cuánto quieres pagar. Todos los motorizados de turno la ven y el primero que acepte te busca.</p>`
       : `<button class="boton secundario chico" id="volver" style="margin-top:16px">${icono("flecha", "girada")} Motorizados</button>
       <h1 class="titulo">¿A dónde vamos?</h1>`}
+      ${descuento(tarifas) ? `<div class="banner-descuento">${icono("dinero")}<span><b>¡50% de descuento en todas las carreras!</b>${esc(descuento(tarifas).motivo)}</span></div>` : ""}
       ${SERVICIOS.length > 1 ? `<div class="segmento" id="tipo">
         <button data-t="delivery">${icono("paquete")} Delivery</button><button data-t="mototaxi">${icono("moto")} Mototaxi</button>
       </div>` : ""}
@@ -368,7 +369,7 @@ function iniciar() {
     const t = tarifas[pedido.tipo];
     const extras = recargos(tarifas);
     $("#precio").innerHTML = (pedido.km != null && n >= 2
-      ? `<span>${resumenRecorrido()}</span><b><span class="monto">${usd(precio(tarifas, pedido.tipo, pedido.km))}</span>${tarifas.tasa > 0 ? `<small class="en-bs">${bs(aBs(precio(tarifas, pedido.tipo, pedido.km), tarifas.tasa))}</small>` : ""}</b>`
+      ? `<span>${resumenRecorrido()}</span><b>${descuento(tarifas) ? `<s class="tachado">${usd(precioLleno(tarifas, pedido.tipo, pedido.km))}</s>` : ""}<span class="monto">${usd(precio(tarifas, pedido.tipo, pedido.km))}</span>${tarifas.tasa > 0 ? `<small class="en-bs">${bs(aBs(precio(tarifas, pedido.tipo, pedido.km), tarifas.tasa))}</small>` : ""}</b>`
       : n >= 2 ? `<span>${icono("ruta")} Calculando el precio…</span><span class="calculando"></span>`
       : `<span>${usd(t.base)} + ${usd(t.porKm)} por km</span><span class="nota">Marca A y B</span>`)
       + (extras.length ? `<small class="recargo">${icono(extras.some((x) => /lluvia/i.test(x.nombre)) ? "lluvia" : "luna")} Incluye ${extras.map((x) => `${x.nombre.toLowerCase()} (+${usd(x.monto)})`).join(" y ")}</small>` : "");
@@ -450,7 +451,7 @@ function iniciar() {
         if (b) b.innerHTML = v ? `${icono("dinero")} Publicar por ${moneda(v)}` : "Publicar carrera";
         const equivale = v ? (enBs ? `Son ${usd(pedido.oferta)}. ` : tasa ? `Son ${bs(aBs(v, tasa))}. ` : "") : "";
         $("#nota-oferta").textContent = equivale + (sugerido == null ? "Marca A y B para ver el precio sugerido."
-          : `Precio sugerido por distancia: ${enBs ? bs(aBs(sugerido, tasa)) : usd(sugerido)}.${pedido.oferta && pedido.oferta < sugerido ? " Con menos dinero puede tardar más en aceptarse." : ""}`);
+          : `Precio sugerido${descuento(tarifas) ? " con 50% de descuento" : " por distancia"}: ${enBs ? bs(aBs(sugerido, tasa)) : usd(sugerido)}.${descuento(tarifas) ? ` (Antes ${enBs ? bs(aBs(precioLleno(tarifas, pedido.tipo, pedido.km), tasa)) : usd(precioLleno(tarifas, pedido.tipo, pedido.km))}.)` : ""}${pedido.oferta && pedido.oferta < sugerido ? " Con menos dinero puede tardar más en aceptarse." : ""}`);
         if ($("#nota-pago")) pintarPago();
       };
       if (!pedido.ofertaTocada && sugerido != null) { pedido.oferta = sugerido; pedido.ofertaBs = null; }
@@ -1116,6 +1117,8 @@ function iniciar() {
         precio: pub ? pedido.oferta : precio(tarifas, pedido.tipo, pedido.km),
         recargos: pub ? [] : recargos(tarifas),
         ...(pub ? { ofertaCliente: true, precioSugerido: precio(tarifas, pedido.tipo, pedido.km) } : {}),
+        // Descuento del 50% activo: el motorizado ve el motivo antes de aceptar.
+        ...(descuento(tarifas) ? { descuento: descuento(tarifas) } : {}),
         // Precio original del cliente: si un motorizado cancela después de una contraoferta, vuelve a este.
         precioCliente: pub ? pedido.oferta : precio(tarifas, pedido.tipo, pedido.km),
         formaPago: pedido.formaPago,
@@ -1409,6 +1412,7 @@ function iniciar() {
         ${c.nota ? `<div class="fila"><span>Llevar</span><span>${esc(c.nota)}</span></div>` : ""}
         <div class="fila"><span>Distancia</span><span>${c.km} km</span></div>
         <div class="fila"><span>Precio</span><b>${usd(c.precio)}${c.precioBs ? ` · ${bs(c.precioBs)}` : ""}</b></div>
+        ${c.descuento ? `<div class="fila"><span>Descuento</span><b class="texto-descuento">${esc(textoDescuento(c))}</b></div>` : ""}
         <div class="fila"><span>Pago</span><span>${esc((FORMAS_PAGO[c.formaPago] || FORMAS_PAGO.usd).c)}</span></div>
         <div class="fila"><span>Pedida</span><span>${fechaTexto(c.creada)}</span></div>
       </div>`;
