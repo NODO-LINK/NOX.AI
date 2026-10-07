@@ -2,7 +2,7 @@
 // Todo respeta "reducir movimiento" del teléfono y se apaga solo cuando no se ve.
 
 const quieto = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
-const ORO = ["#f5d77a", "#d4af37", "#a8801a", "#fff3c4"];
+const ORO = ["#f9a8d4", "#ec4899", "#db2777", "#fbcfe8"];
 
 // ---------- Vibración suave ----------
 export function vibrar(patron = 12) {
@@ -35,10 +35,10 @@ function iniciarVortice() {
   let id = 0, ultimo = performance.now();
   const paso = (ahora) => {
     const dt = Math.min(50, ahora - ultimo); ultimo = ahora;
-    ctx.globalCompositeOperation = "source-over";
-    ctx.fillStyle = "rgba(7,7,7,.22)";           // rastro: cada cuadro borra un poco
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.fillStyle = "rgba(0,0,0,.22)";           // rastro: cada cuadro borra un poco (sirve en fondo claro)
     ctx.fillRect(0, 0, w, h);
-    ctx.globalCompositeOperation = "lighter";
+    ctx.globalCompositeOperation = "source-over";
     const cx = w / 2, cy = h * 0.42;
     for (const p of ps) {
       p.a += p.v * dt * (1 + 60 / p.r);           // más rápido cerca del centro (efecto remolino)
@@ -123,7 +123,7 @@ export function volar(origen, destino) {
   Object.assign(clon.style, {
     position: "fixed", left: a.left + "px", top: a.top + "px", width: a.width + "px", height: a.height + "px", margin: 0,
     zIndex: 2000, pointerEvents: "none", backgroundImage: cs.backgroundImage, backgroundSize: "cover", backgroundPosition: "center",
-    borderRadius: cs.borderRadius, transformOrigin: "0 0", boxShadow: "0 0 30px 4px rgba(212,175,55,.55)",
+    borderRadius: cs.borderRadius, transformOrigin: "0 0", boxShadow: "0 0 30px 4px rgba(236,72,153,.45)",
   });
   document.body.append(clon);
   destino.style.opacity = "0";
@@ -142,7 +142,7 @@ export function volar(origen, destino) {
     clon.animate([
       { transform: "translate(0,0) scale(1.15)", borderRadius: cs.borderRadius },
       { transform: `translate(${dx * 0.55}px,${dy * 0.55 - 40}px) scale(${(1 + sx) / 2},${(1 + sy) / 2})`, offset: 0.55 },
-      { transform: `translate(${dx}px,${dy}px) scale(${sx},${sy})`, borderRadius: radioFin, boxShadow: "0 0 0 0 rgba(212,175,55,0)" },
+      { transform: `translate(${dx}px,${dy}px) scale(${sx},${sy})`, borderRadius: radioFin, boxShadow: "0 0 0 0 rgba(236,72,153,0)" },
     ], { duration: 480, easing: "cubic-bezier(.22,1,.36,1)", fill: "forwards" }).onfinish = () => {
       destino.style.opacity = ""; destino.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160 });
       clon.remove();
