@@ -119,3 +119,17 @@
   [data-app="pasajero"] body::after, [data-app="pasajero"] #pedir,
   [data-app="pasajero"] .pin, [data-app="pasajero"] .estrellas button.on .ico { animation: none !important; }
 }
+
+/* Pestañas con elemento compartido: el botón tocado crece y se vuelve la pantalla nueva */
+[data-app="pasajero"] .cabecera { view-transition-name: cabecera; }
+[data-app="pasajero"] .barra { view-transition-name: barra; }
+::view-transition-group(pestana) { animation-duration: .55s; animation-timing-function: cubic-bezier(.2, .9, .25, 1); }
+::view-transition-image-pair(pestana) { overflow: hidden; border-radius: 26px; }
+::view-transition-old(pestana) { animation: vt-fuera .2s ease-out both; }
+::view-transition-new(pestana) { animation: vt-dentro .42s ease-out .06s both; }
+::view-transition-old(root) { animation: vt-fuera .25s ease-out both; }
+::view-transition-new(root) { animation: vt-dentro .3s ease-out both; }
+@keyframes vt-fuera { to { opacity: 0; } }
+@keyframes vt-dentro { from { opacity: 0; } }
+.burbuja-pestana { position: fixed; z-index: 900; pointer-events: none; transform-origin: 0 0; background: var(--degradado); box-shadow: var(--brillo); }
+@media (prefers-reduced-motion: reduce) { ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; } }

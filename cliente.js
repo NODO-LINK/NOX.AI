@@ -13,15 +13,15 @@ import {
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca,
-} from "./comun.js?v=68";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar } from "./efectos.js?v=68";
+} from "./comun.js?v=69";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana } from "./efectos.js?v=69";
 
 if (!avisoSinConfigurar()) iniciar();
 
 function iniciar() {
   const L = window.L;
   let usuario = null, cliente = null, tarifas = null, bloqueado = false;
-  let rutaActual = "motorizados", mapa = null;
+  let rutaActual = "publicar", mapa = null;
   let motos = [], carreras = [], cancelarSubs = [];
   // Estado del formulario de pedido (se conserva al cambiar de pestaña).
   // puntos[0] = A (donde te buscan), los del medio = paradas, el último = B (destino).
@@ -176,7 +176,7 @@ function iniciar() {
       if (confirm("¿Salir de Whereapp?")) signOut(auth);
     };
     $("#cabecera .derecha").prepend(botonInstalar(), botonTema());
-    $$("#barra button").forEach((b) => (b.onclick = () => (tarifas ? ir(b.dataset.ruta) : aviso("Cargando… un momento"))));
+    $$("#barra button").forEach((b) => (b.onclick = () => (!tarifas ? aviso("Cargando… un momento") : b.dataset.ruta === rutaActual ? null : cambiarPestana(b, () => ir(b.dataset.ruta, true)))));
     $("#widget").onclick = () => ir("carrera");
     tarifas = await leerTarifas();
     // Tarifas en vivo: el recargo de lluvia aparece apenas el admin lo enciende.
@@ -235,7 +235,7 @@ function iniciar() {
       if (primeraVez) { primeraVez = false; if (ahora && rutaActual !== "carrera") return ir("carrera"); }
       if (rutaActual === "carrera") vistaCarrera();
     }));
-    ir(carreraActual() ? "carrera" : "motorizados");
+    ir(carreraActual() ? "carrera" : "publicar");
   }
 
   const sinUbicacion = ({ ubicacion, ...resto }) => resto;
@@ -264,10 +264,19 @@ function iniciar() {
       <div class="botones">${anuncio.enlace && /^https:\/\//.test(anuncio.enlace) ? `<a class="boton" href="${esc(anuncio.enlace)}" target="_blank" rel="noopener">${icono("descargar")} Descargar la app</a>` : ""}
         <a class="boton verde" href="${esc(wa)}" target="_blank" rel="noopener">${icono("chat")} Pedirla por WhatsApp</a></div></div>`;
   }
+  // Botones de cerrar del anuncio y la publicidad (salen en Publicar y en Motorizados).
+  function atarAnuncios() {
+    if ($("#cerrar-publicidad")) $("#cerrar-publicidad").onclick = () => { try { localStorage.setItem(clavePublicidad(), "x"); } catch {} $(".publicidad").remove(); };
+    // Cuenta los toques del botón (para decirle al negocio cuánta gente se interesó).
+    if ($("#tocar-publicidad")) $("#tocar-publicidad").addEventListener("click", () => {
+      setDoc(doc(db, "stats", "publicidad"), { toques: increment(1) }, { merge: true }).catch(() => {});
+    });
+    if ($("#cerrar-anuncio")) $("#cerrar-anuncio").onclick = () => { try { localStorage.setItem(claveAnuncio(), "x"); } catch {} $(".anuncio").remove(); };
+  }
   function enPedido() { return rutaActual === "pedir" || rutaActual === "publicar"; }
   const publicando = () => rutaActual === "publicar";
 
-  function ir(r) {
+  function ir(r, sinEntrada) {
     // "Pedir" ya no es pestaña: se llega desde "Pedir a este" y se marca Motorizados.
     if (r === "pedir" && !pedido.para) r = "motorizados";
     if (r === "publicar") pedido.para = null;
@@ -281,7 +290,7 @@ function iniciar() {
     seguimiento.alMover = null;
     ({ pedir: vistaPedir, publicar: vistaPedir, motorizados: vistaMotorizados, carrera: vistaCarrera })[r]();
     refrescarVivo();
-    transicion();
+    if (!sinEntrada) transicion();
     window.scrollTo(0, 0);
   }
 
@@ -335,7 +344,9 @@ function iniciar() {
       <div id="caja-nota"><label for="nota">¿Qué hay que llevar?</label>
       <textarea id="nota" placeholder="Ej.: una pizza de la pizzería…, un sobre, unas compras">${esc(pedido.nota)}</textarea></div>
       <button class="boton" id="pedir" ${activa ? "disabled" : ""}>${pedido.para ? `Pedir a ${esc(pedido.para.nombre)}` : "Pedir a todos los motorizados"}</button>
-      ${activa ? `<p class="nota">Ya tienes una carrera en curso. Mírala en "Mi carrera".</p>` : ""}`;
+      ${activa ? `<p class="nota">Ya tienes una carrera en curso. Mírala en "Mi carrera".</p>` : ""}
+      ${pub ? htmlAnuncio() + verPublicidad() : ""}`;
+    if (pub) atarAnuncios();
 
     // Vista previa quieta: tocarla abre el mapa en pantalla completa.
     if (mapaViejo) {
@@ -1184,12 +1195,7 @@ function iniciar() {
     $("#vista").insertAdjacentHTML("beforeend", `<p class="nota pie-legal">${ENLACE_POLITICAS}</p>`);
     $$("[data-perfil]").forEach((b) => (b.onclick = () => verPerfil(motos.find((x) => x.id === b.dataset.perfil), b.closest("article")?.querySelector(".avatar"))));
     pintarFotos($("#vista"));
-    if ($("#cerrar-publicidad")) $("#cerrar-publicidad").onclick = () => { try { localStorage.setItem(clavePublicidad(), "x"); } catch {} $(".publicidad").remove(); };
-    // Cuenta los toques del botón (para decirle al negocio cuánta gente se interesó).
-    if ($("#tocar-publicidad")) $("#tocar-publicidad").addEventListener("click", () => {
-      setDoc(doc(db, "stats", "publicidad"), { toques: increment(1) }, { merge: true }).catch(() => {});
-    });
-    if ($("#cerrar-anuncio")) $("#cerrar-anuncio").onclick = () => { try { localStorage.setItem(claveAnuncio(), "x"); } catch {} $(".anuncio").remove(); };
+    atarAnuncios();
     $$("[data-llamar]").forEach((a) => a.addEventListener("click", () => {
       setDoc(doc(db, "llamadas", a.dataset.llamar), { n: increment(1) }, { merge: true }).catch(() => {});
     }));
@@ -1382,7 +1388,7 @@ function iniciar() {
     seguimiento.alMover = null;
     if (!c) {
       const pasadas = carreras.filter((x) => x.estado === "terminada" || x.estado === "cancelada").sort((a, b) => tiempo(b) - tiempo(a)).slice(0, 15);
-      $("#vista").innerHTML = `<div class="vacio">${icono("ruta")}No tienes carreras en curso.<br><button class="boton" id="ir-pedir">Ver motorizados</button></div>
+      $("#vista").innerHTML = `<div class="vacio">${icono("ruta")}No tienes carreras en curso.<br><button class="boton" id="ir-pedir">Publicar una carrera</button></div>
         ${pasadas.length ? `<h1 class="titulo">${icono("reloj")} Tus viajes</h1><div class="lista">${pasadas.map((x) => `
           <article class="tarjeta"><div class="info">
             <h3>${esc(x.origen.dir)} ${icono("flecha")} ${esc(x.destino.dir)}</h3>
@@ -1390,7 +1396,7 @@ function iniciar() {
             <p>${x.estado === "terminada" ? `<span class="pildora ok">Terminada</span> con ${esc(x.motoNombre || "")}` : `<span class="pildora mal">Cancelada</span>`}</p></div>
             <div class="acciones"><button class="boton secundario" data-repetir="${x.id}">${icono("deshacer")} Repetir este viaje</button></div>
           </article>`).join("")}</div>` : ""}`;
-      $("#ir-pedir").onclick = () => ir("motorizados");
+      $("#ir-pedir").onclick = () => ir("publicar");
       $$("[data-repetir]").forEach((b) => (b.onclick = () => repetir(carreras.find((x) => x.id === b.dataset.repetir))));
       return;
     }
@@ -1614,14 +1620,14 @@ function iniciar() {
         }
         await updateDoc(doc(db, "carreras", c.id), { calificada: true });
         aviso(seguro ? "¡Gracias por calificar!" : "Gracias por avisarnos. El administrador revisará tu reporte.");
-        ir("motorizados");
+        ir("publicar");
       } catch (e) {
         console.error(e);
         $("#calificar").disabled = false;
         aviso(bloqueado ? "Tu cédula está bloqueada: no puedes calificar. Comunícate con el administrador." : "No se pudo enviar. Revisa tu internet e intenta de nuevo.");
       }
     };
-    $("#omitir").onclick = async () => { await updateDoc(doc(db, "carreras", c.id), { calificada: true }).catch(() => {}); ir("motorizados"); };
+    $("#omitir").onclick = async () => { await updateDoc(doc(db, "carreras", c.id), { calificada: true }).catch(() => {}); ir("publicar"); };
   }
 
   // ---------- Seguimiento en vivo: widget flotante y aviso en la barra de notificaciones ----------

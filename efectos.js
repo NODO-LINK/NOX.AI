@@ -232,3 +232,38 @@ export function contar(el, hasta, formato, ms = 700) {
   };
   requestAnimationFrame(paso);
 }
+
+// ---------- Pestañas con elemento compartido ----------
+// El botón que se toca en la barra crece y se convierte en la pantalla nueva (transformación de contenedor).
+// Usa View Transitions (Chrome); si el teléfono no la tiene, una burbuja del color de la marca crece desde el botón.
+export function cambiarPestana(boton, actualizar) {
+  const vista = document.getElementById("vista");
+  if (quieto() || !boton || !vista) return actualizar();
+  if (document.startViewTransition) {
+    boton.style.viewTransitionName = "pestana";
+    let t;
+    try {
+      t = document.startViewTransition(() => {
+        boton.style.viewTransitionName = "";
+        actualizar();
+        vista.style.viewTransitionName = "pestana";
+      });
+    } catch { boton.style.viewTransitionName = ""; return actualizar(); }
+    t.finished.finally(() => { vista.style.viewTransitionName = ""; boton.style.viewTransitionName = ""; });
+    return;
+  }
+  const r = boton.getBoundingClientRect();
+  const fin = { x: 0, y: 0, w: innerWidth, h: innerHeight };
+  const burbuja = document.createElement("div");
+  burbuja.className = "burbuja-pestana";
+  Object.assign(burbuja.style, { left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px" });
+  document.body.appendChild(burbuja);
+  const dx = fin.x - r.left, dy = fin.y - r.top;
+  const a = burbuja.animate([
+    { transform: "none", borderRadius: "22px", opacity: 0.95 },
+    { transform: `translate(${dx}px,${dy}px) scale(${fin.w / r.width},${fin.h / r.height})`, borderRadius: "0px", opacity: 0.9, offset: 0.55 },
+    { transform: `translate(${dx}px,${dy}px) scale(${fin.w / r.width},${fin.h / r.height})`, borderRadius: "0px", opacity: 0 },
+  ], { duration: 560, easing: "cubic-bezier(.3,.9,.3,1)" });
+  setTimeout(actualizar, 300);
+  a.onfinish = a.oncancel = () => burbuja.remove();
+}
