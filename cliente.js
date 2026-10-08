@@ -13,8 +13,8 @@ import {
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca,
-} from "./comun.js?v=74";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana } from "./efectos.js?v=74";
+} from "./comun.js?v=75";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana } from "./efectos.js?v=75";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -1624,14 +1624,14 @@ function iniciar() {
         }
         await updateDoc(doc(db, "carreras", c.id), { calificada: true });
         aviso(seguro ? "¡Gracias por calificar!" : "Gracias por avisarnos. El administrador revisará tu reporte.");
-        ir("publicar");
+        if (rutaActual === "carrera") ir("publicar");   // si ya se fue a otra pestaña, no se le cambia
       } catch (e) {
         console.error(e);
         $("#calificar").disabled = false;
         aviso(bloqueado ? "Tu cédula está bloqueada: no puedes calificar. Comunícate con el administrador." : "No se pudo enviar. Revisa tu internet e intenta de nuevo.");
       }
     };
-    $("#omitir").onclick = async () => { await updateDoc(doc(db, "carreras", c.id), { calificada: true }).catch(() => {}); ir("publicar"); };
+    $("#omitir").onclick = async () => { await updateDoc(doc(db, "carreras", c.id), { calificada: true }).catch(() => {}); if (rutaActual === "carrera") ir("publicar"); };
   }
 
   // ---------- Seguimiento en vivo: widget flotante y aviso en la barra de notificaciones ----------

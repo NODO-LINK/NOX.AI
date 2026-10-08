@@ -66,7 +66,7 @@ body::before {
     radial-gradient(40% 34% at 70% 85%, rgba(29, 78, 216, .16), transparent 70%),
     radial-gradient(30% 30% at 10% 80%, rgba(37, 99, 235, .12), transparent 70%);
   filter: blur(30px);
-  animation: deriva 26s ease-in-out infinite alternate;
+  /* Quieto: moverlo sin parar obligaba al teléfono a redibujar el vidrio de la barra y la cabecera en cada cuadro (lag). */
   will-change: transform;
 }
 @keyframes deriva {
@@ -111,7 +111,7 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
   font-weight: 800; font-size: 1.4rem; letter-spacing: -0.03em;
   background: linear-gradient(110deg, #1e40af, #3b82f6, #2563eb, #1e40af); background-size: 300% 100%;
   -webkit-background-clip: text; background-clip: text; color: transparent;
-  animation: brillo-logo 8s linear infinite;
+  animation: brillo-logo 8s linear 1;
 }
 @keyframes brillo-logo { to { background-position: 300% 0; } }
 /* Subrayado de la marca (igual que el logo de las redes) */
@@ -368,7 +368,7 @@ body.sin-barra .aviso { bottom: calc(24px + env(safe-area-inset-bottom)); }
 
 /* ---------- Pantalla de entrada ---------- */
 .entrada { max-width: 420px; margin: 0 auto; padding: 64px 20px 32px; }
-.entrada .logo { font-size: 2.6rem; text-align: center; animation: brillo-logo 8s linear infinite, aparecer-icono .8s var(--resorte) both; }
+.entrada .logo { font-size: 2.6rem; text-align: center; animation: brillo-logo 8s linear 1, aparecer-icono .8s var(--resorte) both; }
 .entrada .logo-sub { text-align: center; white-space: normal; margin-bottom: 22px; }
 
 /* ---------- Transiciones entre pantallas ---------- */
@@ -993,3 +993,12 @@ button.chip-punto { border: 0; color: inherit; font-family: inherit; cursor: poi
 .aviso-descuento { margin: 6px 0; padding: 8px 12px; border-radius: 12px; background: var(--suave-verde); color: var(--verde); font-size: .85rem; }
 .aviso-descuento .ico { width: 16px; height: 16px; vertical-align: -3px; }
 .texto-descuento { color: var(--verde); }
+
+/* ---------- Modo liviano: teléfonos con poca memoria o procesador ----------
+   Sin vidrio esmerilado (es lo que más cuesta dibujar) ni luces de fondo animadas. */
+[data-liviano] .cabecera, [data-liviano] .barra, [data-liviano] .widget, [data-liviano] .modal, [data-liviano] .ventana,
+[data-liviano] .selector, [data-liviano] .aviso, [data-liviano] .sugerencias, [data-liviano] .isla {
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+[data-liviano] .cabecera, [data-liviano] .barra { background: var(--vidrio-fuerte); }
+[data-liviano] body::before { filter: none; opacity: .6; }
+[data-liviano] body::after { display: none !important; }

@@ -6,8 +6,8 @@ import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
-import { firebaseConfig as configReal, appCheckClave } from "./firebase-config.js?v=74";
-import { icono, pintarIconos } from "./iconos.js?v=74";
+import { firebaseConfig as configReal, appCheckClave } from "./firebase-config.js?v=75";
+import { icono, pintarIconos } from "./iconos.js?v=75";
 
 export { icono };
 pintarIconos();
@@ -17,6 +17,14 @@ export const NOMBRE = "Whereapp";
 export const SERVICIOS = ["mototaxi"];
 // En la computadora (localhost) la app usa el simulador de Firebase, para hacer pruebas sin tocar los datos reales.
 const simulador = location.hostname === "localhost";
+// Modo liviano: en teléfonos con poca memoria o pocos núcleos se apagan los efectos más pesados (vidrio, transiciones).
+export const liviano = (() => {
+  try {
+    const mem = navigator.deviceMemory, cpu = navigator.hardwareConcurrency;
+    return (!!mem && mem <= 3) || (!!cpu && cpu <= 4) || localStorage.getItem("whereapp.liviano") === "1";
+  } catch { return false; }
+})();
+if (liviano && typeof document !== "undefined") document.documentElement.dataset.liviano = "";
 export const firebaseConfig = simulador ? { ...configReal, apiKey: "demo", projectId: "demo-whereapp" } : configReal;
 export const configurado = simulador || !String(configReal.apiKey).startsWith("PEGA");
 // Cada parte (cliente, motorizado, administrador) guarda su propia sesión. Así, abrir el panel

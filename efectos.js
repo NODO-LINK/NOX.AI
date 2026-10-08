@@ -2,6 +2,7 @@
 // Todo respeta "reducir movimiento" del teléfono y se apaga solo cuando no se ve.
 
 const quieto = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const liviano = () => document.documentElement.hasAttribute("data-liviano");
 const ORO = ["#60a5fa", "#1d4ed8", "#2563eb", "#bfdbfe"];
 
 // ---------- Vibración suave ----------
@@ -17,7 +18,7 @@ document.addEventListener("pointerdown", (e) => {
 // Partículas azules girando lento alrededor del centro. Solo mientras se ve la pantalla de entrada.
 let vortice = null;
 function iniciarVortice() {
-  if (vortice || quieto()) return;
+  if (vortice || quieto() || liviano()) return;
   const c = document.createElement("canvas");
   c.className = "vortice";
   document.body.prepend(c);
@@ -58,10 +59,17 @@ function iniciarVortice() {
 }
 function pararVortice() { if (vortice) { vortice.parar(); vortice = null; } }
 // Se enciende y se apaga solo según lo que hay en pantalla.
+// (Se revisa como mucho una vez por cuadro: el mapa cambia la página muchas veces seguidas.)
+let revisando = false;
 new MutationObserver(() => {
-  const entrada = document.querySelector("#vista > .entrada");
-  if (entrada && !document.hidden) iniciarVortice(); else pararVortice();
   escribirLogos();
+  if (revisando) return;
+  revisando = true;
+  requestAnimationFrame(() => {
+    revisando = false;
+    const entrada = document.querySelector("#vista > .entrada");
+    if (entrada && !document.hidden) iniciarVortice(); else pararVortice();
+  });
 }).observe(document.body, { childList: true, subtree: true });
 document.addEventListener("visibilitychange", () => { if (document.hidden) pararVortice(); else if (document.querySelector("#vista > .entrada")) iniciarVortice(); });
 
@@ -238,7 +246,7 @@ export function contar(el, hasta, formato, ms = 700) {
 // Usa View Transitions (Chrome); si el teléfono no la tiene, una burbuja del color de la marca crece desde el botón.
 export function cambiarPestana(boton, actualizar) {
   const vista = document.getElementById("vista");
-  if (quieto() || !boton || !vista) return actualizar();
+  if (quieto() || liviano() || !boton || !vista) return actualizar();
   if (document.startViewTransition) {
     boton.style.viewTransitionName = "pestana";
     let t;
