@@ -247,19 +247,7 @@ export function contar(el, hasta, formato, ms = 700) {
 export function cambiarPestana(boton, actualizar) {
   const vista = document.getElementById("vista");
   if (quieto() || liviano() || !boton || !vista) return actualizar();
-  if (document.startViewTransition) {
-    boton.style.viewTransitionName = "pestana";
-    let t;
-    try {
-      t = document.startViewTransition(() => {
-        boton.style.viewTransitionName = "";
-        actualizar();
-        vista.style.viewTransitionName = "pestana";
-      });
-    } catch { boton.style.viewTransitionName = ""; return actualizar(); }
-    t.finished.finally(() => { vista.style.viewTransitionName = ""; boton.style.viewTransitionName = ""; });
-    return;
-  }
+  if (document.startViewTransition) return transicionCompartida(boton, actualizar, () => vista);
   const r = boton.getBoundingClientRect();
   const fin = { x: 0, y: 0, w: innerWidth, h: innerHeight };
   const burbuja = document.createElement("div");
@@ -274,4 +262,22 @@ export function cambiarPestana(boton, actualizar) {
   ], { duration: 560, easing: "cubic-bezier(.3,.9,.3,1)" });
   setTimeout(actualizar, 300);
   a.onfinish = a.oncancel = () => burbuja.remove();
+}
+
+// Elemento compartido genérico: "viejo" (un recuadro, o la pantalla) se transforma en lo que devuelve buscarNuevo()
+// después de actualizar (la pantalla nueva, o el recuadro al volver al inicio).
+export function transicionCompartida(viejo, actualizar, buscarNuevo) {
+  if (quieto() || liviano() || !viejo || !document.startViewTransition) return actualizar();
+  let nuevo = null;
+  viejo.style.viewTransitionName = "pestana";
+  let t;
+  try {
+    t = document.startViewTransition(() => {
+      viejo.style.viewTransitionName = "";
+      actualizar();
+      nuevo = buscarNuevo();
+      if (nuevo) nuevo.style.viewTransitionName = "pestana";
+    });
+  } catch { viejo.style.viewTransitionName = ""; return actualizar(); }
+  t.finished.finally(() => { viejo.style.viewTransitionName = ""; if (nuevo) nuevo.style.viewTransitionName = ""; });
 }

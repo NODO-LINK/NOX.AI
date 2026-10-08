@@ -15,7 +15,8 @@ import {
   enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad, enlacePublicidad,
   DOCUMENTOS, estadoDoc, resumenDocs,
   filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles, textoDescuento,
-} from "./comun.js?v=75";
+  TIPOS_NEGOCIO, CENTRO,
+} from "./comun.js?v=77";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -25,6 +26,7 @@ function iniciar() {
   let mapaVivo = null, marcasVivo = {}, filtroClientes = "";
   let lugaresPropios = [], mapaLugares = null, reportesPago = [];
   let anuncio = null, publicidad = null, toquesPub = 0;
+  let negocios = [], productos = [];   // Mercado a tu casa y Comida rápida
   let documentos = {}, califClientes = [];   // documentos de cada motorizado (licencia, médico, RCV, trimestres): fechas, sin fotos
   const DIA = 864e5;
 
@@ -100,6 +102,8 @@ function iniciar() {
     // Tarifas siempre al día (por si se cambiaron desde otro teléfono), sin redibujar el formulario.
     subs.push(escucharTarifas((t) => { tarifas = t; }));
     escuchar(query(collection(db, "reportesPago"), orderBy("creado", "desc"), limit(60)), (s) => { reportesPago = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
+    escuchar(collection(db, "negocios"), (s) => { negocios = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.nombre).localeCompare(b.nombre)); return ruta === "mas" && subMas === "negocios"; });
+    escuchar(collection(db, "productos"), (s) => { productos = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.nombre).localeCompare(b.nombre)); pintarProductosAbiertos(); return ruta === "mas" && subMas === "negocios"; });
     escuchar(collection(db, "lugares"), (s) => {
       lugaresPropios = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.n).localeCompare(b.n));
       pintarListaLugares();
@@ -625,7 +629,8 @@ function iniciar() {
       <div class="mapa" id="mapa-detalle"></div>
       <a class="boton secundario chico" href="${esc(mapsRuta(c))}" target="_blank" rel="noopener" style="margin-top:8px">${icono("pin")} Abrir ruta en Google Maps</a>
       <h3 class="sub-detalle">${icono("ruta")} Recorrido</h3>
-      <div class="caja-detalle">${filasRecorrido(c)}${fila("Distancia", `${esc(c.km)} km`)}${c.nota ? fila("Qué lleva", esc(c.nota)) : ""}</div>
+      <div class="caja-detalle">${filasRecorrido(c)}${fila("Distancia", `${esc(c.km)} km`)}${c.nota ? fila("Qué lleva", esc(c.nota)) : ""}
+        ${c.negocio ? fila("Negocio", `${esc(c.negocio.nombre)} · ${esc(c.negocio.telefono)}`) + fila("Productos", `${usd(c.totalProductos || 0)} (el cliente se los paga al negocio)`) : ""}</div>
       <h3 class="sub-detalle">${icono("dinero")} Cobro</h3>
       <div class="caja-detalle">${fila("Precio", `${usd(c.precio)}${c.precioBs ? ` · Bs ${Number(c.precioBs).toFixed(2).replace(".", ",")}` : ""}`)}
         ${fila("Forma de pago", esc(forma.c))}${fila("Cobrar", esc(textoCobro(c)))}
@@ -843,7 +848,7 @@ function iniciar() {
         <div><label>Cédula</label><input name="cobroCed" value="${esc((t.cobro || {}).cedula || "")}" placeholder="V-12345678"></div></div></div>
       <h1 class="titulo">Tarifas por kilómetro</h1>
       <p class="nota">Precio = base + (precio por km × kilómetros). El cliente lo ve calculado en el mapa.</p>
-      <div class="caja" ${SERVICIOS.includes("delivery") ? "" : "hidden"}><h2>${icono("paquete")} Delivery</h2><div class="dos">
+      <div class="caja"><h2>${icono("paquete")} Envío de Mercado y Comida rápida</h2><div class="dos">
         <div><label>Base ($)</label><input name="db" type="number" step="0.01" min="0" value="${t.delivery.base}"></div>
         <div><label>Por km ($)</label><input name="dk" type="number" step="0.01" min="0" value="${t.delivery.porKm}"></div></div></div>
       <div class="caja"><h2>${icono("moto")} Mototaxi</h2><div class="dos">
@@ -896,20 +901,194 @@ function iniciar() {
   let subMas = "tarifas";
   function vistaMas() {
     if (mapaLugares) { mapaLugares.remove(); mapaLugares = null; }
-    const subs = ["tarifas", "stats", "lugares", "publicidad"];
-    $("#vista").innerHTML = `<div class="segmento cuatro" id="sub-mas" data-pos="${subs.indexOf(subMas)}">
+    const subs = ["tarifas", "stats", "lugares", "publicidad", "negocios"];
+    $("#vista").innerHTML = `<div class="segmento cinco" id="sub-mas" data-pos="${subs.indexOf(subMas)}">
       <button data-s="tarifas" class="${subMas === "tarifas" ? "activo" : ""}">${icono("dolar")} Tarifas</button>
       <button data-s="stats" class="${subMas === "stats" ? "activo" : ""}">${icono("grafica")} Números</button>
       <button data-s="lugares" class="${subMas === "lugares" ? "activo" : ""}">${icono("pin")} Lugares</button>
-      <button data-s="publicidad" class="${subMas === "publicidad" ? "activo" : ""}">${icono("megafono")} Publicidad</button></div><div id="sub-vista"></div>`;
+      <button data-s="publicidad" class="${subMas === "publicidad" ? "activo" : ""}">${icono("megafono")} Publicidad</button>
+      <button data-s="negocios" class="${subMas === "negocios" ? "activo" : ""}">${icono("carrito")} Negocios</button></div><div id="sub-vista"></div>`;
     const vista = $("#vista");
     // Las vistas escriben en #vista: se les presta un contenedor y luego se pone debajo del selector.
     const real = vista.id;
     const cont = $("#sub-vista");
     vista.id = ""; cont.id = "vista";
-    ({ tarifas: vistaTarifas, stats: vistaStats, lugares: vistaLugares, publicidad: vistaPublicidad })[subMas]();
+    ({ tarifas: vistaTarifas, stats: vistaStats, lugares: vistaLugares, publicidad: vistaPublicidad, negocios: vistaNegocios })[subMas]();
     cont.id = "sub-vista"; vista.id = real;
     $$("#sub-mas button").forEach((b) => (b.onclick = () => { subMas = b.dataset.s; vistaMas(); }));
+  }
+
+  // ---------- Negocios: "Mercado a tu casa" y "Comida rápida" ----------
+  // El admin carga cada negocio (nombre, tipo, RIF, teléfono, ubicación y foto) y sus productos (foto, nombre y precio).
+  function vistaNegocios() {
+    const cuantos = (id) => productos.filter((p) => p.negocioId === id).length;
+    $("#vista").innerHTML = `
+      <h1 class="titulo">${icono("carrito")} Negocios</h1>
+      <p class="nota">Los clientes ven los de <b>mercado</b> en «Mercado a tu casa» y los productos de <b>comida</b> en «Comida rápida». Piden, un motorizado retira en el negocio y se lo lleva. El cliente le paga los productos al negocio y al motorizado solo el envío.</p>
+      <button class="boton" id="nuevo-negocio">${icono("mas")} Agregar negocio</button>
+      <div class="lista" style="margin-top:14px">${negocios.length ? negocios.map((n) => `
+        <article class="tarjeta">
+          <div class="logo-negocio">${n.foto ? `<img src="${esc(n.foto)}" alt="">` : icono(TIPOS_NEGOCIO[n.tipo]?.icono || "carrito")}</div>
+          <div class="info"><h3>${esc(n.nombre)} <span class="pildora">${esc(TIPOS_NEGOCIO[n.tipo]?.corto || n.tipo)}</span>${n.activo === false ? ` <span class="pildora mal">Pausado</span>` : ""}</h3>
+            <p>${icono("pin")} ${esc(n.dir || "Sin dirección")}${n.ubicacion ? "" : ` · <b class="texto-rojo">sin ubicación en el mapa</b>`}</p>
+            <p>${n.rif ? `RIF ${esc(n.rif)} · ` : ""}${icono("telefono")} ${esc(n.telefono || "—")}</p>
+            <p><b>${cuantos(n.id)}</b> producto${cuantos(n.id) === 1 ? "" : "s"}</p></div>
+          <div class="acciones">
+            <button class="boton" data-productos="${n.id}">${icono("carrito")} Productos</button>
+            <button class="boton secundario" data-editar-negocio="${n.id}">Editar</button>
+            <button class="boton secundario" data-pausar="${n.id}">${n.activo === false ? "Activar" : "Pausar"}</button>
+            <button class="boton secundario peligro" data-borrar-negocio="${n.id}">${icono("basura")}</button></div>
+        </article>`).join("") : `<div class="vacio">${icono("carrito")}Todavía no hay negocios. Agrega el primero.</div>`}</div>`;
+    $("#nuevo-negocio").onclick = () => editarNegocio(null);
+    $$("[data-editar-negocio]").forEach((b) => (b.onclick = () => editarNegocio(negocios.find((n) => n.id === b.dataset.editarNegocio))));
+    $$("[data-productos]").forEach((b) => (b.onclick = () => verProductos(negocios.find((n) => n.id === b.dataset.productos))));
+    $$("[data-pausar]").forEach((b) => (b.onclick = async () => {
+      const n = negocios.find((x) => x.id === b.dataset.pausar);
+      const activo = n.activo === false;
+      const lote = writeBatch(db);
+      lote.update(doc(db, "negocios", n.id), { activo });
+      // Los productos llevan copia del estado del negocio: así los clientes solo ven los de negocios activos.
+      productos.filter((p) => p.negocioId === n.id).forEach((p) => lote.update(doc(db, "productos", p.id), { negocioActivo: activo }));
+      await lote.commit().then(() => aviso(activo ? "Negocio activado" : "Negocio pausado: los clientes ya no lo ven"), () => aviso("No se pudo cambiar. ¿Publicaste las reglas nuevas?"));
+    }));
+    $$("[data-borrar-negocio]").forEach((b) => (b.onclick = async () => {
+      const n = negocios.find((x) => x.id === b.dataset.borrarNegocio);
+      if (!confirm(`¿Borrar «${n.nombre}» y todos sus productos?`)) return;
+      const lote = writeBatch(db);
+      productos.filter((p) => p.negocioId === n.id).forEach((p) => lote.delete(doc(db, "productos", p.id)));
+      lote.delete(doc(db, "negocios", n.id));
+      await lote.commit().then(() => aviso("Negocio borrado"), () => aviso("No se pudo borrar"));
+    }));
+  }
+
+  function editarNegocio(n) {
+    let foto = n?.foto || null, ubic = n?.ubicacion || null;
+    const fondo = document.createElement("div");
+    fondo.className = "modal";
+    fondo.innerHTML = `<form class="ventana"><h2>${n ? "Editar negocio" : "Nuevo negocio"}</h2>
+      <label>Nombre<input name="nombre" maxlength="50" required value="${esc(n?.nombre || "")}" placeholder="Ej.: Pizzería El Moján"></label>
+      <label>¿Qué vende?<select name="tipo">${Object.entries(TIPOS_NEGOCIO).map(([k, t]) => `<option value="${k}" ${n?.tipo === k ? "selected" : ""}>${esc(t.t)}</option>`).join("")}</select></label>
+      <label>RIF<input name="rif" maxlength="20" value="${esc(n?.rif || "")}" placeholder="Ej.: J-12345678-9"></label>
+      <label>Teléfono / WhatsApp<input name="telefono" maxlength="20" inputmode="tel" required value="${esc(n?.telefono || "")}" placeholder="0414-1234567"></label>
+      <label>Dirección<input name="dir" maxlength="120" required value="${esc(n?.dir || "")}" placeholder="Ej.: Calle principal, frente a la plaza"></label>
+      <label>Ubicación (toca el mapa donde está el negocio)</label>
+      <div class="mapa" id="mapa-negocio" style="height:220px"></div>
+      <label>Foto o logo</label>
+      <div class="foto-negocio-fila"><div class="logo-negocio grande" id="vista-foto">${foto ? `<img src="${esc(foto)}" alt="">` : icono("carrito")}</div>
+        <label class="boton secundario">${icono("descargar")} Elegir foto<input type="file" accept="image/*" id="foto-negocio" hidden></label></div>
+      <label class="opcion"><input type="checkbox" name="activo" ${n?.activo === false ? "" : "checked"}><span>Visible para los clientes</span></label>
+      <button class="boton">Guardar</button>
+      <button class="boton secundario" type="button" data-no>Cancelar</button></form>`;
+    document.body.append(fondo);
+    const m = nuevoMapa("mapa-negocio", "libre");
+    m.setView(ubic ? [ubic.lat, ubic.lng] : CENTRO, ubic ? 17 : 15, { animate: false });
+    let marca = ubic ? window.L.marker([ubic.lat, ubic.lng]).addTo(m) : null;
+    m.on("click", (e) => { ubic = { lat: e.latlng.lat, lng: e.latlng.lng }; if (marca) marca.setLatLng(e.latlng); else marca = window.L.marker(e.latlng).addTo(m); });
+    setTimeout(() => m.invalidateSize(), 400);
+    const cerrar = () => { m.remove(); fondo.remove(); };
+    $("[data-no]", fondo).onclick = cerrar;
+    $("#foto-negocio", fondo).onchange = async (e) => {
+      const a = e.target.files[0]; if (!a) return;
+      try { foto = await achicarFoto(a, 360); $("#vista-foto", fondo).innerHTML = `<img src="${foto}" alt="">`; } catch { aviso("No se pudo leer esa imagen"); }
+    };
+    $("form", fondo).onsubmit = async (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      if (!ubic) return aviso("Toca el mapa donde está el negocio");
+      const tel = String(f.get("telefono")).trim();
+      if (String(tel).replace(/\D/g, "").length < 10) return aviso("Escribe un teléfono válido");
+      const datos = {
+        nombre: String(f.get("nombre")).trim(), tipo: f.get("tipo"), rif: String(f.get("rif")).trim().toUpperCase(), telefono: tel,
+        dir: String(f.get("dir")).trim(), ubicacion: { lat: ubic.lat, lng: ubic.lng }, foto: foto || null, activo: f.get("activo") === "on",
+      };
+      const bt = $("button:not([type])", e.target); bt.disabled = true;
+      try {
+        const ref = n ? doc(db, "negocios", n.id) : doc(collection(db, "negocios"));
+        const lote = writeBatch(db);
+        lote.set(ref, { ...datos, ...(n ? {} : { creado: serverTimestamp() }) }, { merge: true });
+        // Copia en cada producto lo que los clientes necesitan ver (nombre, logo, tipo y si está activo).
+        productos.filter((p) => p.negocioId === ref.id).forEach((p) => lote.update(doc(db, "productos", p.id), copiaNegocio(datos)));
+        await lote.commit();
+        aviso(n ? "Negocio guardado" : "Negocio agregado. Ahora carga sus productos.");
+        cerrar();
+        if (!n) verProductos({ id: ref.id, ...datos }); else ir(ruta, true);
+      } catch (err) { console.error(err); aviso("No se pudo guardar. ¿Publicaste las reglas nuevas?"); bt.disabled = false; }
+    };
+  }
+  // Datos del negocio copiados en cada producto (para la lista de Comida rápida sin leer cada negocio).
+  const copiaNegocio = (n) => ({ negocioNombre: n.nombre, negocioFoto: n.foto || null, tipo: n.tipo, negocioActivo: n.activo !== false });
+
+  let productosAbiertos = null;   // negocio cuya lista de productos está abierta
+  function pintarProductosAbiertos() {
+    const caja = $("#lista-productos");
+    if (!caja || !productosAbiertos) return;
+    const lista = productos.filter((p) => p.negocioId === productosAbiertos.id);
+    caja.innerHTML = lista.length ? lista.map((p) => `
+      <div class="fila-producto${p.activo === false ? " apagado" : ""}">
+        <div class="foto-producto">${p.foto ? `<img src="${esc(p.foto)}" alt="">` : icono(TIPOS_NEGOCIO[p.tipo]?.icono || "carrito")}</div>
+        <div class="info"><b>${esc(p.nombre)}</b><span>${usd(p.precio)}${p.activo === false ? " · agotado" : ""}</span></div>
+        <button type="button" class="boton secundario chico" data-editar-producto="${p.id}">Editar</button>
+        <button type="button" class="boton secundario chico" data-agotado="${p.id}">${p.activo === false ? "Hay" : "Agotado"}</button>
+        <button type="button" class="quitar" data-borrar-producto="${p.id}" aria-label="Borrar">${icono("basura")}</button>
+      </div>`).join("") : `<p class="nota">Sin productos todavía.</p>`;
+    $$("[data-editar-producto]", caja).forEach((b) => (b.onclick = () => editarProducto(productosAbiertos, productos.find((p) => p.id === b.dataset.editarProducto))));
+    $$("[data-agotado]", caja).forEach((b) => (b.onclick = () => {
+      const p = productos.find((x) => x.id === b.dataset.agotado);
+      updateDoc(doc(db, "productos", p.id), { activo: p.activo === false }).catch(() => aviso("No se pudo cambiar"));
+    }));
+    $$("[data-borrar-producto]", caja).forEach((b) => (b.onclick = () => {
+      const p = productos.find((x) => x.id === b.dataset.borrarProducto);
+      if (confirm(`¿Borrar «${p.nombre}»?`)) deleteDoc(doc(db, "productos", p.id)).then(() => aviso("Producto borrado"), () => aviso("No se pudo borrar"));
+    }));
+  }
+  function verProductos(n) {
+    productosAbiertos = n;
+    const fondo = document.createElement("div");
+    fondo.className = "modal";
+    fondo.innerHTML = `<div class="ventana"><h2>${icono("carrito")} Productos de ${esc(n.nombre)}</h2>
+      <p class="nota">Toca «Agotado» cuando no haya, y los clientes no podrán pedirlo.</p>
+      <button class="boton" id="nuevo-producto">${icono("mas")} Agregar producto</button>
+      <div id="lista-productos" style="margin:12px 0"></div>
+      <button class="boton secundario" type="button" data-cerrar>Listo</button></div>`;
+    document.body.append(fondo);
+    // Al cerrar se redibuja la lista (mientras hay una ventana abierta el panel no se redibuja solo).
+    $("[data-cerrar]", fondo).onclick = () => { productosAbiertos = null; fondo.remove(); ir(ruta, true); };
+    $("#nuevo-producto", fondo).onclick = () => editarProducto(n, null);
+    pintarProductosAbiertos();
+  }
+  function editarProducto(n, p) {
+    let foto = p?.foto || null;
+    const fondo = document.createElement("div");
+    fondo.className = "modal";
+    fondo.innerHTML = `<form class="ventana"><h2>${p ? "Editar producto" : `Nuevo producto · ${esc(n.nombre)}`}</h2>
+      <div class="foto-negocio-fila"><div class="foto-producto grande" id="vista-foto-p">${foto ? `<img src="${esc(foto)}" alt="">` : icono("carrito")}</div>
+        <label class="boton secundario">${icono("descargar")} Foto<input type="file" accept="image/*" id="foto-producto" hidden></label></div>
+      <label>Nombre<input name="nombre" maxlength="60" required value="${esc(p?.nombre || "")}" placeholder="Ej.: Hamburguesa clásica, Harina PAN 1 kg"></label>
+      <label>Precio ($)<input name="precio" type="number" step="0.01" min="0.01" required value="${p ? Number(p.precio).toFixed(2) : ""}" placeholder="0.00"></label>
+      <label>Descripción (opcional)<input name="desc" maxlength="100" value="${esc(p?.desc || "")}" placeholder="Ej.: Con papas y refresco"></label>
+      <button class="boton">Guardar</button>
+      <button class="boton secundario" type="button" data-no>Cancelar</button></form>`;
+    document.body.append(fondo);
+    $("[data-no]", fondo).onclick = () => fondo.remove();
+    $("#foto-producto", fondo).onchange = async (e) => {
+      const a = e.target.files[0]; if (!a) return;
+      try { foto = await achicarFoto(a, 320); $("#vista-foto-p", fondo).innerHTML = `<img src="${foto}" alt="">`; } catch { aviso("No se pudo leer esa imagen"); }
+    };
+    $("form", fondo).onsubmit = async (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const precio = Math.round(Number(f.get("precio")) * 100) / 100;
+      if (!(precio > 0)) return aviso("Escribe el precio");
+      const datos = { nombre: String(f.get("nombre")).trim(), precio, desc: String(f.get("desc")).trim(), foto: foto || null, negocioId: n.id, ...copiaNegocio(n) };
+      const bt = $("button:not([type])", e.target); bt.disabled = true;
+      try {
+        if (p) await updateDoc(doc(db, "productos", p.id), datos);
+        else await addDoc(collection(db, "productos"), { ...datos, activo: true, creado: serverTimestamp() });
+        aviso(p ? "Producto guardado" : "Producto agregado");
+        fondo.remove();
+      } catch (err) { console.error(err); aviso("No se pudo guardar. ¿Publicaste las reglas nuevas?"); bt.disabled = false; }
+    };
+    setTimeout(() => $("input[name=nombre]", fondo).focus(), 50);
   }
 
   // ---------- Publicidad: un anuncio de un negocio que ven todos los clientes ----------

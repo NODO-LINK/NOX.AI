@@ -9,8 +9,8 @@ import {
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar, escucharTarifas, aBs, lineaRecta,
   hoyLocal,
   DOCUMENTOS, estadoDoc,
-  enApp, textoDescuento,
-} from "./comun.js?v=75";
+  enApp, textoDescuento, totalPedido,
+} from "./comun.js?v=77";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -500,17 +500,26 @@ function iniciar() {
     if (miCarrera) activarMiCarrera(miCarrera);
   }
 
+  // Pedido de un negocio (Mercado o Comida rápida): dónde retirar y qué. El cliente le paga los productos al negocio.
+  const cajaNegocio = (c, enCurso = false) => !c.negocio ? "" : `
+    <div class="aviso-negocio">
+      <p><b>${icono("carrito")} Retirar en ${esc(c.negocio.nombre)}</b>${c.negocio.dir ? ` · ${esc(c.negocio.dir)}` : ""}</p>
+      <ul class="items-pedido">${(c.pedido || []).map((x) => `<li><b>${x.c} ×</b> ${esc(x.n)}</li>`).join("")}</ul>
+      <p class="nota">El cliente le paga los productos al negocio (${usd(c.totalProductos ?? totalPedido(c.pedido))}). Tú cobras <b>solo el envío</b>. El cliente le manda al negocio tu nombre y teléfono por WhatsApp.</p>
+      ${enCurso ? `<a class="boton secundario chico" href="tel:${esc(c.negocio.telefono)}">${icono("telefono")} Llamar al negocio</a>` : ""}
+    </div>`;
   const tipoTexto = (c) => (c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`);
   const tarjetaCarrera = (c) => `
     <article class="tarjeta"><div class="info">
       <h3>${tipoTexto(c)} · ${usd(c.precio)} · ${esc(c.km)} km ${c.paraMoto ? `<span class="pildora">Para ti</span>` : ""}${c.ofertaCliente ? `<span class="pildora oferta-pill">Precio del cliente</span>` : ""}${c.descuento ? `<span class="pildora pill-descuento">-50%</span>` : ""}</h3>
       ${c.descuento ? `<p class="aviso-descuento">${icono("dinero")} <b>Carrera con 50% de descuento.</b> Motivo: ${esc(c.descuento.motivo)}</p>` : ""}
+      ${cajaNegocio(c)}
       <p class="cobro">${icono((FORMAS_PAGO[c.formaPago] || FORMAS_PAGO.usd).icono)} <b>Cobrar:</b> ${esc(textoCobro(c))}</p>
       <p><b>A:</b> ${esc(c.origen.dir)}</p>
       ${(c.paradas || []).map((p, i) => `<p><b>Parada ${i + 1}:</b> ${esc(p.dir)}</p>`).join("")}
       <p><b>B:</b> ${esc(c.destino.dir)}</p>
       ${c.retorno ? `<p><b>Ida y vuelta:</b> regresa al punto A</p>` : ""}
-      ${c.nota ? `<p><b>Llevar:</b> ${esc(c.nota)}</p>` : ""}
+      ${c.nota && !c.negocio ? `<p><b>Llevar:</b> ${esc(c.nota)}</p>` : ""}
       <p>${esc(c.clienteNombre)} · ${fechaTexto(c.creada)}</p></div>
       ${c.ofertaCliente && misOfertas.get(c.id) ? `<p class="pildora medio">${icono("reloj")} Ofreciste ${usd(misOfertas.get(c.id).precio)}. Esperando al cliente…</p>` : ""}
       <div class="acciones">
@@ -658,8 +667,9 @@ function iniciar() {
         <div class="fila cobrar"><span>Cobrar</span><b>${esc(textoCobro(c))}</b></div>
         ${c.descuento ? `<div class="fila"><span>Descuento</span><b class="texto-descuento">${esc(textoDescuento(c))}</b></div>` : ""}
         <div class="fila"><span>Distancia</span><span>${esc(c.km)} km</span></div>
-        ${c.nota ? `<div class="fila"><span>Llevar</span><span>${esc(c.nota)}</span></div>` : ""}
+        ${c.nota && !c.negocio ? `<div class="fila"><span>Llevar</span><span>${esc(c.nota)}</span></div>` : ""}
       </div>
+      ${cajaNegocio(c, true)}
       <div class="mapa" id="mapa"></div>
       <p class="nota">Acerca el mapa (+) para ver escuelas, mercados, playas y otros lugares.</p>
       <div class="caja">
@@ -670,7 +680,7 @@ function iniciar() {
         <a class="boton" href="tel:${esc(c.clienteTel)}">${icono("telefono")} Llamar</a>
         <button class="boton" id="chat">${icono("chat")} Chat<b class="contador" id="chat-sin-leer" ${chat.sinLeer ? "" : "hidden"}>${chat.sinLeer || ""}</b></button>
       </div>
-      ${!c.recogido && !c.llegoEn ? `<button class="boton" id="llegue">${icono("campana")} Llegué al punto A (avisar al cliente)</button>` : ""}
+      ${!c.recogido && !c.llegoEn ? `<button class="boton" id="llegue">${icono("campana")} ${c.negocio ? "Llegué al negocio (avisar al cliente)" : "Llegué al punto A (avisar al cliente)"}</button>` : ""}
       ${!c.recogido && c.llegoEn ? `<p class="pildora ok" style="margin-top:12px">${icono("check")} Le avisaste al cliente que llegaste</p>` : ""}
       ${c.recogido
         ? `<button class="boton verde" id="termine">${icono("listo")} Terminé: ya llegamos a B</button>`

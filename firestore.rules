@@ -17,6 +17,7 @@ service cloud.firestore {
     function motoData(uid) { return get(/databases/$(database)/documents/motorizados/$(uid)).data; }
     function clienteData() { return get(/databases/$(database)/documents/clientes/$(request.auth.uid)).data; }
     function tarifas() { return get(/databases/$(database)/documents/config/general).data; }
+    function negocioData(nid) { return get(/databases/$(database)/documents/negocios/$(nid)).data; }
     function texto(v, max) { return v is string && v.size() <= max; }
     // Hora puesta por el servidor (no se puede inventar una fecha desde la consola).
     function ahora(campo) { return request.resource.data[campo] == request.time; }
@@ -104,6 +105,16 @@ service cloud.firestore {
       allow list, write: if esAdmin();
     }
 
+    // Negocios de "Mercado a tu casa" y "Comida rápida", y sus productos: los carga el administrador y los ven los clientes.
+    match /negocios/{id} {
+      allow read: if dentro();
+      allow write: if esAdmin();
+    }
+    match /productos/{id} {
+      allow read: if dentro();
+      allow write: if esAdmin();
+    }
+
     // Puntos de referencia del mapa: los agrega el administrador y los ven todos.
     match /lugares/{id} {
       allow read: if dentro();
@@ -134,7 +145,8 @@ service cloud.firestore {
         && (!('paradas' in request.resource.data) || (request.resource.data.paradas is list && request.resource.data.paradas.size() <= 5))
         && request.resource.data.keys().hasOnly(['clienteUid', 'clienteNombre', 'clienteTel', 'tipo', 'origen', 'destino', 'paradas', 'retorno', 'nota',
              'km', 'precio', 'recargos', 'ofertaCliente', 'precioSugerido', 'precioCliente', 'formaPago', 'tasa', 'precioBs', 'precioBsCliente',
-             'estado', 'paraMoto', 'paraMotoNombre', 'motoUid', 'calificada', 'cancelaciones', 'creada', 'descuento'])
+             'estado', 'paraMoto', 'paraMotoNombre', 'motoUid', 'calificada', 'cancelaciones', 'creada', 'descuento',
+             'negocio', 'pedido', 'totalProductos'])
         && request.resource.data.get('precioCliente', request.resource.data.precio) == request.resource.data.precio
         && request.resource.data.get('precioBsCliente', null) == request.resource.data.get('precioBs', null)
         && request.resource.data.get('calificada', false) == false
@@ -154,10 +166,20 @@ service cloud.firestore {
             || (exists(/databases/$(database)/documents/config/general)
                 && tarifas().get('descuento', {}).get('activa', false) == true
                 && request.resource.data.descuento == { 'pct': 50, 'motivo': tarifas().descuento.get('motivo', '') }))
+        // Pedido a un negocio (Mercado o Comida rápida): delivery, de un negocio real y activo, con sus productos.
+        && (!('negocio' in request.resource.data)
+            || (request.resource.data.tipo == 'delivery'
+                && request.resource.data.negocio.keys().hasOnly(['id', 'nombre', 'telefono', 'dir'])
+                && negocioData(request.resource.data.negocio.id).get('activo', true) != false
+                && request.resource.data.negocio.nombre == negocioData(request.resource.data.negocio.id).nombre
+                && request.resource.data.negocio.telefono == negocioData(request.resource.data.negocio.id).telefono
+                && request.resource.data.pedido is list && request.resource.data.pedido.size() > 0 && request.resource.data.pedido.size() <= 40
+                && request.resource.data.totalProductos is number && request.resource.data.totalProductos >= 0 && request.resource.data.totalProductos < 100000))
+        && ('negocio' in request.resource.data || (!('pedido' in request.resource.data) && !('totalProductos' in request.resource.data)))
         // Precio normal: no menos que la tarifa por distancia (la mitad con descuento; publicada: el cliente pone su precio).
         && (request.resource.data.get('ofertaCliente', false) == true || !exists(/databases/$(database)/documents/config/general)
-            || request.resource.data.precio >= (tarifas()[request.resource.data.tipo].base
-                 + tarifas()[request.resource.data.tipo].porKm * (request.resource.data.km - 0.06)) * ('descuento' in request.resource.data ? 0.5 : 1) - 0.02)
+            || request.resource.data.precio >= (tarifas().get(request.resource.data.tipo, { 'base': 0, 'porKm': 0 }).base
+                 + tarifas().get(request.resource.data.tipo, { 'base': 0, 'porKm': 0 }).porKm * (request.resource.data.km - 0.06)) * ('descuento' in request.resource.data ? 0.5 : 1) - 0.02)
         // En Bs: con la tasa del día y que cuadre con el precio en $.
         && (request.resource.data.get('precioBs', null) == null
             || (request.resource.data.tasa is number && request.resource.data.tasa > 0

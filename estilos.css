@@ -1002,3 +1002,89 @@ button.chip-punto { border: 0; color: inherit; font-family: inherit; cursor: poi
 [data-liviano] .cabecera, [data-liviano] .barra { background: var(--vidrio-fuerte); }
 [data-liviano] body::before { filter: none; opacity: .6; }
 [data-liviano] body::after { display: none !important; }
+
+/* ---------- Panel: pestaña de 5 opciones ---------- */
+.segmento.cinco::before { width: calc((100% - 10px) / 5); }
+.segmento.cinco[data-pos="1"]::before { transform: translateX(100%); }
+.segmento.cinco[data-pos="2"]::before { transform: translateX(200%); }
+.segmento.cinco[data-pos="3"]::before { transform: translateX(300%); }
+.segmento.cinco[data-pos="4"]::before { transform: translateX(400%); }
+.segmento.cinco button { padding: 10px 1px; font-size: .7rem; }
+.segmento.cinco button svg { display: none; }
+
+/* ---------- Negocios y productos ---------- */
+.logo-negocio, .foto-producto { flex: 0 0 auto; width: 56px; height: 56px; border-radius: 16px; overflow: hidden; display: grid; place-items: center; background: var(--marca-suave); color: var(--marca); box-shadow: var(--sombra-1); }
+.logo-negocio img, .foto-producto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.logo-negocio .ico, .foto-producto .ico { width: 26px; height: 26px; }
+.logo-negocio.grande, .foto-producto.grande { width: 84px; height: 84px; border-radius: 22px; }
+.logo-negocio.mini { width: 26px; height: 26px; border-radius: 50%; box-shadow: 0 0 0 2px var(--superficie); }
+.logo-negocio.mini .ico { width: 15px; height: 15px; }
+.foto-negocio-fila { display: flex; align-items: center; gap: 14px; margin: 6px 0 12px; }
+.fila-producto { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 8px 0; border-bottom: 1px solid var(--borde); }
+.fila-producto .info { flex: 1 0 calc(100% - 60px); }
+.fila-producto .boton.chico { flex: 1 1 auto; }
+.fila-producto .foto-producto { width: 46px; height: 46px; border-radius: 12px; }
+.fila-producto .info { min-width: 0; }
+.fila-producto .info b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fila-producto .info span { color: var(--texto-2); font-size: .85rem; }
+.fila-producto.apagado { opacity: .55; }
+.texto-rojo { color: var(--rojo); }
+
+/* ---------- Inicio del pasajero: 5 recuadros flotantes ---------- */
+.con-atras { display: flex; align-items: center; gap: 10px; }
+.con-atras .atras-inicio[hidden] { display: none !important; }
+.inicio { min-height: calc(100vh - 150px); display: flex; flex-direction: column; justify-content: center; padding: 18px 0 10px; }
+.inicio .saludo { font-size: 1.6rem; font-weight: 900; text-align: center; margin: 0; letter-spacing: -.02em; }
+.inicio > .nota { text-align: center; margin: 4px 0 14px; }
+.recuadros { display: grid; grid-template-columns: repeat(2, minmax(0, 158px)); justify-content: center; gap: 14px; margin: 10px 0 18px; }
+.recuadros .recuadro:last-child:nth-child(odd) { grid-column: 1 / -1; justify-self: center; width: calc(50% - 7px); }
+.recuadro { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 132px; padding: 16px 10px 14px; border: 1px solid var(--borde); border-radius: 26px;
+  background: var(--superficie); color: var(--texto); font: inherit; text-align: center; cursor: pointer; box-shadow: var(--sombra-2);
+  transition: transform .25s var(--resorte), box-shadow .25s; animation: recuadro-entra .55s var(--resorte) both; -webkit-tap-highlight-color: transparent; }
+.recuadro:active { transform: scale(.94); box-shadow: var(--sombra-1); }
+.recuadro b { font-size: .98rem; font-weight: 900; line-height: 1.1; }
+.recuadro small { font-size: .74rem; color: var(--texto-2); font-weight: 700; display: inline-flex; align-items: center; gap: 5px; }
+.recuadro-icono { width: 54px; height: 54px; border-radius: 18px; display: grid; place-items: center; background: var(--degradado); color: #fff; box-shadow: var(--brillo); }
+.recuadro-icono .ico { width: 28px; height: 28px; }
+.en-curso { width: 8px; height: 8px; border-radius: 50%; background: var(--verde); box-shadow: 0 0 0 3px rgba(22, 163, 74, .2); }
+@keyframes recuadro-entra { from { opacity: 0; transform: translateY(18px) scale(.9); } to { opacity: 1; transform: none; } }
+::view-transition-image-pair(pestana) { border-radius: 26px; }
+
+/* ---------- Mercado y Comida rápida ---------- */
+.tarjeta-negocio { align-items: center; }
+.tarjeta-negocio .info h3 { margin-bottom: 2px; }
+.cabeza-negocio { margin-top: 12px; }
+.lista.productos { gap: 10px; padding-bottom: 90px; }
+.producto { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 22px; background: var(--superficie); box-shadow: var(--sombra-1); border: 2px solid transparent; transition: border-color .2s; }
+.producto.elegido { border-color: var(--marca); }
+.producto .foto-producto { width: 74px; height: 74px; border-radius: 18px; }
+.producto .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.producto .info b { font-size: .98rem; line-height: 1.15; }
+.producto .info small { color: var(--texto-2); font-size: .78rem; }
+.de-negocio { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 800; color: var(--texto-2); }
+.precio-producto { font-weight: 900; color: var(--marca); font-size: 1.02rem; }
+.contador-producto { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.contador-producto .boton { width: 38px; height: 38px; padding: 0; border-radius: 50%; font-size: 1.2rem; font-weight: 900; }
+.contador-producto b { min-width: 20px; text-align: center; }
+.filtro-negocios { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 10px; margin: 0 -2px; scrollbar-width: none; }
+.filtro-negocios button { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px 7px 8px; border-radius: 999px; border: 1px solid var(--borde); background: var(--superficie); color: var(--texto); font: inherit; font-weight: 800; font-size: .85rem; box-shadow: var(--sombra-1); }
+.filtro-negocios button:first-child { padding-left: 14px; }
+.filtro-negocios button.on { background: var(--marca); color: #fff; border-color: var(--marca); }
+.barra-carrito { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 600; width: min(calc(100% - 28px), 520px);
+  display: flex; align-items: center; gap: 12px; padding: 12px 18px 12px 12px; border: 0; border-radius: 24px; background: var(--degradado); color: #fff; font: inherit; text-align: left; cursor: pointer;
+  box-shadow: var(--brillo), var(--sombra-3); animation: subir-hoja .45s var(--resorte) both; }
+.barra-carrito > span:not(.logo-negocio) { flex: 1; display: flex; flex-direction: column; }
+.barra-carrito .logo-negocio.mini { width: 40px; height: 40px; border-radius: 14px; background: #fff; box-shadow: none; }
+.barra-carrito .logo-negocio.mini .ico { width: 22px; height: 22px; }
+.barra-carrito small { opacity: .85; font-weight: 700; }
+.barra-carrito .total { font-size: 1.15rem; }
+.items-pedido { list-style: none; margin: 6px 0; padding: 0; font-size: .9rem; }
+.items-pedido li { display: flex; gap: 6px; padding: 3px 0; border-bottom: 1px dashed var(--borde); }
+.items-pedido li span { margin-left: auto; font-weight: 800; }
+.total-productos { margin: 6px 0 0; }
+.total-productos small { color: var(--texto-2); }
+.resumen-encargo, .caja-negocio-carrera { align-items: flex-start; flex-wrap: wrap; }
+.caja-negocio-carrera .acciones { width: 100%; }
+.aviso-negocio { margin: 8px 0; padding: 10px 12px; border-radius: 16px; background: var(--marca-suave); font-size: .88rem; }
+.aviso-negocio p { margin: 0 0 4px; }
+.aviso-negocio .ico { width: 16px; height: 16px; vertical-align: -3px; }

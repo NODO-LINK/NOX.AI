@@ -6,8 +6,8 @@ import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
-import { firebaseConfig as configReal, appCheckClave } from "./firebase-config.js?v=75";
-import { icono, pintarIconos } from "./iconos.js?v=75";
+import { firebaseConfig as configReal, appCheckClave } from "./firebase-config.js?v=77";
+import { icono, pintarIconos } from "./iconos.js?v=77";
 
 export { icono };
 pintarIconos();
@@ -859,6 +859,31 @@ export const enApp = (() => {
 export const WHATSAPP = "584123042896";
 export const enlaceWhatsapp = (numero, texto) => `https://wa.me/${String(numero).replace(/\D/g, "")}?text=${encodeURIComponent(texto)}`;
 export const ANUNCIO_PREDETERMINADO = "¡Ya salió la app de Whereapp para Android! Escríbenos por WhatsApp y te la enviamos gratis.";
+// ---------- Negocios: "Mercado a tu casa" y "Comida rápida" ----------
+export const TIPOS_NEGOCIO = {
+  mercado: { t: "Mercado a tu casa", corto: "Mercado", icono: "carrito" },
+  comida: { t: "Comida rápida", corto: "Comida rápida", icono: "comida" },
+};
+// Número para WhatsApp en formato internacional (0414-1234567 → 584141234567), o "" si no se entiende.
+export function numeroWhatsapp(tel) {
+  let d = String(tel || "").replace(/\D/g, "");
+  if (d.length === 11 && d.startsWith("0")) d = "58" + d.slice(1);
+  if (d.length === 10) d = "58" + d;
+  return d.length === 12 ? d : "";
+}
+export const totalPedido = (items) => Math.round((items || []).reduce((s, x) => s + Number(x.p) * Number(x.c), 0) * 100) / 100;
+// Lo que va en la nota de la carrera (corto: el motorizado lo ve en su lista).
+export const resumenPedido = (items) => (items || []).map((x) => `${x.c} × ${x.n}`).join(", ");
+// Mensaje de WhatsApp para el negocio, con los datos del motorizado que va a retirar.
+export function mensajePedido(c) {
+  const lineas = (c.pedido || []).map((x) => `• ${x.c} × ${x.n} (${usd(x.p * x.c)})`).join("\n");
+  return `Hola ${c.negocio.nombre}, soy ${c.clienteNombre} (${c.clienteTel}). Te hago este pedido por Whereapp:\n\n${lineas}\n\n`
+    + `Total de productos: ${usd(c.totalProductos ?? totalPedido(c.pedido))}\n`
+    + `Entregar en: ${c.destino?.dir || ""}\n\n`
+    + `Lo retira el motorizado: ${c.motoNombre || ""}${c.motoTel ? ` · Tel ${c.motoTel}` : ""}${c.motoMoto ? ` · ${c.motoMoto}` : ""}${c.motoPlaca ? ` · Placa ${c.motoPlaca}` : ""}\n\n`
+    + `Los productos te los pago yo. ¿Me confirmas el total y cómo te pago? ¡Gracias!`;
+}
+
 // Publicidad de negocios: el enlace puede ser una página (https://…) o un número de WhatsApp.
 export function enlacePublicidad(p) {
   const e = String((p && p.enlace) || "").trim();
