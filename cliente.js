@@ -13,8 +13,8 @@ import {
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca, TIPOS_NEGOCIO, numeroWhatsapp, totalPedido, resumenPedido, mensajePedido,
-} from "./comun.js?v=77";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=77";
+} from "./comun.js?v=78";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=78";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -708,7 +708,8 @@ function iniciar() {
     const n = pedido.puntos.length;
     pedido.puntos.forEach((p, i) => {
       if (i === oculto) return;   // el punto que se está moviendo con la mira no se dibuja dos veces
-      const marca = L.marker(p, { icon: iconoPunto(i, n), draggable: editable, zIndexOffset: 800 }).addTo(capa);
+      // autoPan: al llevar el punto al borde de la pantalla, el mapa se desliza con él (si no, con zoom quedaba "trabado").
+      const marca = L.marker(p, { icon: iconoPunto(i, n), draggable: editable, autoPan: editable, autoPanPadding: L.point(60, 90), autoPanSpeed: 12, zIndexOffset: 800 }).addTo(capa);
       if (editable) marca.on("dragend", (e) => { pedido.puntos[i] = e.target.getLatLng(); alMover && alMover(); });
       if (alTocar) marca.on("click", () => alTocar(i));
     });
