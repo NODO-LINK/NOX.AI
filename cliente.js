@@ -13,8 +13,8 @@ import {
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca, TIPOS_NEGOCIO, numeroWhatsapp, totalPedido, resumenPedido, mensajePedido,
-} from "./comun.js?v=78";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=78";
+} from "./comun.js?v=79";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=79";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -22,6 +22,8 @@ function iniciar() {
   const L = window.L;
   let usuario = null, cliente = null, tarifas = null, bloqueado = false;
   let rutaActual = "inicio", mapa = null;
+  // QR del motorizado (…/?moto=ID): al entrar se abre su perfil para pedirle.
+  let motoDelQr = new URLSearchParams(location.search).get("moto");
   let motos = [], carreras = [], cancelarSubs = [];
   // Estado del formulario de pedido (se conserva al cambiar de pestaña).
   // puntos[0] = A (donde te buscan), los del medio = paradas, el último = B (destino).
@@ -218,6 +220,7 @@ function iniciar() {
         .sort((a, b) => !!a.enCarrera - !!b.enCarrera || promedio(b) - promedio(a) || (b.ratingCount || 0) - (a.ratingCount || 0));
       // La ubicación de los motorizados cambia seguido; solo se redibuja si cambió otra cosa.
       if (rutaActual === "motorizados" && JSON.stringify(motos.map(sinUbicacion)) !== antes) vistaMotorizados();
+      if (motoDelQr) abrirMotoDelQr();
       // Si un motorizado deja de estar disponible, su oferta ya no se puede aceptar.
       if (rutaActual === "carrera" && JSON.stringify(motos.map(sinUbicacion)) !== antes) pintarOfertas();
     }));
@@ -249,6 +252,15 @@ function iniciar() {
     ir(carreraActual() ? "carrera" : "inicio");
   }
 
+  function abrirMotoDelQr() {
+    const id = motoDelQr; motoDelQr = null;
+    try { history.replaceState(history.state, "", location.pathname); } catch {}
+    if (carreraActual()) return;   // con un viaje en curso no se interrumpe
+    const m = motos.find((x) => x.id === id);
+    ir("motorizados");
+    if (m) setTimeout(() => verPerfil(m), 350);
+    else aviso("Ese motorizado no está de turno ahora. Puedes pedirle a otro.");
+  }
   const sinUbicacion = ({ ubicacion, ...resto }) => resto;
   const tecleando = () => { const a = document.activeElement; return !!a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && $("#vista").contains(a); };
   const tiempo = (c) => (c.creada && c.creada.toMillis ? c.creada.toMillis() : Date.now());

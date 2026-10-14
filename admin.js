@@ -16,7 +16,7 @@ import {
   DOCUMENTOS, estadoDoc, resumenDocs,
   filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles, textoDescuento,
   TIPOS_NEGOCIO, CENTRO,
-} from "./comun.js?v=78";
+} from "./comun.js?v=79";
 
 if (!avisoSinConfigurar()) iniciar();
 
