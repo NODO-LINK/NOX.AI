@@ -12,9 +12,9 @@ import {
   pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
-  colorMarca, TIPOS_NEGOCIO, numeroWhatsapp, totalPedido, resumenPedido, mensajePedido,
-} from "./comun.js?v=79";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=79";
+  colorMarca, enlaceDescarga, TIPOS_NEGOCIO, numeroWhatsapp, totalPedido, resumenPedido, mensajePedido,
+} from "./comun.js?v=80";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=80";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -284,7 +284,7 @@ function iniciar() {
     return `<div class="anuncio"><button class="quitar" id="cerrar-anuncio" aria-label="Cerrar">${icono("cerrar")}</button>
       <div class="anuncio-ico">${icono("descargar")}</div>
       <p>${esc(texto)}</p>
-      <div class="botones">${anuncio.enlace && /^https:\/\//.test(anuncio.enlace) ? `<a class="boton" href="${esc(anuncio.enlace)}" target="_blank" rel="noopener">${icono("descargar")} Descargar la app</a>` : ""}
+      <div class="botones">${enlaceDescarga(anuncio.enlace) ? `<a class="boton" href="${esc(enlaceDescarga(anuncio.enlace))}" target="_blank" rel="noopener">${icono("descargar")} Descargar la app</a>` : ""}
         <a class="boton verde" href="${esc(wa)}" target="_blank" rel="noopener">${icono("chat")} Pedirla por WhatsApp</a></div></div>`;
   }
   // Botones de cerrar del anuncio y la publicidad (salen en Publicar y en Motorizados).

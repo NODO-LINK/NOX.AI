@@ -9,8 +9,8 @@ import {
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar, escucharTarifas, aBs, lineaRecta,
   hoyLocal,
   DOCUMENTOS, estadoDoc,
-  enApp, textoDescuento, totalPedido,
-} from "./comun.js?v=79";
+  enApp, textoDescuento, totalPedido, enlaceDescarga,
+} from "./comun.js?v=80";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -435,7 +435,7 @@ function iniciar() {
       // Lo que dicen los clientes de su seguridad (de las reseñas aprobadas).
       const malosMios = Object.entries(perfil.malos || {}).filter(([, n]) => n > 0);
       html += `<h1 class="titulo">${icono("compartir")} Tu QR de Whereapp</h1>
-        <div class="caja qr-caja"><p class="nota">Muéstraselo a tus pasajeros: lo escanean con la cámara del teléfono, abren Whereapp con <b>tu perfil</b> y la próxima vez te piden a ti. También puedes guardarlo e imprimirlo.</p>
+        <div class="caja qr-caja"><p class="nota">Muéstraselo a tus pasajeros: lo escanean con la cámara del teléfono y <b>descargan la app de Whereapp</b>. También puedes guardarlo e imprimirlo para tu moto.</p>
           <button class="boton" id="ver-qr">${icono("compartir")} Mostrar mi QR</button></div>`;
       html += `<h1 class="titulo">${icono("escudo")} Tu seguridad</h1>
         <div class="caja">${insigniasSeguridad(perfil, 6) ? `<div class="etiquetas">${insigniasSeguridad(perfil, 6)}</div>` : `<p class="nota">Todavía no hay opiniones de seguridad.</p>`}
@@ -616,8 +616,13 @@ function iniciar() {
 
   // Datos de pago móvil del motorizado (los ve el cliente que paga por Pago móvil).
   const BANCOS = ["Banco de Venezuela", "Banesco", "Mercantil", "Provincial (BBVA)", "Bancamiga", "Banco Nacional de Crédito (BNC)", "Bicentenario", "Banco del Tesoro", "Banplus", "Exterior", "Venezolano de Crédito", "Sofitasa", "Bancaribe", "100% Banco", "Banco Activo", "Banco Plaza", "Banco Caroní", "Mi Banco", "Bancrecer", "Banco Fondo Común (BFC)"];
-  // ---------- QR del motorizado: abre la app de pasajeros con su perfil ----------
-  const enlaceQr = () => new URL(`./?moto=${encodeURIComponent(yo.uid)}`, location.href).href;
+  // ---------- QR del motorizado: descarga la app de pasajeros (el APK en Google Drive que pone el admin) ----------
+  // Si el admin todavía no puso el enlace del APK, el QR abre la página de pasajeros con el perfil del motorizado.
+  const enlacePagina = () => new URL(`./?moto=${encodeURIComponent(yo.uid)}`, location.href).href;
+  async function enlaceQr() {
+    try { const d = await getDoc(doc(db, "config", "anuncio")); const e = enlaceDescarga(d.exists() && d.data().enlace); if (e) return { url: e, apk: true }; } catch {}
+    return { url: enlacePagina(), apk: false };
+  }
   let libQr = null;
   const cargarQr = () => libQr || (libQr = new Promise((ok, mal) => {
     if (window.qrcode) return ok(window.qrcode);
@@ -643,7 +648,7 @@ function iniciar() {
     x.textAlign = "center"; x.fillStyle = "#fff";
     x.font = "900 110px Nunito, sans-serif"; x.fillText(NOMBRE, 540, 170);
     x.fillStyle = "#fde68a"; x.beginPath(); x.roundRect(330, 195, 420, 16, 8); x.fill();
-    x.fillStyle = "#fff"; x.font = "800 44px Nunito, sans-serif"; x.fillText("Escanéame y pide tu mototaxi", 540, 290);
+    x.fillStyle = "#fff"; x.font = "800 44px Nunito, sans-serif"; x.fillText(qrCanvas.dataset.apk ? "Escanéame y descarga la app" : "Escanéame y pide tu mototaxi", 540, 290);
     x.fillStyle = "#fff"; x.beginPath(); x.roundRect(190, 340, 700, 700, 48); x.fill();
     x.drawImage(qrCanvas, 220, 370, 640, 640);
     x.fillStyle = "#fff"; x.font = "900 56px Nunito, sans-serif"; x.fillText(perfil.nombre || "", 540, 1130);
@@ -654,17 +659,18 @@ function iniciar() {
   async function mostrarQr() {
     let qrcode;
     try { qrcode = await cargarQr(); } catch { return aviso("No se pudo cargar el QR. Revisa tu internet."); }
-    const enlace = enlaceQr();
+    const { url: enlace, apk } = await enlaceQr();
     const qrCanvas = dibujarQr(qrcode, enlace, 640);
     const fondo = document.createElement("div");
     fondo.className = "modal";
     fondo.innerHTML = `<div class="ventana ventana-qr"><h2>${icono("compartir")} Tu QR de ${NOMBRE}</h2>
-      <p class="nota">Que lo escaneen con la cámara: se abre Whereapp con tu perfil para pedirte.</p>
+      <p class="nota">${apk ? "Que lo escaneen con la cámara: se <b>descarga la app de Whereapp</b> (Android)." : "Que lo escaneen con la cámara: se abre Whereapp con tu perfil. (El administrador aún no puso el enlace de descarga de la app.)"}</p>
       <div class="qr-grande"></div>
       <p class="qr-nombre"><b>${esc(perfil.nombre || "")}</b>${perfil.placa ? ` · Placa ${esc(perfil.placa)}` : ""}</p>
       <div class="botones"><button class="boton" data-guardar>${icono("descargar")} Guardar imagen</button>
         <button class="boton secundario" data-compartir>${icono("compartir")} Compartir enlace</button></div>
       <button class="boton secundario" data-cerrar>Cerrar</button></div>`;
+    if (apk) qrCanvas.dataset.apk = "1";
     $(".qr-grande", fondo).append(qrCanvas);
     document.body.append(fondo);
     $("[data-cerrar]", fondo).onclick = () => fondo.remove();
@@ -681,7 +687,7 @@ function iniciar() {
       }, "image/png");
     };
     $("[data-compartir]", fondo).onclick = async () => {
-      const texto = `Pide tu mototaxi conmigo (${perfil.nombre}) en ${NOMBRE}:`;
+      const texto = apk ? `Descarga la app de ${NOMBRE} para pedir tu mototaxi (soy ${perfil.nombre}):` : `Pide tu mototaxi conmigo (${perfil.nombre}) en ${NOMBRE}:`;
       try {
         if (navigator.share) await navigator.share({ title: NOMBRE, text: texto, url: enlace });
         else { await navigator.clipboard.writeText(`${texto} ${enlace}`); aviso("Enlace copiado: pégalo en WhatsApp"); }
