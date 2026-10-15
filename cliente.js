@@ -14,8 +14,8 @@ import {
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca, enlaceDescarga, TIPOS_NEGOCIO, numeroWhatsapp, totalPedido, resumenPedido, mensajePedido,
   precioCodigo, textoRecibo, RAPIDOS_CLIENTE, enviarMensaje, botonesRapidos, conBs, activarPush, avisosAlEntrar, hayBuscadorGoogle, buscarGoogle, lugarGoogle,
-} from "./comun.js?v=84";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=84";
+} from "./comun.js?v=85";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=85";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -73,8 +73,9 @@ function iniciar() {
     $("#cabecera").hidden = true; $("#barra").hidden = true; $("#widget").hidden = true; document.body.classList.add("sin-barra");
     document.body.classList.remove("con-widget");
     const guardados = forzarFormulario ? null : recordados.leer();
-    const pie = `<p class="nota" style="text-align:center;margin-top:18px">¿Eres motorizado? <a href="moto.html" style="color:var(--marca);font-weight:700">Entra aquí</a></p>
-      <p class="nota" style="text-align:center">${ENLACE_POLITICAS}</p>`;
+    const pie = `<p class="nota" style="text-align:center;margin-top:18px">${ENLACE_POLITICAS}</p>`;
+    // Una sola app: los motorizados entran desde aquí (la app recuerda el modo para la próxima vez).
+    const enlaceMoto = `<a class="enlace-modo" href="moto.html" data-modo="moto">Entrar como motorizado</a>`;
     // Casilla para aceptar la política (solo si no la ha aceptado en este teléfono).
     const casilla = politicasAceptadas() ? "" : `<label class="opcion acepto"><input type="checkbox" id="acepto"><span>Acepto la <a href="privacidad.html" target="_blank">política de privacidad y de cookies</a></span></label>`;
     const falta = () => {
@@ -95,6 +96,7 @@ function iniciar() {
           ${casilla}
           <button class="boton" id="continuar">Entrar como ${esc(guardados.nombre.split(" ")[0])}</button>
           <button class="boton secundario" id="otros">No soy yo / cambiar datos</button>
+          ${enlaceMoto}
         </div>${pie}</div>`;
       transicion();
       $("#continuar").onclick = () => { if (!falta()) entrar(guardados, $("#continuar")); };
@@ -111,6 +113,7 @@ function iniciar() {
         <input id="tel" type="tel" inputmode="tel" placeholder="0414-1234567" autocomplete="tel" value="${esc(telBonito(previos.telefono))}" required>
         ${casilla}
         <button class="boton">Entrar</button>
+        ${enlaceMoto}
         <p class="nota">Tus datos quedan guardados en este teléfono para que la próxima vez entres con un toque.</p>
       </form>${pie}</div>`;
     transicion();
@@ -493,6 +496,7 @@ function iniciar() {
         <div class="fila-op" id="op-instalar">${icono("descargar")}<span>Instalar la app</span></div>
         <a href="${esc(enlaceWhatsapp(WHATSAPP, `Hola, soy ${cliente.nombre}. Necesito ayuda con Whereapp.`))}" target="_blank" rel="noopener">${icono("chat")}<span>Ayuda por WhatsApp<small>0412-3042896</small></span>${icono("flecha")}</a>
         <a href="privacidad.html">${icono("escudo")}<span>Privacidad y cookies</span>${icono("flecha")}</a>
+        <a href="moto.html" data-modo="moto">${icono("moto")}<span>Entrar como motorizado<small>Para quienes trabajan con Whereapp</small></span>${icono("flecha")}</a>
       </div>
       <button class="boton peligro" id="salir">Salir</button>`;
     const inst = botonInstalar(); $("#op-instalar").append(inst); $("#op-instalar").hidden = inst.hidden;

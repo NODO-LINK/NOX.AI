@@ -1,8 +1,7 @@
 plugins { id "com.android.application" }
 
-// Firma: la MISMA llave de cada APK actual (así se instala encima). Se toman de los "secrets" de GitHub.
+// Firma: la MISMA llave de la APK actual de pasajeros (así se instala encima). Se toman de los "secrets" de GitHub.
 def llaveCliente = System.getenv("WHEREAPP_KEYSTORE")
-def llaveMoto = System.getenv("WHEREAPP_MOTO_KEYSTORE")
 
 android {
     namespace "com.whereapp.cliente"
@@ -22,16 +21,8 @@ android {
                 keyPassword System.getenv("WHEREAPP_KEY_PASSWORD")
             }
         }
-        if (llaveMoto) {
-            moto {
-                storeFile file(llaveMoto)
-                storePassword System.getenv("WHEREAPP_MOTO_STORE_PASSWORD")
-                keyAlias System.getenv("WHEREAPP_MOTO_KEY_ALIAS")
-                keyPassword System.getenv("WHEREAPP_MOTO_KEY_PASSWORD")
-            }
-        }
     }
-    // Dos apps con el mismo código: pasajeros (con widget) y motorizados.
+    // Una sola app para pasajeros y motorizados (los motorizados entran con «Entrar como motorizado»).
     flavorDimensions "app"
     productFlavors {
         cliente {
@@ -40,13 +31,6 @@ android {
             resValue "string", "app_name", "Whereapp"
             manifestPlaceholders = [urlInicio: "https://nodo-link.github.io/NOX.AI/", rutaApp: "/NOX.AI"]
             if (llaveCliente) signingConfig signingConfigs.cliente
-        }
-        moto {
-            dimension "app"
-            applicationId "com.whereapp.moto"
-            resValue "string", "app_name", "Whereapp Moto"
-            manifestPlaceholders = [urlInicio: "https://nodo-link.github.io/NOX.AI/moto.html", rutaApp: "/NOX.AI/moto.html"]
-            if (llaveMoto) signingConfig signingConfigs.moto
         }
     }
     buildTypes {

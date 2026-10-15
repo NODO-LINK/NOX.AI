@@ -11,7 +11,7 @@ import {
   DOCUMENTOS, estadoDoc,
   enApp, textoDescuento, totalPedido, enlaceDescarga,
   RAPIDOS_MOTO, enviarMensaje, botonesRapidos, activarPush, avisosAlEntrar,
-} from "./comun.js?v=84";
+} from "./comun.js?v=85";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -72,6 +72,7 @@ function iniciar() {
       const turnoAntes = perfil ? perfil.deTurno !== false : null;
       const firmaAntes = firma(perfil);
       perfil = { id: s.id, ...s.data() };
+      try { localStorage.setItem("whereapp.modo", "moto"); } catch {}
       // Una vez al día: que usó la app y si es la instalada (APK).
       try {
         const marca = `${hoyLocal()}:${enApp()}`;
@@ -106,10 +107,11 @@ function iniciar() {
     $("#cabecera").hidden = true;
     $("#vista").innerHTML = `<div class="entrada">
       <div class="logo">${NOMBRE}</div><div class="logo-sub">Apartado de motorizados</div>
-      <form class="caja" id="login"><h2>Entrar</h2>
+      <form class="caja" id="login"><h2>Entrar como motorizado</h2>
         <label for="usuario">Usuario</label><input id="usuario" autocomplete="username" autocapitalize="none">
         <label for="clave">Clave</label><input id="clave" type="password" autocomplete="current-password">
         <button class="boton">Entrar</button>
+        <a class="enlace-modo" href="index.html?pasajero" data-modo="pasajero">Entrar como pasajero</a>
         <p class="nota">El usuario y la clave te los da el administrador.</p>
         <p class="nota">Al entrar aceptas la ${ENLACE_POLITICAS.replace("Política", "política")}.</p></form></div>`;
     $("#login").onsubmit = async (e) => {
@@ -494,6 +496,7 @@ function iniciar() {
           : `<p class="nota">Regístralo para que los clientes que pagan por Pago móvil vean tus datos.</p>`}
           <button class="boton secundario" id="editar-pm" style="margin-top:10px">${icono("telefono")} ${pm.telefono ? "Cambiar datos" : "Registrar pago móvil"}</button></div>`;
     }
+    if (!miCarrera) html += `<a class="enlace-modo" href="index.html?pasajero" data-modo="pasajero">Usar la app como pasajero</a>`;
     $("#vista").innerHTML = html;
     // Animar la entrada solo cuando cambia lo que se muestra (lista, carrera o aviso de inactivo).
     const modo = `${ok}-${miCarrera ? miCarrera.id : "lista"}-${miCarrera ? !!miCarrera.recogido : ""}`;

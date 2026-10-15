@@ -6,8 +6,8 @@ import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
-import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=84";
-import { icono, pintarIconos } from "./iconos.js?v=84";
+import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=85";
+import { icono, pintarIconos } from "./iconos.js?v=85";
 
 export { icono };
 pintarIconos();
@@ -1221,6 +1221,13 @@ export function abrirChat(carreraId, yoUid, yoNombre, conQuien) {
   addEventListener("online", () => { pintar(); aviso("Conexión restablecida"); });
   if (document.readyState === "loading") addEventListener("DOMContentLoaded", pintar); else pintar();
 })();
+
+// ---------- Una sola app para pasajeros y motorizados ----------
+// Los enlaces «Entrar como motorizado / pasajero» recuerdan el modo: al abrir la app de nuevo se entra directo ahí.
+document.addEventListener("click", (e) => {
+  const a = e.target.closest?.("[data-modo]");
+  if (a) try { localStorage.setItem("whereapp.modo", a.dataset.modo); } catch {}
+});
 
 // ---------- Botón "atrás" del teléfono ----------
 // Con una ventana abierta (mapa, chat, perfil, SOS…), "atrás" la cierra en vez de salir de la app.
