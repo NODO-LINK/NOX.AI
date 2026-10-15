@@ -16,7 +16,7 @@ import {
   DOCUMENTOS, estadoDoc, resumenDocs,
   filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles, textoDescuento,
   TIPOS_NEGOCIO, CENTRO, numeroWhatsapp, avisosAlEntrar,
-} from "./comun.js?v=88";
+} from "./comun.js?v=89";
 
 if (!avisoSinConfigurar()) iniciar();
 // Estrellas dibujadas (sin emojis): llenas y, si se pide, también las apagadas.
@@ -737,7 +737,7 @@ function iniciar() {
         <label class="opcion"><input type="checkbox" name="activo" ${a.activo ? "checked" : ""}><span>Mostrar el anuncio</span></label>
         <label>Mensaje</label><textarea name="texto" maxlength="200" placeholder="${esc(ANUNCIO_PREDETERMINADO)}">${esc(a.texto || "")}</textarea>
         <label>Enlace para descargar la app (opcional)</label><input name="enlace" type="url" placeholder="https://…" value="${esc(a.enlace || "")}">
-        <p class="nota">Pon aquí el enlace del APK en <b>Google Drive</b> (compartido como «Cualquier persona con el enlace»). Sale el botón «Descargar la app» y es también el enlace del <b>QR de los motorizados</b>: al escanearlo se descarga la app directo.</p>
+        <p class="nota">Cuando Whereapp esté en <b>Play Store</b>, pega aquí su enlace (https://play.google.com/store/apps/details?id=com.whereapp.cliente). Sale el botón «Descargar la app».</p>
         <button class="boton">Guardar anuncio</button></form>
       <div class="caja"><h2>${icono("chat")} Avisar por WhatsApp</h2>
         <p class="nota">WhatsApp no deja enviar a todos de una vez desde una página. Puedes: tocar «WhatsApp» en cada cliente (el mensaje ya va escrito), o copiar todos los números y crear una <b>lista de difusión</b> en WhatsApp (solo les llega a quienes te tienen guardado).</p>

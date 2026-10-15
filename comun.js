@@ -6,8 +6,8 @@ import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
-import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=88";
-import { icono, pintarIconos } from "./iconos.js?v=88";
+import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=89";
+import { icono, pintarIconos } from "./iconos.js?v=89";
 
 export { icono };
 pintarIconos();
@@ -957,7 +957,7 @@ export const enApp = (() => {
 export const WHATSAPP = "584123042896";
 export const enlaceWhatsapp = (numero, texto) => `https://wa.me/${String(numero).replace(/\D/g, "")}?text=${encodeURIComponent(texto)}`;
 export const ANUNCIO_PREDETERMINADO = "¡Ya salió la app de Whereapp para Android! Escríbenos por WhatsApp y te la enviamos gratis.";
-// Enlace para descargar el APK (el que pone el admin en el anuncio). Si es de Google Drive,
+// Enlace para descargar la app (el que pone el admin en el anuncio, p. ej. Play Store). Si es de Google Drive,
 // se convierte en descarga directa (sin pasar por la vista previa de Drive).
 export function enlaceDescarga(url) {
   const u = String(url || "").trim();

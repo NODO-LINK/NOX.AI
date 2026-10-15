@@ -9,16 +9,16 @@ import {
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar, escucharTarifas, aBs, lineaRecta,
   hoyLocal,
   DOCUMENTOS, estadoDoc,
-  enApp, textoDescuento, totalPedido, enlaceDescarga,
+  enApp, textoDescuento, totalPedido,
   RAPIDOS_MOTO, enviarMensaje, botonesRapidos, activarPush, avisosAlEntrar,
-} from "./comun.js?v=88";
+} from "./comun.js?v=89";
 
 if (!avisoSinConfigurar()) iniciar();
 
 function iniciar() {
   const L = window.L;
   let yo = null, perfil = null, subs = [], subsCarreras = [];
-  // Accesos directos del ícono (mantener presionado): moto.html?accion=turno | ganancias | qr
+  // Accesos directos del ícono (mantener presionado): moto.html?accion=turno | ganancias
   let accionInicial = new URLSearchParams(location.search).get("accion");
   function hacerAccion() {
     const a = accionInicial; accionInicial = null;
@@ -28,7 +28,6 @@ function iniciar() {
       if (perfil.deTurno !== false) return aviso("Ya estás de turno");
       updateDoc(doc(db, "motorizados", yo.uid), { deTurno: true }).then(() => aviso("¡Estás de turno! Ya recibes carreras."), () => aviso("No se pudo cambiar el turno"));
     } else if (a === "ganancias") setTimeout(() => $("#ganancias")?.scrollIntoView({ behavior: "smooth", block: "start" }), 400);
-    else if (a === "qr") setTimeout(() => mostrarQr(), 300);
   }
   let tarifas = null, reportes = [], misDocs = null;
   // Contraofertas: lo que ofreció este motorizado en carreras con precio del cliente, y las que aceptó él mismo.
@@ -469,9 +468,6 @@ function iniciar() {
       html += estadisticas();
       // Lo que dicen los clientes de su seguridad (de las reseñas aprobadas).
       const malosMios = Object.entries(perfil.malos || {}).filter(([, n]) => n > 0);
-      html += `<h1 class="titulo">${icono("compartir")} Tu QR de Whereapp</h1>
-        <div class="caja qr-caja"><p class="nota">Muéstraselo a tus pasajeros: lo escanean con la cámara del teléfono y <b>descargan la app de Whereapp</b>. También puedes guardarlo e imprimirlo para tu moto.</p>
-          <button class="boton" id="ver-qr">${icono("compartir")} Mostrar mi QR</button></div>`;
       html += `<h1 class="titulo">${icono("escudo")} Tu seguridad</h1>
         <div class="caja">${insigniasSeguridad(perfil, 6) ? `<div class="etiquetas">${insigniasSeguridad(perfil, 6)}</div>` : `<p class="nota">Todavía no hay opiniones de seguridad.</p>`}
         ${malosMios.length ? `<p class="nota" style="margin-top:10px">Para mejorar:</p><div class="etiquetas">${malosMios.map(([k, n]) => `<span class="pildora riesgo">${icono("alerta")} ${esc((ASPECTOS.malos.find((a) => a.k === k) || { t: k }).t)} (${n})</span>`).join("")}</div>` : ""}
@@ -499,7 +495,6 @@ function iniciar() {
     if (modo !== ultimoModo) { ultimoModo = modo; transicion(); }
 
     if ($("#editar-pm")) $("#editar-pm").onclick = editarPagoMovil;
-    if ($("#ver-qr")) $("#ver-qr").onclick = mostrarQr;
     if ($("#poner-meta")) $("#poner-meta").onclick = ponerMeta;
     if ($("#reportar-pago")) $("#reportar-pago").onclick = reportarPago;
     const ops = $("#mis-opiniones");
@@ -638,84 +633,6 @@ function iniciar() {
 
   // Datos de pago móvil del motorizado (los ve el cliente que paga por Pago móvil).
   const BANCOS = ["Banco de Venezuela", "Banesco", "Mercantil", "Provincial (BBVA)", "Bancamiga", "Banco Nacional de Crédito (BNC)", "Bicentenario", "Banco del Tesoro", "Banplus", "Exterior", "Venezolano de Crédito", "Sofitasa", "Bancaribe", "100% Banco", "Banco Activo", "Banco Plaza", "Banco Caroní", "Mi Banco", "Bancrecer", "Banco Fondo Común (BFC)"];
-  // ---------- QR del motorizado: descarga la app de pasajeros (el APK en Google Drive que pone el admin) ----------
-  // Si el admin todavía no puso el enlace del APK, el QR abre la página de pasajeros con el perfil del motorizado.
-  const enlacePagina = () => new URL(`./?moto=${encodeURIComponent(yo.uid)}`, location.href).href;
-  async function enlaceQr() {
-    try { const d = await getDoc(doc(db, "config", "anuncio")); const e = enlaceDescarga(d.exists() && d.data().enlace); if (e) return { url: e, apk: true }; } catch {}
-    return { url: enlacePagina(), apk: false };
-  }
-  let libQr = null;
-  const cargarQr = () => libQr || (libQr = new Promise((ok, mal) => {
-    if (window.qrcode) return ok(window.qrcode);
-    const s = document.createElement("script");
-    s.src = "vendor/qrcode/qrcode.js"; s.onload = () => ok(window.qrcode); s.onerror = () => { libQr = null; mal(new Error("qr")); };
-    document.head.append(s);
-  }));
-  // Dibuja el QR en un canvas (cuadros negros sobre blanco, con margen para que se lea bien).
-  function dibujarQr(qrcode, texto, lado) {
-    const qr = qrcode(0, "M"); qr.addData(texto); qr.make();
-    const n = qr.getModuleCount(), margen = 2, celda = Math.floor(lado / (n + margen * 2));
-    const c = document.createElement("canvas"); c.width = c.height = celda * (n + margen * 2);
-    const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.fillStyle = "#0b1a4a";
-    for (let f = 0; f < n; f++) for (let k = 0; k < n; k++) if (qr.isDark(f, k)) x.fillRect((k + margen) * celda, (f + margen) * celda, celda, celda);
-    return c;
-  }
-  // Imagen para guardar o imprimir: fondo azul, el QR en una tarjeta blanca y los datos del motorizado.
-  function imagenQr(qrCanvas) {
-    const c = document.createElement("canvas"); c.width = 1080; c.height = 1350;
-    const x = c.getContext("2d");
-    const g = x.createLinearGradient(0, 0, 1080, 1350); g.addColorStop(0, "#3b6cf6"); g.addColorStop(0.5, "#1d4ed8"); g.addColorStop(1, "#1e3a8a");
-    x.fillStyle = g; x.fillRect(0, 0, 1080, 1350);
-    x.textAlign = "center"; x.fillStyle = "#fff";
-    x.font = "900 110px Nunito, sans-serif"; x.fillText(NOMBRE, 540, 170);
-    x.fillStyle = "#fde68a"; x.beginPath(); x.roundRect(330, 195, 420, 16, 8); x.fill();
-    x.fillStyle = "#fff"; x.font = "800 44px Nunito, sans-serif"; x.fillText(qrCanvas.dataset.apk ? "Escanéame y descarga la app" : "Escanéame y pide tu mototaxi", 540, 290);
-    x.fillStyle = "#fff"; x.beginPath(); x.roundRect(190, 340, 700, 700, 48); x.fill();
-    x.drawImage(qrCanvas, 220, 370, 640, 640);
-    x.fillStyle = "#fff"; x.font = "900 56px Nunito, sans-serif"; x.fillText(perfil.nombre || "", 540, 1130);
-    x.font = "700 38px Nunito, sans-serif"; x.fillText([perfil.moto, perfil.placa ? `Placa ${perfil.placa}` : ""].filter(Boolean).join(" · "), 540, 1190);
-    x.fillStyle = "#fde68a"; x.font = "800 34px Nunito, sans-serif"; x.fillText("Mototaxi seguro en El Moján", 540, 1270);
-    return c;
-  }
-  async function mostrarQr() {
-    let qrcode;
-    try { qrcode = await cargarQr(); } catch { return aviso("No se pudo cargar el QR. Revisa tu internet."); }
-    const { url: enlace, apk } = await enlaceQr();
-    const qrCanvas = dibujarQr(qrcode, enlace, 640);
-    const fondo = document.createElement("div");
-    fondo.className = "modal";
-    fondo.innerHTML = `<div class="ventana ventana-qr"><h2>${icono("compartir")} Tu QR de ${NOMBRE}</h2>
-      <p class="nota">${apk ? "Que lo escaneen con la cámara: se <b>descarga la app de Whereapp</b> (Android)." : "Que lo escaneen con la cámara: se abre Whereapp con tu perfil. (El administrador aún no puso el enlace de descarga de la app.)"}</p>
-      <div class="qr-grande"></div>
-      <p class="qr-nombre"><b>${esc(perfil.nombre || "")}</b>${perfil.placa ? ` · Placa ${esc(perfil.placa)}` : ""}</p>
-      <div class="botones"><button class="boton" data-guardar>${icono("descargar")} Guardar imagen</button>
-        <button class="boton secundario" data-compartir>${icono("compartir")} Compartir enlace</button></div>
-      <button class="boton secundario" data-cerrar>Cerrar</button></div>`;
-    if (apk) qrCanvas.dataset.apk = "1";
-    $(".qr-grande", fondo).append(qrCanvas);
-    document.body.append(fondo);
-    $("[data-cerrar]", fondo).onclick = () => fondo.remove();
-    $("[data-guardar]", fondo).onclick = async () => {
-      try { await document.fonts.ready; } catch {}
-      imagenQr(qrCanvas).toBlob((blob) => {
-        if (!blob) return aviso("No se pudo crear la imagen");
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url; a.download = `Whereapp-QR-${String(perfil.nombre || "motorizado").replace(/\s+/g, "-")}.png`;
-        document.body.append(a); a.click(); a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
-        aviso("Imagen guardada en tus descargas");
-      }, "image/png");
-    };
-    $("[data-compartir]", fondo).onclick = async () => {
-      const texto = apk ? `Descarga la app de ${NOMBRE} para pedir tu mototaxi (soy ${perfil.nombre}):` : `Pide tu mototaxi conmigo (${perfil.nombre}) en ${NOMBRE}:`;
-      try {
-        if (navigator.share) await navigator.share({ title: NOMBRE, text: texto, url: enlace });
-        else { await navigator.clipboard.writeText(`${texto} ${enlace}`); aviso("Enlace copiado: pégalo en WhatsApp"); }
-      } catch {}
-    };
-  }
 
   function editarPagoMovil() {
     const pm = perfil.pagoMovil || {};
