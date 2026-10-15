@@ -19,6 +19,96 @@ service cloud.firestore {
     function tarifas() { return get(/databases/$(database)/documents/config/general).data; }
     function negocioData(nid) { return get(/databases/$(database)/documents/negocios/$(nid)).data; }
     function texto(v, max) { return v is string && v.size() <= max; }
+    // Cliente bloqueado por el administrador: por su cuenta, su teléfono o su cédula (si la tiene).
+    function clienteBloqueado() {
+      let c = clienteData();
+      return exists(/databases/$(database)/documents/bloqueados/$(request.auth.uid))
+        || exists(/databases/$(database)/documents/bloqueados/$(c.get('telefono', '-')))
+        || exists(/databases/$(database)/documents/bloqueados/$(c.get('cedula', '-')));
+    }
+    function codigoData(c) { return get(/databases/$(database)/documents/codigos/$(c)).data; }
+
+    // ---------- Carrera nueva (dividida en partes para no pasar el límite de cálculos de Firestore) ----------
+    function carreraNuevaOk(id, d) {
+      let hayConfig = exists(/databases/$(database)/documents/config/general);
+      let t = hayConfig ? tarifas() : {};
+      return carreraCampos(d) && carreraDelCliente(d) && carreraDescuento(d, t) && carreraPin(id, d)
+        && carreraNegocio(d) && carreraPrecio(d, t, hayConfig) && carreraBs(d, t, hayConfig) && carreraParaMoto(d);
+    }
+    function carreraCampos(d) {
+      return d.keys().hasOnly(['clienteUid', 'clienteNombre', 'clienteTel', 'tipo', 'origen', 'destino', 'paradas', 'retorno', 'nota',
+             'km', 'precio', 'recargos', 'ofertaCliente', 'precioSugerido', 'precioCliente', 'formaPago', 'tasa', 'precioBs', 'precioBsCliente',
+             'estado', 'paraMoto', 'paraMotoNombre', 'motoUid', 'calificada', 'cancelaciones', 'creada', 'descuento',
+             'negocio', 'pedido', 'totalProductos', 'conPin', 'codigo'])
+        && d.clienteUid == request.auth.uid && d.estado == 'esperando' && d.motoUid == null
+        && d.km is number && d.km >= 0 && d.km < 200
+        && d.precio is number && d.precio > 0 && d.precio < 1000
+        && punto(d.origen) && punto(d.destino)
+        && (!('paradas' in d) || (d.paradas is list && d.paradas.size() <= 5))
+        && d.get('precioCliente', d.precio) == d.precio
+        && d.get('precioBsCliente', null) == d.get('precioBs', null)
+        && d.get('calificada', false) == false
+        && d.tipo in ['mototaxi', 'delivery']
+        && d.get('formaPago', 'usd') in ['usd', 'bs', 'pagomovil']
+        && texto(d.get('nota', ''), 300)
+        && d.get('cancelaciones', []).size() == 0
+        && d.creada == request.time;
+    }
+    // Desde la consola no se puede: usar otro nombre o teléfono, ni pedir varias seguidas
+    // (la carrera va junto con la hora de su última carrera, que la ficha del cliente solo deja cambiar cada 20 s). Bloqueados no piden.
+    function carreraDelCliente(d) {
+      let c = clienteData();
+      return d.clienteNombre is string && d.clienteNombre.size() <= 80
+        && d.clienteNombre == c.nombre && d.clienteTel == c.telefono
+        && getAfter(/databases/$(database)/documents/clientes/$(request.auth.uid)).data.get('ultimaCarrera', null) == request.time
+        && !clienteBloqueado();
+    }
+    // 50% (si el admin lo encendió, con su motivo) o código de promoción (activo y sin vencer). No se juntan.
+    function carreraDescuento(d, t) {
+      return (!('descuento' in d)
+          || (t.get('descuento', {}).get('activa', false) == true
+              && d.descuento == { 'pct': 50, 'motivo': t.get('descuento', {}).get('motivo', '') }))
+        && (!('codigo' in d) || (!('descuento' in d) && codigoOk(d.codigo)));
+    }
+    function codigoOk(k) {
+      let x = k.keys().hasOnly(['c', 'pct']) && k.c is string && k.c.matches('^[A-Z0-9]{3,20}$') ? codigoData(k.c) : null;
+      return x != null && x.activo == true && x.vence > request.time && k.pct == x.pct;
+    }
+    // Código de 4 números para subir a la moto: se guarda aparte (el motorizado no lo puede leer).
+    function carreraPin(id, d) {
+      return d.get('conPin', false) == false
+        || (d.conPin == true && d.tipo == 'mototaxi' && existsAfter(/databases/$(database)/documents/carreras/$(id)/privado/pin));
+    }
+    // Pedido a un negocio (Mercado o Comida rápida): delivery, de un negocio real y activo, con sus productos.
+    function carreraNegocio(d) {
+      return ('negocio' in d)
+        ? (d.tipo == 'delivery' && d.negocio.keys().hasOnly(['id', 'nombre', 'telefono', 'dir']) && negocioOk(d.negocio)
+           && d.pedido is list && d.pedido.size() > 0 && d.pedido.size() <= 40
+           && d.totalProductos is number && d.totalProductos >= 0 && d.totalProductos < 100000)
+        : (!('pedido' in d) && !('totalProductos' in d));
+    }
+    function negocioOk(n) {
+      let x = negocioData(n.id);
+      return x.get('activo', true) != false && n.nombre == x.nombre && n.telefono == x.telefono;
+    }
+    // Precio normal: no menos que la tarifa por distancia (con su descuento). Publicada: el cliente pone su precio.
+    function carreraPrecio(d, t, hayConfig) {
+      let tar = t.get(d.tipo, { 'base': 0, 'porKm': 0 });
+      let factor = ('descuento' in d) ? 0.5 : (('codigo' in d) ? (100.0 - d.codigo.pct) / 100.0 : 1.0);
+      return d.get('ofertaCliente', false) == true || !hayConfig
+        || d.precio >= (tar.base + tar.porKm * (d.km - 0.06)) * factor - 0.02;
+    }
+    // En Bs: con la tasa del día y que cuadre con el precio en $.
+    function carreraBs(d, t, hayConfig) {
+      return d.get('precioBs', null) == null
+        || (d.tasa is number && d.tasa > 0 && (!hayConfig || d.tasa == t.get('tasa', 0))
+            && d.precioBs is number && math.abs(d.precioBs - d.precio * d.tasa) <= d.tasa * 0.02 + 1);
+    }
+    // Pedida a un motorizado: que exista y con su nombre real.
+    function carreraParaMoto(d) {
+      return d.get('paraMoto', null) == null || d.get('paraMotoNombre', null) == motoData(d.paraMoto).nombre;
+    }
+
     // Hora puesta por el servidor (no se puede inventar una fecha desde la consola).
     function ahora(campo) { return request.resource.data[campo] == request.time; }
 
@@ -82,24 +172,28 @@ service cloud.firestore {
 
     match /clientes/{uid} {
       allow read: if dentro() && request.auth.uid == uid;
-      // La cédula no se puede cambiar después (así un cliente bloqueado no se desbloquea solo).
+      // Para entrar basta nombre y teléfono. La cédula es opcional (clientes viejos la tienen) y no se puede cambiar ni borrar.
       allow create, update: if dentro() && request.auth.uid == uid
         && request.resource.data.nombre is string && request.resource.data.nombre.size() >= 5 && request.resource.data.nombre.size() <= 80
-        && request.resource.data.cedula is string && request.resource.data.cedula.matches('^[VE]-[0-9]{6,9}$')
+        && (!('cedula' in request.resource.data) || (request.resource.data.cedula is string && request.resource.data.cedula.matches('^[VE]-[0-9]{6,9}$')))
         && request.resource.data.telefono is string && request.resource.data.telefono.matches('^[+]58[0-9]{10}$')
         && request.resource.data.keys().hasOnly(['nombre', 'cedula', 'telefono', 'creado', 'politicas', 'ultimaCarrera', 'enApp', 'ultimaVez'])
         && request.resource.data.get('enApp', true) is bool
         && (!('ultimaVez' in request.resource.data) || request.resource.data.ultimaVez == request.time
             || (resource != null && request.resource.data.ultimaVez == resource.data.get('ultimaVez', null)))
-        && (resource == null || request.resource.data.cedula == resource.data.cedula)
-        // La hora de su última carrera solo la pone el servidor (y no se puede borrar para saltarse la espera).
-        && (!('ultimaCarrera' in request.resource.data) || request.resource.data.ultimaCarrera == request.time
-            || (resource != null && request.resource.data.ultimaCarrera == resource.data.get('ultimaCarrera', null)))
+        && (resource == null || request.resource.data.get('cedula', null) == resource.data.get('cedula', null))
+        // La hora de su última carrera solo la pone el servidor, y como mucho una vez cada 20 s (no se puede pedir varias seguidas).
+        // Tampoco se puede borrar para saltarse la espera.
+        && (!('ultimaCarrera' in request.resource.data)
+            || (resource != null && request.resource.data.ultimaCarrera == resource.data.get('ultimaCarrera', null))
+            || (request.resource.data.ultimaCarrera == request.time
+                && (resource == null || !('ultimaCarrera' in resource.data) || resource.data.ultimaCarrera < request.time - duration.value(20, 's')
+                    || resource.data.ultimaCarrera == request.time)))
         && (resource == null || !('ultimaCarrera' in resource.data) || 'ultimaCarrera' in request.resource.data);
       allow read, update: if esAdmin();
     }
 
-    // Cédulas bloqueadas por el administrador: esos clientes no pueden pedir carreras.
+    // Clientes bloqueados por el administrador (por cuenta, teléfono o cédula): no pueden pedir carreras.
     match /bloqueados/{cedula} {
       allow get: if dentro();
       allow list, write: if esAdmin();
@@ -113,6 +207,17 @@ service cloud.firestore {
     match /productos/{id} {
       allow read: if dentro();
       allow write: if esAdmin();
+      // «Lo más pedido»: al pedir, el cliente suma lo que llevó de cada producto (solo puede sumar, de 1 a 20).
+      allow update: if dentro() && soloCambia(['vendidos'])
+        && request.resource.data.vendidos is int
+        && request.resource.data.vendidos - resource.data.get('vendidos', 0) >= 1
+        && request.resource.data.vendidos - resource.data.get('vendidos', 0) <= 20;
+    }
+
+    // Códigos de promoción: los crea el administrador. Un cliente solo puede consultar el que escribió (no la lista).
+    match /codigos/{c} {
+      allow get: if dentro();
+      allow list, write: if esAdmin();
     }
 
     // Puntos de referencia del mapa: los agrega el administrador y los ven todos.
@@ -134,61 +239,7 @@ service cloud.firestore {
         || (esMoto() && resource.data.motoUid == request.auth.uid)
         || (esMoto() && resource.data.estado == 'esperando' && motoHabilitado());
 
-      allow create: if dentro() && idNormal(id)
-        && request.resource.data.clienteUid == request.auth.uid
-        && !exists(/databases/$(database)/documents/bloqueados/$(get(/databases/$(database)/documents/clientes/$(request.auth.uid)).data.cedula))
-        && request.resource.data.estado == 'esperando'
-        && request.resource.data.motoUid == null
-        && request.resource.data.km is number && request.resource.data.km >= 0 && request.resource.data.km < 200
-        && request.resource.data.precio is number && request.resource.data.precio > 0 && request.resource.data.precio < 1000
-        && punto(request.resource.data.origen) && punto(request.resource.data.destino)
-        && (!('paradas' in request.resource.data) || (request.resource.data.paradas is list && request.resource.data.paradas.size() <= 5))
-        && request.resource.data.keys().hasOnly(['clienteUid', 'clienteNombre', 'clienteTel', 'tipo', 'origen', 'destino', 'paradas', 'retorno', 'nota',
-             'km', 'precio', 'recargos', 'ofertaCliente', 'precioSugerido', 'precioCliente', 'formaPago', 'tasa', 'precioBs', 'precioBsCliente',
-             'estado', 'paraMoto', 'paraMotoNombre', 'motoUid', 'calificada', 'cancelaciones', 'creada', 'descuento',
-             'negocio', 'pedido', 'totalProductos'])
-        && request.resource.data.get('precioCliente', request.resource.data.precio) == request.resource.data.precio
-        && request.resource.data.get('precioBsCliente', null) == request.resource.data.get('precioBs', null)
-        && request.resource.data.get('calificada', false) == false
-        && request.resource.data.clienteNombre is string && request.resource.data.clienteNombre.size() <= 80
-        // Desde la consola no se puede: usar otro nombre o teléfono, inventar la hora, ni pedir varias seguidas.
-        && request.resource.data.clienteNombre == clienteData().nombre
-        && request.resource.data.clienteTel == clienteData().telefono
-        && ahora('creada')
-        && getAfter(/databases/$(database)/documents/clientes/$(request.auth.uid)).data.get('ultimaCarrera', null) == request.time
-        && (!('ultimaCarrera' in clienteData()) || clienteData().ultimaCarrera < request.time - duration.value(20, 's'))
-        && request.resource.data.tipo in ['mototaxi', 'delivery']
-        && request.resource.data.get('formaPago', 'usd') in ['usd', 'bs', 'pagomovil']
-        && texto(request.resource.data.get('nota', ''), 300)
-        && request.resource.data.get('cancelaciones', []).size() == 0
-        // Descuento del 50%: solo si el admin lo tiene encendido, y con su mismo motivo.
-        && (!('descuento' in request.resource.data)
-            || (exists(/databases/$(database)/documents/config/general)
-                && tarifas().get('descuento', {}).get('activa', false) == true
-                && request.resource.data.descuento == { 'pct': 50, 'motivo': tarifas().descuento.get('motivo', '') }))
-        // Pedido a un negocio (Mercado o Comida rápida): delivery, de un negocio real y activo, con sus productos.
-        && (!('negocio' in request.resource.data)
-            || (request.resource.data.tipo == 'delivery'
-                && request.resource.data.negocio.keys().hasOnly(['id', 'nombre', 'telefono', 'dir'])
-                && negocioData(request.resource.data.negocio.id).get('activo', true) != false
-                && request.resource.data.negocio.nombre == negocioData(request.resource.data.negocio.id).nombre
-                && request.resource.data.negocio.telefono == negocioData(request.resource.data.negocio.id).telefono
-                && request.resource.data.pedido is list && request.resource.data.pedido.size() > 0 && request.resource.data.pedido.size() <= 40
-                && request.resource.data.totalProductos is number && request.resource.data.totalProductos >= 0 && request.resource.data.totalProductos < 100000))
-        && ('negocio' in request.resource.data || (!('pedido' in request.resource.data) && !('totalProductos' in request.resource.data)))
-        // Precio normal: no menos que la tarifa por distancia (la mitad con descuento; publicada: el cliente pone su precio).
-        && (request.resource.data.get('ofertaCliente', false) == true || !exists(/databases/$(database)/documents/config/general)
-            || request.resource.data.precio >= (tarifas().get(request.resource.data.tipo, { 'base': 0, 'porKm': 0 }).base
-                 + tarifas().get(request.resource.data.tipo, { 'base': 0, 'porKm': 0 }).porKm * (request.resource.data.km - 0.06)) * ('descuento' in request.resource.data ? 0.5 : 1) - 0.02)
-        // En Bs: con la tasa del día y que cuadre con el precio en $.
-        && (request.resource.data.get('precioBs', null) == null
-            || (request.resource.data.tasa is number && request.resource.data.tasa > 0
-                && (!exists(/databases/$(database)/documents/config/general) || request.resource.data.tasa == tarifas().get('tasa', 0))
-                && request.resource.data.precioBs is number
-                && math.abs(request.resource.data.precioBs - request.resource.data.precio * request.resource.data.tasa) <= request.resource.data.tasa * 0.02 + 1))
-        // Pedida a un motorizado: que exista y con su nombre real.
-        && (request.resource.data.get('paraMoto', null) == null
-            || request.resource.data.get('paraMotoNombre', null) == motoData(request.resource.data.paraMoto).nombre);
+      allow create: if dentro() && idNormal(id) && carreraNuevaOk(id, request.resource.data);
 
       allow update: if esAdmin()
         // El cliente cancela su carrera…
@@ -239,7 +290,10 @@ service cloud.firestore {
             && soloCambia(['estado', 'motoUid', 'motoNombre', 'motoTel', 'motoMoto', 'motoPlaca', 'aceptada']))
         // El motorizado avisa que ya recogió, termina o cancela su carrera (al cancelar vuelve a quedar disponible).
         || (esMoto() && resource.data.motoUid == request.auth.uid && resource.data.estado == 'aceptada'
-            && ((request.resource.data.estado == 'aceptada' && request.resource.data.recogido == true && ahora('recogidoEn') && soloCambia(['recogido', 'recogidoEn']))
+            // Al recoger al pasajero: si la carrera tiene código, el motorizado debe escribir el que le dice el pasajero.
+            && ((request.resource.data.estado == 'aceptada' && request.resource.data.recogido == true && ahora('recogidoEn') && soloCambia(['recogido', 'recogidoEn', 'pin'])
+                 && (resource.data.get('conPin', false) != true
+                     || request.resource.data.get('pin', '') == get(/databases/$(database)/documents/carreras/$(id)/privado/pin).data.pin))
              || (request.resource.data.estado == 'aceptada' && ahora('llegoEn') && soloCambia(['llegoEn']))
              || (request.resource.data.estado == 'terminada' && ahora('terminada') && soloCambia(['estado', 'terminada']))
              // Cancelar: solo antes de recoger; vuelve al precio original del cliente (si hubo contraoferta).
@@ -254,6 +308,16 @@ service cloud.firestore {
                  && request.resource.data.get('contraoferta', false) == false
                  && soloCambia(['estado', 'motoUid', 'paraMoto', 'paraMotoNombre', 'cancelaciones', 'recogido', 'llegoEn',
                                 'motoNombre', 'motoTel', 'motoMoto', 'motoPlaca', 'precio', 'precioBs', 'contraoferta']))));
+    }
+
+    // Código para subir a la moto: lo crea el cliente junto con su carrera y solo él (y el admin) lo ve.
+    match /carreras/{cid}/privado/{d} {
+      allow get: if esAdmin() || (dentro() && get(/databases/$(database)/documents/carreras/$(cid)).data.clienteUid == request.auth.uid);
+      allow create: if dentro() && d == 'pin'
+        && !exists(/databases/$(database)/documents/carreras/$(cid))
+        && getAfter(/databases/$(database)/documents/carreras/$(cid)).data.clienteUid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/carreras/$(cid)).data.get('conPin', false) == true
+        && request.resource.data.keys().hasOnly(['pin']) && request.resource.data.pin is string && request.resource.data.pin.matches('^[0-9]{4}$');
     }
 
     // Contraofertas: cada motorizado propone su precio en una carrera publicada por el cliente.
@@ -306,7 +370,7 @@ service cloud.firestore {
       allow create: if dentro() && id == request.resource.data.carreraId
         && request.resource.data.clienteUid == request.auth.uid
         && request.resource.data.fecha == request.time
-        && !exists(/databases/$(database)/documents/bloqueados/$(get(/databases/$(database)/documents/clientes/$(request.auth.uid)).data.cedula))
+        && !clienteBloqueado()
         && request.resource.data.clienteNombre == get(/databases/$(database)/documents/clientes/$(request.auth.uid)).data.nombre
         && get(/databases/$(database)/documents/carreras/$(request.resource.data.carreraId)).data.clienteUid == request.auth.uid
         && get(/databases/$(database)/documents/carreras/$(request.resource.data.carreraId)).data.motoUid == request.resource.data.motoUid
@@ -329,6 +393,15 @@ service cloud.firestore {
         && request.resource.data.nombre == motoData(request.auth.uid).nombre && ahora('creado');
       allow read: if esAdmin() || (dentro() && resource.data.motoUid == request.auth.uid);
       allow update, delete: if esAdmin();
+    }
+
+    // Token para avisos push (uno por persona): solo lo escribe su dueño; lo lee el servidor (Cloud Functions).
+    match /tokens/{uid} {
+      allow create, update: if dentro() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['t', 'rol', 'actualizado'])
+        && texto(request.resource.data.t, 4096) && request.resource.data.rol in ['cliente', 'moto']
+        && request.resource.data.actualizado == request.time;
+      allow delete: if dentro() && request.auth.uid == uid;
     }
 
     match /pagos/{id} {

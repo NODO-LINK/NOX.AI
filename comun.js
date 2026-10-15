@@ -6,8 +6,8 @@ import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
-import { firebaseConfig as configReal, appCheckClave } from "./firebase-config.js?v=81";
-import { icono, pintarIconos } from "./iconos.js?v=81";
+import { firebaseConfig as configReal, appCheckClave, vapidClave } from "./firebase-config.js?v=82";
+import { icono, pintarIconos } from "./iconos.js?v=82";
 
 export { icono };
 pintarIconos();
@@ -99,6 +99,7 @@ export const DOCUMENTOS = [
   { k: "trimestres", t: "Trimestres", fecha: "Pagado hasta" },
   // No vence: basta con tener la foto.
   { k: "origen", t: "Certificado de origen o carnet de circulación", sinVence: true },
+  { k: "cedula", t: "Cédula de identidad", sinVence: true },
 ];
 // Estado de un documento: { c: clase de la píldora, t: texto, n: 0 al día · 1 vence pronto · 2 vencido · 3 falta }
 export function estadoDoc(d, tipo) {
@@ -270,8 +271,31 @@ export const precio = (t, tipo, km, cuando = new Date()) => {
   const p = precioLleno(t, tipo, km, cuando);
   return descuento(t) ? Math.round(p * 50) / 100 : p;
 };
+// Precio con un código de promoción (sobre el precio lleno, sin el 50%: no se juntan).
+export const precioCodigo = (t, tipo, km, pct, cuando = new Date()) => Math.round(precioLleno(t, tipo, km, cuando) * (100 - pct)) / 100;
 // Aviso del descuento en una carrera (para el motorizado, el admin y el cliente).
-export const textoDescuento = (c) => (c && c.descuento ? `50% de descuento · ${c.descuento.motivo}` : "");
+export const textoDescuento = (c) => (c && c.descuento ? `50% de descuento · ${c.descuento.motivo}`
+  : c && c.codigo ? `${c.codigo.pct}% de descuento · código ${c.codigo.c}` : "");
+// Recibo de una carrera o pedido, para compartir por WhatsApp.
+export function textoRecibo(c) {
+  const f = fecha(c.terminada) || fecha(c.creada);
+  const lineas = [
+    `🧾 Recibo de ${NOMBRE}`,
+    f ? f.toLocaleString("es-VE", { dateStyle: "medium", timeStyle: "short" }) : "",
+    c.negocio ? `Pedido de ${c.negocio.nombre}` : c.tipo === "mototaxi" ? "Viaje en mototaxi" : "Delivery",
+    `Desde: ${c.origen?.dir || ""}`,
+    ...(c.paradas || []).map((p, i) => `Parada ${i + 1}: ${p.dir}`),
+    `Hasta: ${c.destino?.dir || ""}`,
+    `Distancia: ${c.km} km`,
+    ...(c.pedido || []).map((x) => `• ${x.c} × ${x.n} (${usd(x.p * x.c)})`),
+    c.negocio ? `Productos: ${usd(c.totalProductos ?? totalPedido(c.pedido))} (pagados al negocio)` : "",
+    `${c.negocio ? "Envío" : "Precio"}: ${usd(c.precio)}${c.precioBs ? ` · ${bs(c.precioBs)}` : ""}`,
+    textoDescuento(c),
+    c.motoNombre ? `Motorizado: ${c.motoNombre}${c.motoPlaca ? ` · Placa ${c.motoPlaca}` : ""}` : "",
+    `Pago: ${(FORMAS_PAGO[c.formaPago] || FORMAS_PAGO.usd).c}`,
+  ];
+  return lineas.filter(Boolean).join("\n");
+}
 
 // Distancia por calle (OSRM, gratis). Si falla, línea recta × 1,3.
 export function lineaRecta(a, b) {
@@ -1017,6 +1041,23 @@ export async function notificar(titulo, cuerpo, { tag = "whereapp", sonar = true
     requireInteraction: urgente,   // se queda en la barra hasta que la toque
   }).catch(() => {});
 }
+// ---------- Avisos push (con la app cerrada; los manda el servidor de Firebase) ----------
+// Guarda el token de este teléfono en "tokens/{uid}". Sin la clave VAPID (firebase-config.js) no hace nada.
+export async function activarPush(uid, rol) {
+  if (simulador || !vapidClave || !uid || !avisosPosibles() || Notification.permission !== "granted") return;
+  try {
+    const { getMessaging, getToken, isSupported } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js");
+    if (!(await isSupported())) return;
+    const reg = (await registroSw) || (await navigator.serviceWorker.ready);
+    const t = await getToken(getMessaging(app), { vapidKey: vapidClave, serviceWorkerRegistration: reg });
+    if (!t) return;
+    const clave = "whereapp.push." + uid;
+    if (localStorage.getItem(clave) === t) return;
+    const { setDoc: guardar } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
+    await guardar(doc(db, "tokens", uid), { t, rol, actualizado: serverTimestamp() });
+    localStorage.setItem(clave, t);
+  } catch (e) { console.warn("Avisos push", e); }
+}
 // Pide permiso de notificaciones con el primer toque en la pantalla (algunos teléfonos solo lo permiten así).
 export function pedirAvisosAlTocar() {
   if (!avisosPosibles() || Notification.permission !== "default") return;
@@ -1037,6 +1078,17 @@ export function escucharChat(carreraId, yoUid, alCambiar) {
   }, () => {});
 }
 export const marcarChatLeido = (carreraId, ajenos) => vistoChat.guardar(carreraId, ajenos);
+
+// Mensajes rápidos (un toque, sin abrir el chat).
+export const RAPIDOS_CLIENTE = ["Ya salgo", "Estoy en la esquina", "Espera 2 min", "¿Dónde estás?"];
+export const RAPIDOS_MOTO = ["Voy en camino", "Llego en 5 min", "Ya estoy afuera", "No encuentro la dirección"];
+export async function enviarMensaje(carreraId, de, nombre, texto) {
+  texto = String(texto || "").trim().slice(0, 500);
+  if (!texto) return false;
+  try { await addDoc(collection(db, "carreras", carreraId, "mensajes"), { de, nombre, texto, fecha: serverTimestamp() }); return true; }
+  catch { aviso("No se pudo enviar el mensaje"); return false; }
+}
+export const botonesRapidos = (lista) => `<div class="rapidos">${lista.map((t) => `<button type="button" class="pildora" data-rapido-ya="${esc(t)}">${esc(t)}</button>`).join("")}</div>`;
 
 // Ventana de chat (hoja que sube). Devuelve una función para cerrarla.
 export function abrirChat(carreraId, yoUid, yoNombre, conQuien) {

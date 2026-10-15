@@ -12,3 +12,8 @@ export const firebaseConfig = {
 // App Check (protección extra): pega aquí la "clave del sitio" de reCAPTCHA v3 entre las comillas.
 // Mientras esté vacía, App Check queda apagado y la app funciona igual.
 export const appCheckClave = "6LdeFOQtAAAAANqUXqGagMnYL8WBRl2j2Sw1nYzb";
+
+// Avisos push (con la app cerrada): pega aquí la "Clave pública" del par de claves de Web Push.
+// Se saca en: Consola de Firebase → ⚙️ Configuración del proyecto → Cloud Messaging → Certificados push web → Generar par de claves.
+// Mientras esté vacía, los avisos solo llegan con la app abierta (como antes).
+export const vapidClave = "";

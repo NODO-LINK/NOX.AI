@@ -13,8 +13,9 @@ import {
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca, enlaceDescarga, TIPOS_NEGOCIO, numeroWhatsapp, totalPedido, resumenPedido, mensajePedido,
-} from "./comun.js?v=81";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=81";
+  precioCodigo, textoRecibo, RAPIDOS_CLIENTE, enviarMensaje, botonesRapidos, conBs, activarPush,
+} from "./comun.js?v=82";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=82";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -55,11 +56,11 @@ function iniciar() {
     const s = await getDoc(doc(db, "clientes", u.uid)).catch(() => null);
     cliente = s && s.exists() ? s.data() : null;
     if (!cliente || !cliente.nombre) return pantallaEntrada();
-    if (cliente.cedula) recordados.guardar({ nombre: cliente.nombre, cedula: cliente.cedula, telefono: cliente.telefono });
+    recordados.guardar({ nombre: cliente.nombre, telefono: cliente.telefono, ...(cliente.cedula ? { cedula: cliente.cedula } : {}) });
     arrancar();
   });
 
-  // ---------- Entrada: nombre, cédula y teléfono (sin verificación por SMS) ----------
+  // ---------- Entrada: nombre y teléfono (sin verificación por SMS) ----------
   // Los datos del cliente se recuerdan en este teléfono para entrar con un solo toque la próxima vez.
   const recordados = {
     leer() { try { return JSON.parse(localStorage.getItem("whereapp.datos")) || null; } catch { return null; } },
@@ -90,7 +91,7 @@ function iniciar() {
         <div class="caja" style="text-align:center">
           <div class="avatar" style="margin:4px auto 12px;width:64px;height:64px;font-size:1.3rem">${esc(iniciales)}</div>
           <h2>¡Hola de nuevo, ${esc(guardados.nombre.split(" ")[0])}!</h2>
-          <p class="nota">${esc(guardados.nombre)} · C.I. ${esc(guardados.cedula)} · ${esc(telBonito(guardados.telefono))}</p>
+          <p class="nota">${esc(guardados.nombre)} · ${esc(telBonito(guardados.telefono))}</p>
           ${casilla}
           <button class="boton" id="continuar">Entrar como ${esc(guardados.nombre.split(" ")[0])}</button>
           <button class="boton secundario" id="otros">No soy yo / cambiar datos</button>
@@ -102,16 +103,10 @@ function iniciar() {
     }
 
     const previos = recordados.leer() || {};
-    const [nac, num] = String(previos.cedula || "V-").split("-");
     $("#vista").innerHTML = `<div class="entrada">${cabeza}
       <form class="caja" id="registro"><h2>Entra con tus datos</h2>
         <label for="nombre">Nombre completo</label>
         <input id="nombre" maxlength="80" autocomplete="name" placeholder="Ej.: María José Pérez González" value="${esc(previos.nombre)}" required>
-        <label for="cedula">Cédula</label>
-        <div class="cedula">
-          <select id="nacionalidad" aria-label="Nacionalidad"><option ${nac === "V" ? "selected" : ""}>V</option><option ${nac === "E" ? "selected" : ""}>E</option></select>
-          <input id="cedula" inputmode="numeric" placeholder="12345678" value="${esc(num)}" required>
-        </div>
         <label for="tel">Teléfono</label>
         <input id="tel" type="tel" inputmode="tel" placeholder="0414-1234567" autocomplete="tel" value="${esc(telBonito(previos.telefono))}" required>
         ${casilla}
@@ -122,13 +117,11 @@ function iniciar() {
     $("#registro").onsubmit = (e) => {
       e.preventDefault();
       const nombre = $("#nombre").value.trim().replace(/\s+/g, " ");
-      const numero = $("#cedula").value.replace(/\D/g, "");
       const telefono = normalizarTel($("#tel").value);
       if (nombre.split(" ").length < 2 || nombre.length < 5) return aviso("Escribe tu nombre y apellido");
-      if (numero.length < 6 || numero.length > 9) return aviso("Escribe una cédula válida");
       if (!telefono) return aviso("Escribe un teléfono válido, ej. 0414-1234567");
       if (falta()) return;
-      entrar({ nombre, cedula: `${$("#nacionalidad").value}-${numero}`, telefono }, $("#registro button"));
+      entrar({ nombre, telefono }, $("#registro button"));
     };
   }
 
@@ -136,17 +129,20 @@ function iniciar() {
     boton.disabled = true;
     registrando = true;
     try {
-      // Si en este teléfono había otra persona (otra cédula), se crea una cuenta nueva: la cédula no se cambia.
+      // Si en este teléfono había otra persona (otro número), se crea una cuenta nueva para ella.
       if (usuario) {
         const previo = await getDoc(doc(db, "clientes", usuario.uid)).catch(() => null);
-        if (previo && previo.exists() && previo.data().cedula && previo.data().cedula !== datos.cedula) { await signOut(auth); usuario = null; }
+        if (previo && previo.exists() && previo.data().telefono && previo.data().telefono !== datos.telefono) { await signOut(auth); usuario = null; }
       }
+      // Lo que se guarda: solo nombre y teléfono (la cédula de un cliente viejo se queda como está).
+      datos = { nombre: datos.nombre, telefono: datos.telefono };
       const cred = usuario ? { user: usuario } : await signInAnonymously(auth);
       usuario = cred.user;
       aceptarPoliticas();
       cliente = { ...datos, creado: serverTimestamp(), politicas: VERSION_POLITICAS };
       await setDoc(doc(db, "clientes", usuario.uid), cliente, { merge: true });
       recordados.guardar(datos);
+      cliente = (await getDoc(doc(db, "clientes", usuario.uid)).catch(() => null))?.data() || cliente;
       registrando = false;
       arrancar();
     } catch (err) {
@@ -200,6 +196,7 @@ function iniciar() {
     }));
     contarVisita();
     marcarUso();
+    activarPush(usuario.uid, "cliente");
     // Anuncio del administrador (ej.: "pide la app por WhatsApp"): solo para quien usa la página web.
     if (!enApp()) cancelarSubs.push(onSnapshot(doc(db, "config", "anuncio"), (d) => {
       anuncio = d.exists() ? d.data() : null;
@@ -212,8 +209,12 @@ function iniciar() {
       if (rutaActual === "motorizados") vistaMotorizados();
       if (rutaActual === "inicio") vistaInicio();
     }, () => {}));
-    // Cédula bloqueada por el administrador: no puede pedir.
-    bloqueado = await getDoc(doc(db, "bloqueados", cliente.cedula || "-")).then((x) => x.exists()).catch(() => false);
+    // Bloqueado por el administrador (por su cuenta, su teléfono o su cédula): no puede pedir.
+    bloqueado = false;
+    for (const id of [usuario.uid, cliente.telefono, cliente.cedula].filter(Boolean)) {
+      const b = await getDoc(doc(db, "bloqueados", id)).catch(() => null);
+      if (b && b.exists()) { bloqueado = { motivo: b.data().motivo || "" }; break; }
+    }
 
     cancelarSubs.push(onSnapshot(query(collection(db, "motorizados"), where("activo", "==", true)), (s) => {
       const antes = JSON.stringify(motos.map(sinUbicacion));
@@ -227,9 +228,12 @@ function iniciar() {
       if (rutaActual === "carrera" && JSON.stringify(motos.map(sinUbicacion)) !== antes) pintarOfertas();
     }));
     let primeraVez = true;
-    cancelarSubs.push(onSnapshot(query(collection(db, "carreras"), where("clienteUid", "==", usuario.uid)), (s) => {
+    // Con metadatos: así se sabe si un pedido hecho sin señal todavía no llegó al servidor.
+    cancelarSubs.push(onSnapshot(query(collection(db, "carreras"), where("clienteUid", "==", usuario.uid)), { includeMetadataChanges: true }, (s) => {
+      const nuevas = s.docs.map((d) => ({ id: d.id, ...d.data(), ...(d.metadata.hasPendingWrites ? { _pendiente: true } : {}) }));
+      if (JSON.stringify(nuevas) === JSON.stringify(carreras)) return;   // solo cambió el estado de la conexión
       const antes = carreraActual();
-      carreras = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+      carreras = nuevas;
       const ahora = carreraActual();
       $("#punto").hidden = !ahora;
       if (rutaActual === "inicio" && !!antes !== !!ahora) vistaInicio();
@@ -254,6 +258,7 @@ function iniciar() {
     ir(carreraActual() ? "carrera" : "inicio");
   }
 
+  const textoBloqueo = () => `Tu cuenta está bloqueada${bloqueado && bloqueado.motivo ? `: ${bloqueado.motivo}` : ""}. Comunícate con el administrador por WhatsApp (0412-3042896).`;
   function abrirMotoDelQr() {
     const id = motoDelQr; motoDelQr = null;
     try { history.replaceState(history.state, "", location.pathname); } catch {}
@@ -308,6 +313,9 @@ function iniciar() {
     // Al salir de un pedido de negocio hacia un viaje normal, el formulario vuelve a empezar.
     if ((r === "publicar" || r === "pedir" || r === "viaje") && pedido.negocio) limpiarEncargo();
     if (r === "encargo" && !pedido.negocio) r = "inicio";
+    if (!["viaje", "publicar", "pedir", "encargo"].includes(r)) { pedido.destinoPendiente = null; esperandoSenal = false; }
+    busquedaTienda = ""; categoriaActual = null;
+    if (r === "publicar" || r === "encargo") pedido.codigo = null;
     rutaActual = r;
     // Pantallas principales (Inicio, Actividad, Cuenta): con barra abajo. Las demás: flecha de volver arriba.
     const principal = PRINCIPALES.includes(r);
@@ -350,10 +358,19 @@ function iniciar() {
       { a: "mercado", c: "b-mercado", t: "Mercado a tu casa", s: "Haz tus compras sin salir", i: "carrito" },
     ].filter(Boolean);
     const cerca = negocios.slice(0, 10);
+    // Atajos: Casa y Trabajo (de "Mis lugares") y los últimos destinos a los que fue.
+    const favs = favoritos.leer();
+    const atajos = ["casa", "trabajo"].map((t) => ({ t, f: favs.find((f) => f.tipo === t) }));
+    const recientes = destinosRecientes(3);
     $("#vista").innerHTML = `<div class="inicio-y">
       <div class="saludo-y"><div><h1>Hola, ${esc(String(cliente.nombre).split(" ")[0])} 👋</h1><p>${icono("pin")} El Moján, Zulia</p></div>
         <button class="avatar-y" data-ir="cuenta" aria-label="Tu cuenta">${esc(iniciales(cliente.nombre))}</button></div>
       <button class="buscador-y" data-ir="viaje">${icono("buscar")}<span>¿A dónde vas?</span><b>${icono("moto")}</b></button>
+      <div class="atajos-y">${atajos.map(({ t, f }) => f
+        ? `<button class="atajo-y" data-destino="fav:${favs.indexOf(f)}">${icono(TIPOS_MIOS[t].icono)}<span><b>${esc(TIPOS_MIOS[t].nombre)}</b><small>${esc(f.n)}</small></span></button>`
+        : `<button class="atajo-y vacio-y" data-guardar-atajo="${t}">${icono(TIPOS_MIOS[t].icono)}<span><b>${esc(TIPOS_MIOS[t].nombre)}</b><small>Guardar</small></span></button>`).join("")}</div>
+      ${recientes.length ? `<div class="recientes-y">${recientes.map((r, k) => `
+        <button data-destino="rec:${k}">${icono("reloj")}<span><b>${esc(r.dir)}</b><small>Viaje reciente</small></span>${icono("flecha")}</button>`).join("")}</div>` : ""}
       ${activa ? `<button class="activa-y" data-ir="carrera"><span class="en-curso"></span><b>${activa.negocio ? "Tu pedido está en curso" : "Tu viaje está en curso"}</b><small>Ver ${icono("flecha")}</small></button>` : ""}
       <div class="servicios-y">${SECCIONES.map((x, k) => `
         <button class="recuadro servicio-y" data-seccion="${x.r}" style="animation-delay:${k * 0.05}s"><span class="ico-y">${icono(x.i)}</span><b>${x.t}</b></button>`).join("")}</div>
@@ -371,6 +388,67 @@ function iniciar() {
     $$(".servicio-y").forEach((b) => (b.onclick = () => abrir(b, b.dataset.seccion)));
     $$("#vista [data-ir]").forEach((b) => (b.onclick = () => (PRINCIPALES.includes(b.dataset.ir) ? ir(b.dataset.ir) : abrir(b, b.dataset.ir))));
     $$("[data-negocio]").forEach((b) => (b.onclick = () => { negocioActual = negocios.find((n) => n.id === b.dataset.negocio); if (negocioActual) abrir(b, "negocio"); }));
+    $$("[data-destino]").forEach((b) => (b.onclick = () => {
+      const [cual, k] = b.dataset.destino.split(":");
+      const l = cual === "fav" ? favs[Number(k)] : recientes[Number(k)];
+      if (!l) return;
+      if (carreraActual()) return aviso("Ya tienes un viaje en curso");
+      irConDestino({ lat: l.lat, lng: l.lng, n: l.n || l.dir }, b);
+    }));
+    $$("[data-guardar-atajo]").forEach((b) => (b.onclick = () => {
+      aviso(`Marca ${b.dataset.guardarAtajo === "casa" ? "tu casa" : "tu trabajo"} como destino (B) y toca la estrella ☆ para guardarla`);
+      abrir(b, "viaje");
+    }));
+    consejosInicio();
+  }
+
+  // Últimos destinos distintos (de viajes terminados, sin pedidos de negocios).
+  function destinosRecientes(cuantos) {
+    const vistos = [];
+    carreras.filter((c) => c.estado === "terminada" && !c.negocio && c.destino).sort((a, b) => tiempo(b) - tiempo(a)).forEach((c) => {
+      if (vistos.length < cuantos && !vistos.some((v) => lineaRecta(v, c.destino) < 0.05)) vistos.push(c.destino);
+    });
+    return vistos;
+  }
+  // Pedir un mototaxi ya con el destino (B) puesto: A sale del GPS (o lo marca el pasajero).
+  function irConDestino(l, desde) {
+    limpiarEncargo();
+    Object.assign(pedido, { puntos: [], refs: [], retorno: false, agregando: false, km: null, linea: null, para: null, oferta: null, ofertaBs: null, ofertaTocada: false, paradaPendiente: false, yoIntentado: false,
+      destinoPendiente: { lat: l.lat, lng: l.lng, n: String(l.n || "Destino").slice(0, 200) } });
+    if (desde) transicionCompartida(desde, () => ir("viaje", true), () => $("#vista")); else ir("viaje");
+  }
+
+  // ---------- Consejos la primera vez: burbujas que señalan lo principal ----------
+  function consejosInicio() {
+    let visto = false;
+    try { visto = localStorage.getItem("whereapp.consejos") === "1"; } catch {}
+    // En las pruebas automáticas (navegador manejado por un programa) no salen, salvo que se pidan con ?consejos.
+    if (visto || $(".consejo") || (navigator.webdriver && !/consejos/.test(location.search))) return;
+    const pasos = [
+      { el: ".buscador-y", t: "Toca aquí para pedir un mototaxi. Tu ubicación se pone sola." },
+      { el: ".atajos-y", t: "Guarda tu casa y tu trabajo para pedir con un solo toque." },
+      { el: ".servicios-y", t: "Comida rápida, mercado a tu casa y la lista de motorizados." },
+      { el: '#barra [data-ruta="carrera"]', t: "En Actividad ves tu viaje en vivo y tu historial con recibos." },
+      { el: '#barra [data-ruta="cuenta"]', t: "En Cuenta: tus lugares, tu contacto de confianza y ayuda." },
+    ];
+    let k = 0;
+    const capa = document.createElement("div");
+    capa.className = "consejo";
+    document.body.append(capa);
+    const terminar = () => { capa.remove(); try { localStorage.setItem("whereapp.consejos", "1"); } catch {} };
+    const pintar = () => {
+      const p = pasos[k], el = $(p.el);
+      if (!el || rutaActual !== "inicio") return terminar();
+      el.scrollIntoView({ block: "center" });
+      const r = el.getBoundingClientRect();
+      const abajo = r.top < innerHeight / 2;
+      capa.innerHTML = `<div class="consejo-foco" style="top:${r.top - 6}px;left:${r.left - 6}px;width:${r.width + 12}px;height:${r.height + 12}px"></div>
+        <div class="consejo-burbuja ${abajo ? "abajo" : "arriba"}" style="${abajo ? `top:${r.bottom + 14}px` : `bottom:${innerHeight - r.top + 14}px`}">
+          <p>${esc(p.t)}</p><div class="botones"><button class="boton secundario chico" data-saltar>Saltar</button><button class="boton chico" data-sig>${k === pasos.length - 1 ? "¡Listo!" : `Siguiente (${k + 1}/${pasos.length})`}</button></div></div>`;
+      $("[data-saltar]", capa).onclick = terminar;
+      $("[data-sig]", capa).onclick = () => { k++; if (k >= pasos.length) terminar(); else pintar(); };
+    };
+    setTimeout(pintar, 700);
   }
 
   // ---------- Cuenta: tus datos y ajustes ----------
@@ -378,9 +456,10 @@ function iniciar() {
     const lugaresMios = favoritos.leer().length;
     $("#vista").innerHTML = `<h1 class="titulo">Cuenta</h1>
       <div class="caja perfil-cuenta"><span class="avatar">${esc(iniciales(cliente.nombre))}</span>
-        <div><b>${esc(cliente.nombre)}</b><small>C.I. ${esc(cliente.cedula || "—")} · ${esc(cliente.telefono || "")}</small></div></div>
+        <div><b>${esc(cliente.nombre)}</b><small>${cliente.cedula ? `C.I. ${esc(cliente.cedula)} · ` : ""}${esc(telBonito(cliente.telefono))}</small></div></div>
       <div class="caja opciones-cuenta">
         <button data-op="lugares">${icono("casa")}<span>Mis lugares<small>${lugaresMios ? `${lugaresMios} guardado${lugaresMios === 1 ? "" : "s"}` : "Casa, trabajo…"}</small></span>${icono("flecha")}</button>
+        <button data-op="contacto">${icono("usuario")}<span>Contacto de confianza<small>${contactoSos.leer() ? esc(contactoSos.leer().nombre) : "Para avisarle de tus viajes y en un SOS"}</small></span>${icono("flecha")}</button>
         <div class="fila-op" id="op-tema">${icono("luna")}<span>Modo oscuro</span></div>
         <div class="fila-op" id="op-instalar">${icono("descargar")}<span>Instalar la app</span></div>
         <a href="${esc(enlaceWhatsapp(WHATSAPP, `Hola, soy ${cliente.nombre}. Necesito ayuda con Whereapp.`))}" target="_blank" rel="noopener">${icono("chat")}<span>Ayuda por WhatsApp<small>0412-3042896</small></span>${icono("flecha")}</a>
@@ -390,6 +469,7 @@ function iniciar() {
     $("#op-tema").append(botonTema());
     const inst = botonInstalar(); $("#op-instalar").append(inst); $("#op-instalar").hidden = inst.hidden;
     $("[data-op=lugares]").onclick = () => editarLugares(() => { if (rutaActual === "cuenta") vistaCuenta(); });
+    $("[data-op=contacto]").onclick = async () => { if ((await elegirContacto()) && rutaActual === "cuenta") vistaCuenta(); };
     $("#salir").onclick = () => accionSalir();
   }
   // La pantalla se encoge de vuelta a su recuadro.
@@ -409,7 +489,7 @@ function iniciar() {
   function cargarTienda() {
     if (tiendaLista) return;
     tiendaLista = true;
-    const repintar = () => { if (tecleando()) return; if (rutaActual === "inicio") vistaInicio(); else if (rutaActual === "mercado") vistaMercado(); else if (rutaActual === "comida") vistaComida(); else if (rutaActual === "negocio") vistaNegocio(); };
+    const repintar = () => { if (tecleando()) return; if (rutaActual === "inicio") vistaInicio(); else if (rutaActual === "mercado") vistaMercado(); else if (rutaActual === "comida") vistaComida(); else if (rutaActual === "negocio") vistaNegocio(); else if (rutaActual === "carrera" && carreraActual()?.negocio && !$(".modal")) vistaCarrera(); };
     cancelarSubs.push(onSnapshot(query(collection(db, "negocios"), where("activo", "==", true)), (s) => {
       negocios = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.nombre).localeCompare(b.nombre));
       repintar();
@@ -420,6 +500,36 @@ function iniciar() {
     }, (e) => console.error(e)));
   }
   const cargando = () => `<div class="vacio">${icono("reloj")}Cargando…</div>`;
+  const tasaHoy = () => (tarifas && tarifas.tasa > 0 ? tarifas.tasa : 0);
+  const dosMonedas = (n) => conBs(n, tasaHoy());
+  // Buscador de productos (por nombre, descripción, categoría o negocio) y «Lo más pedido».
+  let busquedaTienda = "", categoriaActual = null;
+  const coincideProducto = (p, q) => { const t = normalizar(`${p.nombre} ${p.desc || ""} ${p.categoria || ""} ${p.negocioNombre || ""}`); return normalizar(q).split(/\s+/).filter(Boolean).every((w) => t.includes(w)); };
+  const masPedidos = (lista) => lista.filter((p) => Number(p.vendidos) > 0).sort((a, b) => b.vendidos - a.vendidos).slice(0, 8);
+  const buscadorTienda = (ph) => `<label class="buscador-tienda">${icono("buscar")}<input id="buscar-producto" type="search" placeholder="${esc(ph)}" value="${esc(busquedaTienda)}" autocomplete="off"></label>`;
+  const filaMasPedido = (lista) => lista.length ? `<div class="titulo-y"><h2>${icono("estrella")} Lo más pedido</h2></div>
+    <div class="fila-productos-y">${lista.map((p) => tarjetaProducto(p, true)).join("")}</div>` : "";
+  const chipsCategorias = (lista) => {
+    const cats = [...new Set(lista.map((p) => String(p.categoria || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    if (categoriaActual && !cats.includes(categoriaActual)) categoriaActual = null;
+    return cats.length ? `<div class="filtro-negocios categorias"><button class="${categoriaActual ? "" : "on"}" data-categoria="">Todo</button>${cats.map((c) => `<button class="${categoriaActual === c ? "on" : ""}" data-categoria="${esc(c)}">${esc(c)}</button>`).join("")}</div>` : "";
+  };
+  // Al escribir solo se cambian los resultados (no toda la pantalla: así no se cierra el teclado).
+  function atarBuscador(tipo, repintar) {
+    const campo = $("#buscar-producto");
+    if (!campo) return;
+    campo.oninput = () => {
+      busquedaTienda = campo.value;
+      const caja = $("#resultados-tienda");
+      if (!busquedaTienda.trim()) { caja.hidden = true; $("#contenido-tienda").hidden = false; return; }
+      const r = productos.filter((p) => (!tipo || p.tipo === tipo) && coincideProducto(p, busquedaTienda)).slice(0, 40);
+      caja.hidden = false; $("#contenido-tienda").hidden = true;
+      caja.innerHTML = r.length ? `<div class="lista productos">${r.map((p) => tarjetaProducto(p, true)).join("")}</div>` : `<div class="vacio">${icono("buscar")}No encontramos «${esc(busquedaTienda.trim())}».</div>`;
+      atarProductos();
+    };
+    $$("[data-categoria]").forEach((b) => (b.onclick = () => { categoriaActual = b.dataset.categoria || null; repintar(); }));
+    if (busquedaTienda.trim()) campo.oninput();
+  }
   const logoNegocio = (n, clase = "") => `<span class="logo-negocio ${clase}">${n && (n.foto || n.negocioFoto) ? `<img src="${esc(n.foto || n.negocioFoto)}" alt="">` : icono(TIPOS_NEGOCIO[n?.tipo]?.icono || "carrito")}</span>`;
 
   // Carrito: productos de UN negocio (un motorizado retira en un solo lugar). Se guarda en el teléfono.
@@ -447,7 +557,7 @@ function iniciar() {
       <div class="foto-producto">${p.foto ? `<img src="${esc(p.foto)}" alt="" loading="lazy">` : icono(TIPOS_NEGOCIO[p.tipo]?.icono || "carrito")}</div>
       <div class="info"><b>${esc(p.nombre)}</b>${p.desc ? `<small>${esc(p.desc)}</small>` : ""}
         ${conNegocio ? `<span class="de-negocio">${logoNegocio(p, "mini")} ${esc(p.negocioNombre)}</span>` : ""}
-        <span class="precio-producto">${usd(p.precio)}</span></div>
+        <span class="precio-producto">${usd(p.precio)}${tasaHoy() ? `<small>${bs(aBs(p.precio, tasaHoy()))}</small>` : ""}</span></div>
       <div class="contador-producto">
         <button class="boton secundario chico" data-menos="${p.id}" aria-label="Quitar uno">−</button>
         <b data-cant="${p.id}">${carrito.items[p.id] || 0}</b>
@@ -466,7 +576,8 @@ function iniciar() {
     if (!barra) { barra = document.createElement("button"); barra.id = "barra-carrito"; barra.className = "barra-carrito"; $("#vista").append(barra); barra.onclick = irEncargo; }
     const n = negocios.find((x) => x.id === carrito.negocioId);
     const cant = items.reduce((s, x) => s + x.c, 0);
-    barra.innerHTML = `${logoNegocio(n, "mini")}<span><b>Ver pedido · ${cant} producto${cant === 1 ? "" : "s"}</b><small>${esc(n ? n.nombre : "")}</small></span><b class="total">${usd(totalPedido(items.map((x) => ({ p: x.p.precio, c: x.c }))))}</b>`;
+    const total = totalPedido(items.map((x) => ({ p: x.p.precio, c: x.c })));
+    barra.innerHTML = `${logoNegocio(n, "mini")}<span><b>Ver pedido · ${cant} producto${cant === 1 ? "" : "s"}</b><small>${esc(n ? n.nombre : "")}</small></span><b class="total">${usd(total)}${tasaHoy() ? `<small>${bs(aBs(total, tasaHoy()))}</small>` : ""}</b>`;
   }
 
   function vistaMercado() {
@@ -474,6 +585,9 @@ function iniciar() {
     const lista = negocios.filter((n) => n.tipo === "mercado");
     $("#vista").innerHTML = `<h1 class="titulo">${icono("carrito")} Mercado a tu casa</h1>
       <p class="nota">Elige un negocio, arma tu pedido y un motorizado te lo lleva. Los productos se los pagas al negocio y al motorizado solo el envío.</p>
+      ${buscadorTienda("Buscar harina, arroz, refresco…")}
+      <div id="resultados-tienda" hidden></div>
+      <div id="contenido-tienda">${filaMasPedido(masPedidos(productos.filter((p) => p.tipo === "mercado")))}
       <div class="lista">${!tiendaLista || (!lista.length && !negocios.length && !productos.length) ? cargando() : lista.length ? lista.map((n) => `
         <article class="negocio-y">
           <button class="portada-negocio-y" data-abrir="${n.id}" aria-label="Ver productos de ${esc(n.nombre)}">
@@ -481,7 +595,9 @@ function iniciar() {
             ${logoNegocio(n, "sobre")}
             <span class="datos-negocio-y"><b>${esc(n.nombre)}</b><small>${productos.filter((p) => p.negocioId === n.id).length} productos · ${esc(n.dir || "")}</small></span></button>
           <a class="llamar-y" href="tel:${esc(n.telefono)}" aria-label="Llamar">${icono("telefono")}</a>
-        </article>`).join("") : `<div class="vacio">${icono("carrito")}Pronto habrá negocios aquí.</div>`}</div>`;
+        </article>`).join("") : `<div class="vacio">${icono("carrito")}Pronto habrá negocios aquí.</div>`}</div></div>`;
+    atarBuscador("mercado", vistaMercado);
+    atarProductos();
     $$("[data-abrir]").forEach((b) => (b.onclick = () => {
       negocioActual = negocios.find((n) => n.id === b.dataset.abrir);
       transicionCompartida(b.closest("article"), () => ir("negocio", true), () => $("#vista"));
@@ -493,7 +609,9 @@ function iniciar() {
     const n = negocioActual && (negocios.find((x) => x.id === negocioActual.id) || negocioActual);
     if (!n) return ir("mercado");
     negocioActual = n;
-    const lista = productos.filter((p) => p.negocioId === n.id);
+    const todos = productos.filter((p) => p.negocioId === n.id);
+    const cats = chipsCategorias(todos);
+    const lista = todos.filter((p) => !categoriaActual || p.categoria === categoriaActual);
     const tipo = TIPOS_NEGOCIO[n.tipo] || TIPOS_NEGOCIO.mercado;
     $("#vista").innerHTML = `<button class="boton secundario chico" id="volver-tienda" style="margin-top:16px">${icono("flecha", "girada")} ${esc(tipo.t)}</button>
       <div class="cabeza-negocio-y">
@@ -501,20 +619,30 @@ function iniciar() {
         ${logoNegocio(n, "sobre")}
         <div class="datos-cabeza-y"><h1>${esc(n.nombre)}</h1><p>${icono("pin")} ${esc(n.dir || "")}${n.rif ? ` · RIF ${esc(n.rif)}` : ""}</p>
           <a class="boton secundario chico" href="tel:${esc(n.telefono)}">${icono("telefono")} Llamar al negocio</a></div></div>
+      ${n.pagoMovil && n.pagoMovil.telefono ? `<p class="nota">${icono("telefono")} Acepta pago móvil: ${esc(n.pagoMovil.banco || "")}</p>` : ""}
+      ${cats}
       <div class="lista productos">${lista.length ? lista.map((p) => tarjetaProducto(p, false)).join("") : `<div class="vacio">${icono("carrito")}Este negocio todavía no tiene productos.</div>`}</div>`;
     $("#volver-tienda").onclick = () => ir(n.tipo === "comida" ? "comida" : "mercado");
+    $$("[data-categoria]").forEach((b) => (b.onclick = () => { categoriaActual = b.dataset.categoria || null; vistaNegocio(); }));
     atarProductos();
   }
   function vistaComida() {
     cargarTienda();
     const conComida = negocios.filter((n) => n.tipo === "comida");
     if (filtroComida && !conComida.some((n) => n.id === filtroComida)) filtroComida = null;
-    const lista = productos.filter((p) => p.tipo === "comida" && (!filtroComida || p.negocioId === filtroComida));
+    const deNegocio = productos.filter((p) => p.tipo === "comida" && (!filtroComida || p.negocioId === filtroComida));
+    const cats = chipsCategorias(deNegocio);
+    const lista = deNegocio.filter((p) => !categoriaActual || p.categoria === categoriaActual);
     $("#vista").innerHTML = `<h1 class="titulo">${icono("comida")} Comida rápida</h1>
       <p class="nota">Elige tu comida, un motorizado la retira en el negocio y te la lleva. La comida se la pagas al negocio y al motorizado solo el envío.</p>
+      ${buscadorTienda("Buscar hamburguesa, pizza, perro…")}
+      <div id="resultados-tienda" hidden></div>
+      <div id="contenido-tienda">${filtroComida || categoriaActual ? "" : filaMasPedido(masPedidos(productos.filter((p) => p.tipo === "comida")))}
       ${conComida.length > 1 ? `<div class="filtro-negocios"><button class="${filtroComida ? "" : "on"}" data-filtro="">Todos</button>${conComida.map((n) => `<button class="${filtroComida === n.id ? "on" : ""}" data-filtro="${n.id}">${logoNegocio(n, "mini")} ${esc(n.nombre)}</button>`).join("")}</div>` : ""}
-      <div class="lista productos">${!tiendaLista ? cargando() : lista.length ? lista.map((p) => tarjetaProducto(p, true)).join("") : `<div class="vacio">${icono("comida")}Pronto habrá comida aquí.</div>`}</div>`;
+      ${cats}
+      <div class="lista productos">${!tiendaLista ? cargando() : lista.length ? lista.map((p) => tarjetaProducto(p, true)).join("") : `<div class="vacio">${icono("comida")}Pronto habrá comida aquí.</div>`}</div></div>`;
     $$("[data-filtro]").forEach((b) => (b.onclick = () => { filtroComida = b.dataset.filtro || null; vistaComida(); }));
+    atarBuscador("comida", vistaComida);
     atarProductos();
   }
 
@@ -545,6 +673,16 @@ function iniciar() {
   const iconoPunto = (i, n) => (i === 0 ? ICONOS.origen : i === n - 1 && n > 1 ? ICONOS.destino : ICONOS.parada(i));
 
   function vistaPedir() {
+    // Destino elegido desde el inicio (Casa, Trabajo o un viaje reciente): se pone como B apenas hay A.
+    if (pedido.destinoPendiente) {
+      if (pedido.puntos.length >= 2 || rutaActual === "encargo") pedido.destinoPendiente = null;
+      else if (pedido.puntos.length === 1) {
+        const d = pedido.destinoPendiente;
+        pedido.destinoPendiente = null;
+        pedido.puntos.push(L.latLng(d.lat, d.lng)); pedido.refs.push(d.n); pedido.km = null;
+        recalcular().then(() => { if (enPedido() && !$(".selector")) vistaPedir(); });
+      }
+    }
     const activa = carreraActual();
     const n = pedido.puntos.length;
     const pub = publicando();
@@ -553,12 +691,13 @@ function iniciar() {
     const mapaViejo = mapa && mapa._dePedido && $("#abrir-mapa");
     const scroll = window.scrollY;
     $("#vista").innerHTML = `
+      ${esperandoSenal ? `<div class="banner-aviso sin-senal">${icono("alerta")}<span><b>Sin señal: tu pedido está en espera.</b> Se envía solo apenas vuelva la conexión. <button class="enlace" id="cancelar-espera">No enviarlo</button></span></div>` : ""}
       ${enc ? `<button class="boton secundario chico" id="volver-encargo" style="margin-top:16px">${icono("flecha", "girada")} Seguir comprando</button>
         <h1 class="titulo">¿Dónde te lo llevamos?</h1>
         <article class="tarjeta tarjeta-negocio resumen-encargo">${logoNegocio({ foto: pedido.negocioFoto, tipo: pedido.volverA === "comida" ? "comida" : "mercado" }, "grande")}
           <div class="info"><h3>${esc(pedido.negocio.nombre)}</h3>
             <ul class="items-pedido">${pedido.items.map((x) => `<li><b>${x.c} ×</b> ${esc(x.n)} <span>${usd(x.p * x.c)}</span></li>`).join("")}</ul>
-            <p class="total-productos">Productos: <b>${usd(totalPedido(pedido.items))}</b> <small>(se los pagas al negocio)</small></p></div></article>
+            <p class="total-productos">Productos: <b>${dosMonedas(totalPedido(pedido.items))}</b> <small>(se los pagas al negocio${negocioPm(pedido.negocio.id) ? " por pago móvil" : ""})</small></p></div></article>
         <p class="nota">El punto <b>A</b> es el negocio. Marca el punto <b>B</b>: donde quieres recibirlo. El envío se calcula por kilómetros.</p>`
       : rutaActual === "viaje" || pub ? `<div class="asa-y"></div><h1 class="titulo">¿A dónde vas?</h1>
         <div class="segmento" id="modo-precio" data-activo="${pub ? "publicar" : "viaje"}">
@@ -583,6 +722,9 @@ function iniciar() {
       ${n >= 3 && !pedido.paradaPendiente ? `<p class="nota ayuda-orden">${icono("agarrar")} Mantén y arrastra la letra de una parada para cambiar el orden de la ruta.</p>` : ""}
       ${n >= 4 && !pedido.paradaPendiente ? `<button class="boton secundario chico" id="ordenar">${icono("ruta")} Ordenar por la ruta más corta</button>` : ""}
       <div class="precio-caja" id="precio"></div>
+      ${pub ? "" : pedido.codigo ? `<div class="codigo-promo"><span class="pildora ok">${icono("dinero")} Código ${esc(pedido.codigo.c)} · ${pedido.codigo.pct}% de descuento</span><button class="quitar" id="quitar-codigo" aria-label="Quitar el código">${icono("cerrar")}</button></div>`
+        : `<details class="codigo-promo" id="caja-codigo"><summary>${icono("dinero")} ¿Tienes un código de descuento?</summary>
+          <div class="fila-codigo"><input id="codigo" maxlength="20" autocapitalize="characters" autocomplete="off" placeholder="Ej.: MOJAN10"><button class="boton chico" id="aplicar-codigo">Aplicar</button></div></details>`}
       <div class="caja-pago">
         <label>¿Cómo vas a pagar?</label>
         <div class="formas-pago">${Object.entries(FORMAS_PAGO).map(([k, f]) => `<button type="button" data-pago="${k}" class="${pedido.formaPago === k ? "on" : ""}">${icono(f.icono)}<span>${f.t}</span></button>`).join("")}</div>
@@ -624,15 +766,15 @@ function iniciar() {
     const t = tarifas[pedido.tipo];
     const extras = recargos(tarifas);
     $("#precio").innerHTML = (pedido.km != null && n >= 2
-      ? `<span>${resumenRecorrido()}</span><b>${descuento(tarifas) ? `<s class="tachado">${usd(precioLleno(tarifas, pedido.tipo, pedido.km))}</s>` : ""}<span class="monto">${usd(precio(tarifas, pedido.tipo, pedido.km))}</span>${tarifas.tasa > 0 ? `<small class="en-bs">${bs(aBs(precio(tarifas, pedido.tipo, pedido.km), tarifas.tasa))}</small>` : ""}</b>`
+      ? `<span>${resumenRecorrido()}</span><b>${descuento(tarifas) || pedido.codigo ? `<s class="tachado">${usd(precioLleno(tarifas, pedido.tipo, pedido.km))}</s>` : ""}<span class="monto">${usd(precioPedido())}</span>${tarifas.tasa > 0 ? `<small class="en-bs">${bs(aBs(precioPedido(), tarifas.tasa))}</small>` : ""}</b>`
       : n >= 2 ? `<span>${icono("ruta")} Calculando el precio…</span><span class="calculando"></span>`
       : `<span>${usd(t.base)} + ${usd(t.porKm)} por km</span><span class="nota">Marca A y B</span>`)
       + (extras.length ? `<small class="recargo">${icono(extras.some((x) => /lluvia/i.test(x.nombre)) ? "lluvia" : "luna")} Incluye ${extras.map((x) => `${x.nombre.toLowerCase()} (+${usd(x.monto)})`).join(" y ")}</small>` : "");
     // El precio "cuenta" hasta su valor cuando cambia.
     const monto = $("#precio .monto");
-    if (monto) { const v = precio(tarifas, pedido.tipo, pedido.km); monto.dataset.valor = ultimoPrecio; contar(monto, v, usd); ultimoPrecio = v; }
+    if (monto) { const v = precioPedido(); monto.dataset.valor = ultimoPrecio; contar(monto, v, usd); ultimoPrecio = v; }
     if (pub) $("#precio").hidden = true;   // al publicar, el precio lo pone el cliente (abajo se muestra el sugerido)
-    if (bloqueado) $("#pedir").outerHTML = `<p class="pildora mal" style="margin-top:14px">Tu cédula está bloqueada. Comunícate con el administrador.</p>`;
+    if (bloqueado) $("#pedir").outerHTML = `<p class="pildora mal" style="margin-top:14px">${esc(textoBloqueo())}</p>`;
     $$("#tipo button").forEach((b) => b.classList.toggle("activo", b.dataset.t === pedido.tipo));
     if ($("#tipo")) $("#tipo").dataset.activo = pedido.tipo;
     $("#caja-nota").hidden = pedido.tipo === "mototaxi" || enc;
@@ -657,7 +799,7 @@ function iniciar() {
     if ($("#volver")) $("#volver").onclick = () => ir("motorizados");
     // Forma de pago: se recuerda en el teléfono para la próxima vez.
     const pintarPago = () => {
-      const monto = pub ? pedido.oferta : n >= 2 && pedido.km != null ? precio(tarifas, pedido.tipo, pedido.km) : null;
+      const monto = pub ? pedido.oferta : n >= 2 && pedido.km != null ? precioPedido() : null;
       const f = pedido.formaPago;
       const enBs = f === "bs" || f === "pagomovil";
       let texto = !enBs ? "Pagas en dólares en efectivo al llegar."
@@ -725,9 +867,14 @@ function iniciar() {
       }));
       pintarOferta();
     }
+    if ($("#aplicar-codigo")) $("#aplicar-codigo").onclick = () => aplicarCodigo($("#codigo").value);
+    if ($("#codigo")) $("#codigo").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); aplicarCodigo($("#codigo").value); } });
+    if ($("#quitar-codigo")) $("#quitar-codigo").onclick = () => { pedido.codigo = null; vistaPedir(); };
     const quitar = $("#quitar-para");
     if (quitar) quitar.onclick = () => { pedido.para = null; ir("motorizados"); };
-    if ($("#pedir")) $("#pedir").onclick = enviarPedido;
+    if ($("#pedir")) $("#pedir").onclick = () => enviarPedido();
+    if (esperandoSenal && $("#pedir")) { $("#pedir").disabled = true; $("#pedir").innerHTML = `${icono("reloj")} Esperando señal…`; }
+    if ($("#cancelar-espera")) $("#cancelar-espera").onclick = () => { esperandoSenal = false; vistaPedir(); };
     // Lugares para las sugerencias.
     if (!lugares) cargarLugares().then((l) => { lugares = l; }).catch(() => {});
     // Tu ubicación se pone sola como punto A.
@@ -749,6 +896,19 @@ function iniciar() {
     }
   }
 
+  // Precio normal del viaje: con código de promoción si se aplicó uno (si no, el de siempre, con el 50% si está activo).
+  const precioPedido = () => (pedido.codigo ? precioCodigo(tarifas, pedido.tipo, pedido.km, pedido.codigo.pct) : precio(tarifas, pedido.tipo, pedido.km));
+  async function aplicarCodigo(texto) {
+    const c = String(texto || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (c.length < 3) return aviso("Escribe el código");
+    const d = await getDoc(doc(db, "codigos", c)).catch(() => null);
+    const x = d && d.exists() ? d.data() : null;
+    if (!x || x.activo !== true || !(fecha(x.vence) > new Date()) || !(x.pct > 0)) return aviso("Ese código no existe o ya venció");
+    if (descuento(tarifas) && x.pct <= 50) return aviso("Ya tienes 50% de descuento: es mejor que ese código");
+    pedido.codigo = { c, pct: x.pct };
+    vibrar(15); aviso(`¡Código aplicado! ${x.pct}% de descuento`);
+    if (enPedido()) vistaPedir();
+  }
   const resumenRecorrido = () => {
     const n = pedido.puntos.length;
     return `${pedido.km.toFixed(1)} km${n > 2 ? ` · ${n - 2} parada${n > 3 ? "s" : ""}` : ""}${pedido.retorno ? " · ida y vuelta" : ""}`;
@@ -887,7 +1047,7 @@ function iniciar() {
         const letra = f.pendiente === "P" ? String(f.pos) : f.pendiente;
         const clase = f.pendiente === "A" ? "letra-a" : f.pendiente === "B" ? "letra-b" : "letra-p";
         const ph = f.pendiente === "A" ? (pedido.buscandoA ? "Buscando tu ubicación…" : "¿Dónde te buscan? Escribe un lugar…")
-          : f.pendiente === "B" ? (f.bloqueada ? "Primero el punto A" : rutaActual === "encargo" ? "¿Dónde lo recibes? Escribe un lugar…" : "¿A dónde vas? Escribe un lugar…") : "¿Dónde es la parada? Escribe un lugar…";
+          : f.pendiente === "B" ? (f.bloqueada ? (pedido.destinoPendiente ? `Destino: ${pedido.destinoPendiente.n}` : "Primero el punto A") : rutaActual === "encargo" ? "¿Dónde lo recibes? Escribe un lugar…" : "¿A dónde vas? Escribe un lugar…") : "¿Dónde es la parada? Escribe un lugar…";
         return `<div class="parada-fila pendiente ${pedido.filaNueva === "P" && f.pendiente === "P" ? "nueva" : ""}">
           <i class="${clase}">${letra}</i>
           <div class="campo-lugar"><input data-nuevo="${f.pendiente}" maxlength="200" placeholder="${ph}" ${f.bloqueada ? "disabled" : ""} autocomplete="off"><div class="sugerencias" hidden></div></div>
@@ -1024,8 +1184,8 @@ function iniciar() {
       const favs = favoritos.leer().map((f) => ({ ...f, t: "favorito", mio: true }));
       let lista;
       if (q.length < 2) {
-        // Sin escribir: tu ubicación y tus lugares guardados.
-        lista = favs.slice(0, 5);
+        // Sin escribir: tu ubicación, tus lugares guardados y los lugares conocidos que puso el administrador.
+        lista = [...favs.slice(0, 5), ...(lugares || []).filter((l) => l.propio).slice(0, 5)];
       } else {
         const palabras = q.split(/\s+/);
         const puntaje = (l) => {
@@ -1047,7 +1207,7 @@ function iniciar() {
         const tipo = l.mio ? tipoMio(l) : tipoLugar(l.t);
         const ic = l.yo ? "ubicarme" : tipo.icono;
         const color = l.yo ? "#2563eb" : tipo.color;
-        const sub = l.yo ? "Usar el GPS del teléfono" : l.mio ? "Tus lugares" : tipoLugar(l.t).nombre;
+        const sub = l.yo ? "Usar el GPS del teléfono" : l.mio ? "Tus lugares" : l.propio && q.length < 2 ? "Lugar conocido de El Moján" : tipoLugar(l.t).nombre;
         return `<button type="button" data-k="${k}"><span class="lugar" style="background:${color}">${icono(ic)}</span><span><b>${esc(l.n)}</b><small>${esc(sub)}</small></span></button>`;
       }).join("")
         + (q.length >= 2 && !lista.length ? `<p class="nota">No encontramos «${esc(input.value.trim())}». Márcalo en el mapa con el botón ${icono("pin")}.</p>` : "")
@@ -1345,8 +1505,15 @@ function iniciar() {
     pintar();
   }
 
-  async function enviarPedido() {
-    if (bloqueado) return aviso("Tu cédula está bloqueada. Comunícate con el administrador.");
+  // Sin señal: el pedido se queda en espera en esta pantalla y se envía solo apenas vuelva la conexión.
+  let esperandoSenal = false;
+  addEventListener("online", () => {
+    if (!esperandoSenal) return;
+    esperandoSenal = false;
+    if (enPedido() && !carreraActual()) setTimeout(() => enviarPedido(true), 1200);
+  });
+  async function enviarPedido(reintento = false) {
+    if (bloqueado) return aviso(textoBloqueo());
     if (carreraActual()) return aviso("Ya tienes una carrera en curso");
     const n = pedido.puntos.length;
     if (n < 2 || pedido.km == null) return aviso("Marca el punto A y el punto B en el mapa");
@@ -1367,55 +1534,83 @@ function iniciar() {
         return aviso("El punto A es el negocio: lo dejamos en su lugar. Revisa el envío y pide otra vez.");
       }
     }
+    if (!navigator.onLine) {
+      esperandoSenal = true;
+      aviso("Sin señal: tu pedido se enviará solo apenas vuelva la conexión");
+      return vistaPedir();
+    }
     $("#pedir").disabled = true;
     pedirPermisoAvisos();
     const punto = (i) => ({ lat: pedido.puntos[i].lat, lng: pedido.puntos[i].lng, dir: pedido.refs[i].trim().slice(0, 200) });
-    try {
-      // La carrera y la hora de la última carrera del cliente van juntas (las reglas no dejan pedir varias seguidas).
-      const lote = writeBatch(db);
-      lote.update(doc(db, "clientes", usuario.uid), { ultimaCarrera: serverTimestamp() });
-      lote.set(doc(collection(db, "carreras")), {
-        clienteUid: usuario.uid,
-        clienteNombre: cliente.nombre,
-        clienteTel: cliente.telefono,
-        tipo: pedido.tipo,
-        origen: punto(0),
-        destino: punto(n - 1),
-        paradas: pedido.puntos.slice(1, -1).map((_, j) => punto(j + 1)),
-        retorno: pedido.retorno,
-        nota: pedido.tipo === "delivery" ? pedido.nota.trim() : "",
-        km: Math.round(pedido.km * 10) / 10,
-        precio: pub ? pedido.oferta : precio(tarifas, pedido.tipo, pedido.km),
-        recargos: pub ? [] : recargos(tarifas),
-        ...(pub ? { ofertaCliente: true, precioSugerido: precio(tarifas, pedido.tipo, pedido.km) } : {}),
-        // Pedido de un negocio: qué hay que retirar y dónde (el cliente le paga los productos al negocio).
-        ...(enc ? { negocio: pedido.negocio, pedido: pedido.items.map((x) => ({ n: x.n, c: x.c, p: x.p })), totalProductos: totalPedido(pedido.items) } : {}),
-        // Descuento del 50% activo: el motorizado ve el motivo antes de aceptar.
-        ...(descuento(tarifas) ? { descuento: descuento(tarifas) } : {}),
-        // Precio original del cliente: si un motorizado cancela después de una contraoferta, vuelve a este.
-        precioCliente: pub ? pedido.oferta : precio(tarifas, pedido.tipo, pedido.km),
-        formaPago: pedido.formaPago,
-        tasa: tarifas.tasa > 0 ? tarifas.tasa : null,
-        precioBs: pub && pedido.ofertaBs && (pedido.formaPago === "bs" || pedido.formaPago === "pagomovil") ? pedido.ofertaBs : aBs(pub ? pedido.oferta : precio(tarifas, pedido.tipo, pedido.km), tarifas.tasa),
-        precioBsCliente: pub && pedido.ofertaBs && (pedido.formaPago === "bs" || pedido.formaPago === "pagomovil") ? pedido.ofertaBs : aBs(pub ? pedido.oferta : precio(tarifas, pedido.tipo, pedido.km), tarifas.tasa),
-        estado: "esperando",
-        paraMoto: pedido.para ? pedido.para.id : null,
-        paraMotoNombre: pedido.para ? pedido.para.nombre : null,
-        motoUid: null,
-        calificada: false,
-        cancelaciones: [],
-        creada: serverTimestamp(),
-      });
-      await lote.commit();
+    // Código de promoción (no se junta con el 50%: si el 50% es mejor, el código no se usa).
+    const codigo = !pub && pedido.codigo && !(descuento(tarifas) && pedido.codigo.pct <= 50) ? pedido.codigo : null;
+    const normal = codigo ? precioCodigo(tarifas, pedido.tipo, pedido.km, codigo.pct) : precio(tarifas, pedido.tipo, pedido.km);
+    const monto = pub ? pedido.oferta : normal;
+    const enBsExacto = pub && pedido.ofertaBs && (pedido.formaPago === "bs" || pedido.formaPago === "pagomovil");
+    // Mototaxi: código de 4 números que el pasajero le dice al motorizado al subir (así sabe que es la moto correcta).
+    const pin = pedido.tipo === "mototaxi" && !enc ? String(crypto.getRandomValues(new Uint32Array(1))[0] % 10000).padStart(4, "0") : null;
+    const items = enc ? pedido.items.slice() : null;
+    const ref = doc(collection(db, "carreras"));
+    // La carrera y la hora de la última carrera del cliente van juntas (las reglas no dejan pedir varias seguidas).
+    const lote = writeBatch(db);
+    lote.update(doc(db, "clientes", usuario.uid), { ultimaCarrera: serverTimestamp() });
+    lote.set(ref, {
+      clienteUid: usuario.uid,
+      clienteNombre: cliente.nombre,
+      clienteTel: cliente.telefono,
+      tipo: pedido.tipo,
+      origen: punto(0),
+      destino: punto(n - 1),
+      paradas: pedido.puntos.slice(1, -1).map((_, j) => punto(j + 1)),
+      retorno: pedido.retorno,
+      nota: pedido.tipo === "delivery" ? pedido.nota.trim() : "",
+      km: Math.round(pedido.km * 10) / 10,
+      precio: monto,
+      recargos: pub ? [] : recargos(tarifas),
+      ...(pub ? { ofertaCliente: true, precioSugerido: precio(tarifas, pedido.tipo, pedido.km) } : {}),
+      // Pedido de un negocio: qué hay que retirar y dónde (el cliente le paga los productos al negocio).
+      ...(enc ? { negocio: pedido.negocio, pedido: items.map((x) => ({ i: x.id, n: x.n, c: x.c, p: x.p })), totalProductos: totalPedido(items) } : {}),
+      // Descuento del 50% activo (o código de promoción): el motorizado ve el motivo antes de aceptar.
+      ...(codigo ? { codigo: { c: codigo.c, pct: codigo.pct } } : descuento(tarifas) ? { descuento: descuento(tarifas) } : {}),
+      ...(pin ? { conPin: true } : {}),
+      // Precio original del cliente: si un motorizado cancela después de una contraoferta, vuelve a este.
+      precioCliente: monto,
+      formaPago: pedido.formaPago,
+      tasa: tarifas.tasa > 0 ? tarifas.tasa : null,
+      precioBs: enBsExacto ? pedido.ofertaBs : aBs(monto, tarifas.tasa),
+      precioBsCliente: enBsExacto ? pedido.ofertaBs : aBs(monto, tarifas.tasa),
+      estado: "esperando",
+      paraMoto: pedido.para ? pedido.para.id : null,
+      paraMotoNombre: pedido.para ? pedido.para.nombre : null,
+      motoUid: null,
+      calificada: false,
+      cancelaciones: [],
+      creada: serverTimestamp(),
+    });
+    if (pin) {
+      lote.set(doc(db, "carreras", ref.id, "privado", "pin"), { pin });
+      pines.set(ref.id, pin);
+      try { localStorage.setItem("whereapp.pin." + ref.id, pin); } catch {}
+    }
+    const listo = () => {
       vibrar([30, 60, 30]);
-      Object.assign(pedido, { puntos: [], refs: [], retorno: false, agregando: false, km: null, linea: null, nota: "", para: null, oferta: null, ofertaBs: null, ofertaTocada: false, paradaPendiente: false, yoIntentado: false });
+      Object.assign(pedido, { puntos: [], refs: [], retorno: false, agregando: false, km: null, linea: null, nota: "", para: null, oferta: null, ofertaBs: null, ofertaTocada: false, paradaPendiente: false, yoIntentado: false, codigo: null });
       if (enc) { carrito.items = {}; carrito.negocioId = null; guardarCarrito(); limpiarEncargo(); }
       ir("carrera");
-    } catch (e) {
+    };
+    const fallo = (e) => {
       console.error(e);
       aviso(e && e.code === "permission-denied" ? "No se pudo pedir la carrera. Espera unos segundos e intenta de nuevo." : "No se pudo pedir la carrera. Revisa tu internet e intenta de nuevo.");
-      $("#pedir").disabled = false;
-    }
+      if ($("#pedir")) $("#pedir").disabled = false;
+    };
+    // «Lo más pedido»: se suma lo que llevó de cada producto (aparte: si un producto ya no existe, el pedido igual sale).
+    const contarVendidos = () => { if (items) items.forEach((x) => updateDoc(doc(db, "productos", x.id), { vendidos: increment(x.c) }).catch(() => {})); };
+    try {
+      await lote.commit();
+      contarVendidos();
+      if (reintento) aviso("¡Volvió la señal! Tu pedido ya se envió");
+      listo();
+    } catch (e) { fallo(e); }
   }
 
   // ---------- Motorizados activos ----------
@@ -1456,7 +1651,7 @@ function iniciar() {
       <div class="lista">${motos.length ? lista.map(({ m, cerca, visto }) => `
         <article class="tarjeta">
           <div class="avatar tocable" data-foto-moto="${m.id}" data-perfil="${m.id}">${esc(iniciales(m.nombre))}</div>
-          <div class="info"><h3 class="tocable" data-perfil="${m.id}">${esc(m.nombre)}</h3>
+          <div class="info"><h3 class="tocable" data-perfil="${m.id}">${esc(m.nombre)}${m.verificado ? ` <span class="pildora verificado">${icono("check")} Verificado</span>` : ""}</h3>
             <p>${icono("moto")} ${esc(m.moto || "")}${m.color ? ` ${esc(m.color.toLowerCase())}` : ""}${m.placa ? ` · Placa ${esc(m.placa)}` : ""}</p>
             <button class="ver-perfil" data-perfil="${m.id}">${icono("estrella")} Ver perfil y opiniones</button>
             <div class="etiquetas">${m.enCarrera ? `<span class="pildora ocupado">${icono("ruta")} Carrera en curso</span>` : `<span class="pildora ok">Disponible</span>`}
@@ -1483,6 +1678,21 @@ function iniciar() {
     }));
   }
 
+  // Pago móvil del negocio (para pagar los productos), con botones para copiar.
+  const negocioPm = (id) => { const n = negocios.find((x) => x.id === id); return n && n.pagoMovil && n.pagoMovil.telefono ? n.pagoMovil : null; };
+  function pagoMovilNegocio(c) {
+    if (!tiendaLista) cargarTienda();
+    const pm = negocioPm(c.negocio.id);
+    if (!pm) return "";
+    const total = c.totalProductos ?? totalPedido(c.pedido);
+    const enBs = c.tasa > 0 ? aBs(total, c.tasa) : tasaHoy() ? aBs(total, tasaHoy()) : null;
+    const fila = (t, v) => `<div class="fila"><span>${t}</span><b>${esc(v)}</b><button class="quitar" data-copiar="${esc(v)}" aria-label="Copiar">${icono("copiar")}</button></div>`;
+    const todo = `${pm.banco}\n${pm.telefono}\n${pm.cedula || pm.rif || ""}${enBs ? `\n${enBs.toFixed(2).replace(".", ",")}` : ""}`;
+    return `<div class="pago-movil pm-negocio"><h4>${icono("telefono")} Pago móvil de ${esc(c.negocio.nombre)}</h4>
+      ${fila("Banco", pm.banco)}${fila("Teléfono", pm.telefono)}${pm.cedula ? fila("Cédula / RIF", pm.cedula) : ""}${enBs ? fila("Monto", enBs.toFixed(2).replace(".", ",")) : ""}
+      <button class="boton secundario chico" data-copiar="${esc(todo)}">${icono("copiar")} Copiar todo</button>
+      <p class="nota">Confirma el total con el negocio por WhatsApp antes de pagar.</p></div>`;
+  }
   // Datos del pago móvil del motorizado, con botones para copiarlos.
   function tarjetaPagoMovil(c) {
     const pm = ((seguimiento.motoUid === c.motoUid && seguimiento.moto) || motos.find((x) => x.id === c.motoUid) || {}).pagoMovil || {};
@@ -1582,6 +1792,45 @@ function iniciar() {
     leer() { try { return JSON.parse(localStorage.getItem("whereapp.contactoSos")) || null; } catch { return null; } },
     guardar(c) { try { localStorage.setItem("whereapp.contactoSos", JSON.stringify(c)); } catch {} },
   };
+  // Ventana para guardar el contacto de confianza (nombre y WhatsApp). Devuelve el contacto o null.
+  function elegirContacto() {
+    return new Promise((resolver) => {
+      const k = contactoSos.leer() || {};
+      const fondo = document.createElement("div");
+      fondo.className = "modal";
+      fondo.innerHTML = `<form class="ventana"><h2>${icono("usuario")} Contacto de confianza</h2>
+        <p class="nota">Con un toque le mandas tu viaje en vivo por WhatsApp, y en una emergencia (SOS) le llega tu ubicación.</p>
+        <label>Nombre<input name="nombre" maxlength="40" required placeholder="Ej.: Mamá" value="${esc(k.nombre || "")}"></label>
+        <label>Su WhatsApp<input name="tel" type="tel" inputmode="tel" required placeholder="0414-1234567" value="${esc(k.tel ? "0" + String(k.tel).slice(2, 5) + "-" + String(k.tel).slice(5) : "")}"></label>
+        <button class="boton">Guardar</button><button class="boton secundario" type="button" data-no>Cancelar</button></form>`;
+      document.body.append(fondo);
+      const cerrar = (v) => { fondo.remove(); resolver(v); };
+      $("[data-no]", fondo).onclick = () => cerrar(null);
+      $("form", fondo).onsubmit = (e) => {
+        e.preventDefault();
+        const f = new FormData(e.target);
+        const tel = normalizarTel(f.get("tel") || "");
+        const nombre = String(f.get("nombre") || "").trim();
+        if (!nombre) return aviso("Escribe el nombre");
+        if (!tel) return aviso("Ese número no es válido, ej. 0414-1234567");
+        const c = { nombre: nombre.slice(0, 40), tel: tel.replace("+", "") };
+        contactoSos.guardar(c);
+        aviso(`${c.nombre} es tu contacto de confianza`);
+        cerrar(c);
+      };
+    });
+  }
+  // Código para subir a la moto: se guarda en el teléfono al pedir; si no está, se lee de la base de datos.
+  const pines = new Map();
+  function pinDe(c) {
+    if (pines.has(c.id)) return pines.get(c.id);
+    try { const x = localStorage.getItem("whereapp.pin." + c.id); if (x) { pines.set(c.id, x); return x; } } catch {}
+    pines.set(c.id, null);
+    getDoc(doc(db, "carreras", c.id, "privado", "pin")).then((d) => {
+      if (d.exists() && d.data().pin) { pines.set(c.id, d.data().pin); if (rutaActual === "carrera") vistaCarrera(); }
+    }).catch(() => pines.delete(c.id));
+    return null;
+  }
   function abrirSos(c) {
     const fondo = document.createElement("div");
     fondo.className = "modal";
@@ -1600,14 +1849,7 @@ function iniciar() {
         <p class="nota">${ubic ? "Tu ubicación va en el mensaje." : "Buscando tu ubicación para el mensaje…"} También le avisamos al administrador de ${NOMBRE}.</p>
         <button class="boton secundario" data-no>Cerrar</button></div>`;
       $("[data-no]", fondo).onclick = () => fondo.remove();
-      $("#contacto-sos", fondo).onclick = () => {
-        const nombre = prompt("Nombre de tu contacto de confianza:", (k && k.nombre) || "");
-        if (!nombre) return;
-        const tel = normalizarTel(prompt("Su número de WhatsApp (ej. 0414-1234567):", "") || "");
-        if (!tel) return aviso("Ese número no es válido");
-        contactoSos.guardar({ nombre: nombre.trim(), tel: tel.replace("+", "") });
-        pintar();
-      };
+      $("#contacto-sos", fondo).onclick = async () => { if (await elegirContacto()) pintar(); };
     };
     document.body.append(fondo);
     pintar();
@@ -1632,9 +1874,10 @@ function iniciar() {
     fondo.innerHTML = `<div class="ventana perfil-moto">
       <div class="fotos-perfil">
         <figure><div class="foto-perfil" data-foto-moto="${esc(m.id)}">${icono("usuario")}</div><figcaption>Conductor</figcaption></figure>
-        <figure><div class="foto-perfil" data-foto-moto="${esc(m.id)}" data-cual="moto">${icono("moto")}</div><figcaption>Moto</figcaption></figure>
+        <figure><div class="foto-perfil" data-foto-moto="${esc(m.id)}" data-cual="moto">${icono("moto")}</div><figcaption>Moto y placa</figcaption></figure>
       </div>
       <h2 class="perfil-nombre">${esc(m.nombre)}</h2>
+      ${m.verificado ? `<p style="text-align:center;margin:0 0 6px"><span class="pildora verificado">${icono("check")} Verificado: el administrador revisó su cédula, su cara y su moto</span></p>` : ""}
       <div class="rating" style="text-align:center">${estrellas(m)}</div>
       <div class="ficha">
         <div class="fila"><span>${icono("usuario")} Nombre</span><b>${esc(m.nombre)}</b></div>
@@ -1669,9 +1912,11 @@ function iniciar() {
         ${pasadas.length ? `<h1 class="titulo">${icono("reloj")} Tus viajes</h1><div class="lista">${pasadas.map((x) => `
           <article class="tarjeta"><div class="info">
             <h3>${esc(x.origen.dir)} ${icono("flecha")} ${esc(x.destino.dir)}</h3>
-            <p>${fechaTexto(x.creada)} · ${x.km} km · ${usd(x.precio)}${x.paradas?.length ? ` · ${x.paradas.length} parada${x.paradas.length > 1 ? "s" : ""}` : ""}${x.retorno ? " · ida y vuelta" : ""}</p>
+            <p>${fechaTexto(x.creada)} · ${x.km} km · ${usd(x.precio)}${x.precioBs ? ` · ${bs(x.precioBs)}` : ""}${x.paradas?.length ? ` · ${x.paradas.length} parada${x.paradas.length > 1 ? "s" : ""}` : ""}${x.retorno ? " · ida y vuelta" : ""}</p>
             <p>${x.estado === "terminada" ? `<span class="pildora ok">Terminada</span> con ${esc(x.motoNombre || "")}` : `<span class="pildora mal">Cancelada</span>`}</p></div>
-            ${x.negocio ? "" : `<div class="acciones"><button class="boton secundario" data-repetir="${x.id}">${icono("deshacer")} Repetir este viaje</button></div>`}
+            ${x.negocio ? `<p class="nota">${esc(x.negocio.nombre)}: ${esc(resumenPedido(x.pedido))}</p>` : ""}
+            <div class="acciones">${x.estado === "terminada" ? `<a class="boton secundario" href="https://wa.me/?text=${encodeURIComponent(textoRecibo(x))}" target="_blank" rel="noopener">${icono("compartir")} Recibo</a>` : ""}
+              ${x.negocio ? "" : `<button class="boton secundario" data-repetir="${x.id}">${icono("deshacer")} Repetir</button>`}</div>
           </article>`).join("")}</div>` : ""}`;
       $("#ir-pedir").onclick = () => ir("viaje");
       $$("[data-repetir]").forEach((b) => (b.onclick = () => repetir(carreras.find((x) => x.id === b.dataset.repetir))));
@@ -1691,8 +1936,9 @@ function iniciar() {
         <div class="fila"><span>Pedida</span><span>${fechaTexto(c.creada)}</span></div>
       </div>`;
     const botonesExtra = `
-      <div class="botones">
-        ${c.estado === "aceptada" ? `<button class="boton" id="chat">${icono("chat")} Chat con ${esc(c.motoNombre.split(" ")[0])}<b class="contador" id="chat-sin-leer" ${seguimiento.sinLeer ? "" : "hidden"}>${seguimiento.sinLeer || ""}</b></button>` : ""}
+      <div class="botones apilados">
+        ${c.estado === "aceptada" ? `${botonesRapidos(RAPIDOS_CLIENTE)}<button class="boton" id="chat">${icono("chat")} Chat con ${esc(c.motoNombre.split(" ")[0])}<b class="contador" id="chat-sin-leer" ${seguimiento.sinLeer ? "" : "hidden"}>${seguimiento.sinLeer || ""}</b></button>` : ""}
+        <button class="boton secundario" id="avisar-contacto">${icono("usuario")} ${contactoSos.leer() ? `Enviar mi viaje a ${esc(contactoSos.leer().nombre)}` : "Avisar a un familiar"}</button>
         <button class="boton secundario" id="compartir">${icono("compartir")} Compartir con un amigo</button>
         ${avisosPosibles() && Notification.permission !== "granted" ? `<button class="boton secundario" id="activar-avisos">${icono("campana")} Ver en notificaciones</button>` : ""}
       </div>`;
@@ -1703,19 +1949,24 @@ function iniciar() {
       <article class="tarjeta tarjeta-negocio caja-negocio-carrera">
         <div class="info"><h3>${icono("carrito")} ${esc(c.negocio.nombre)}</h3>
           <ul class="items-pedido">${(c.pedido || []).map((x) => `<li><b>${x.c} ×</b> ${esc(x.n)} <span>${usd(x.p * x.c)}</span></li>`).join("")}</ul>
-          <p class="total-productos">Productos: <b>${usd(c.totalProductos ?? totalPedido(c.pedido))}</b> <small>(se los pagas al negocio)</small></p>
-          <p class="nota">Al motorizado le pagas solo el envío: <b>${usd(c.precio)}</b>.</p></div>
+          <p class="total-productos">Productos: <b>${dosMonedas(c.totalProductos ?? totalPedido(c.pedido))}</b> <small>(se los pagas al negocio)</small></p>
+          <p class="nota">Al motorizado le pagas solo el envío: <b>${usd(c.precio)}${c.precioBs ? ` · ${bs(c.precioBs)}` : ""}</b>.</p></div>
+        ${pagoMovilNegocio(c)}
         <div class="acciones">
           ${c.estado === "aceptada" && waNegocio ? `<a class="boton verde" id="enviar-pedido" href="${esc(enlaceWhatsapp(waNegocio, mensajePedido(c)))}" target="_blank" rel="noopener">${icono("chat")} Enviar pedido por WhatsApp</a>` : ""}
           <a class="boton secundario" href="tel:${esc(c.negocio.telefono)}">${icono("telefono")} Llamar al negocio</a></div>
         ${c.estado === "esperando" ? `<p class="nota">Cuando un motorizado acepte, aquí te sale el botón para enviarle el pedido al negocio por WhatsApp, con el nombre y el teléfono del motorizado que va a retirar.</p>` : ""}
       </article>` : "";
 
+    const pin = c.conPin && !c.recogido ? pinDe(c) : null;
+    const cajaPin = c.conPin && !c.recogido ? `<div class="caja-pin"><span>${icono("escudo")} Tu código para subir</span><b>${pin ? esc(pin.split("").join(" ")) : "· · · ·"}</b>
+      <small>El motorizado te lo va a pedir cuando te montes. Si no te lo pide o no coincide la placa, no te montes.</small></div>` : "";
     if (c.estado === "esperando") {
-      $("#vista").innerHTML = `
+      $("#vista").innerHTML = `${c._pendiente ? `<div class="banner-aviso sin-senal">${icono("alerta")}<span><b>Sin señal: tu pedido todavía no se envió.</b> Se envía solo apenas vuelva la conexión. No cierres la app.</span></div>` : ""}
         <div class="estado-carrera"><div class="grande latido">${icono("moto")}</div>
           <h2>${c.paraMoto ? `Esperando a que ${esc(c.paraMotoNombre)} acepte…` : "Buscando motorizado…"}</h2>
           <p class="nota">Te avisamos apenas un motorizado acepte. Puedes dejar esta pantalla abierta.</p></div>
+        ${cajaPin}
         ${c.ofertaCliente ? `<h2 class="subtitulo-ofertas">${icono("dinero")} Ofertas de motorizados</h2><div class="lista" id="ofertas"></div>` : ""}
         ${cajaNegocio}
         ${botonesExtra}
@@ -1726,15 +1977,20 @@ function iniciar() {
       const m = (seguimiento.motoUid === c.motoUid && seguimiento.moto) || motos.find((x) => x.id === c.motoUid) || {};
       $("#vista").innerHTML = `
         <div class="vivo" id="vivo"></div>
-        <article class="tarjeta" id="tarjeta-moto">
-          <div class="avatar" data-foto-moto="${c.motoUid}">${esc(iniciales(c.motoNombre || "?"))}</div>
-          <div class="foto-moto-mini" data-foto-moto="${c.motoUid}" data-cual="moto"></div>
-          <div class="info"><h3>${esc(c.motoNombre)}</h3>
-            <p>${icono("moto")} ${esc(c.motoMoto || "")}${c.motoPlaca ? ` · Placa <b>${esc(c.motoPlaca)}</b>` : ""}</p>
-            ${m.ratingCount ? `<span class="rating">${estrellas(m)}</span>` : ""}
-            <button class="ver-perfil" id="perfil-carrera">${icono("usuario")} Ver perfil, fotos y placa</button></div>
-          <div class="acciones"><a class="boton" href="tel:${esc(c.motoTel)}">${icono("telefono")} Llamar a ${esc(c.motoNombre.split(" ")[0])}</a></div>
+        <article class="tarjeta-moto-y" id="tarjeta-moto">
+          <div class="fotos-moto-y">
+            <figure><div class="foto-grande-y" data-foto-moto="${c.motoUid}">${icono("usuario")}</div><figcaption>Conductor</figcaption></figure>
+            <figure><div class="foto-grande-y" data-foto-moto="${c.motoUid}" data-cual="moto">${icono("moto")}</div><figcaption>Su moto</figcaption></figure>
+          </div>
+          <h3>${esc(c.motoNombre)}${m.verificado ? ` <span class="pildora verificado">${icono("check")} Verificado</span>` : ""}</h3>
+          <p>${icono("moto")} ${esc(c.motoMoto || "")}</p>
+          ${c.motoPlaca ? `<div class="placa-grande" aria-label="Placa">${esc(c.motoPlaca)}</div>` : ""}
+          ${m.ratingCount ? `<span class="rating">${estrellas(m)}</span>` : ""}
+          <p class="nota">Antes de montarte, revisa que la cara, la moto y la placa coincidan.</p>
+          <div class="botones"><a class="boton" href="tel:${esc(c.motoTel)}">${icono("telefono")} Llamar a ${esc(c.motoNombre.split(" ")[0])}</a>
+            <button class="boton secundario" id="perfil-carrera">${icono("usuario")} Ver perfil y opiniones</button></div>
         </article>
+        ${cajaPin}
         ${c.formaPago === "pagomovil" ? tarjetaPagoMovil(c) : ""}
         <div class="mapa-vivo-caja">
           <div class="mapa grande" id="mapa"></div>
@@ -1807,6 +2063,18 @@ function iniciar() {
       $("#sos").onclick = () => abrirSos(c);
     }
     $("#compartir").onclick = () => compartirCarrera(c, cliente.nombre);
+    $("#avisar-contacto").onclick = async () => {
+      const k = contactoSos.leer() || (await elegirContacto());
+      if (!k) return;
+      const enlace = new URL(`seguir.html?c=${encodeURIComponent(c.id)}`, location.href).href;
+      const texto = `Hola ${k.nombre}, voy en un ${c.tipo === "mototaxi" ? "mototaxi" : "pedido"} de ${NOMBRE}${c.motoNombre ? ` con ${c.motoNombre}${c.motoPlaca ? `, placa ${c.motoPlaca}` : ""}` : ""}. Sígueme en vivo aquí: ${enlace}`;
+      window.open(enlaceWhatsapp(k.tel, texto), "_blank");
+    };
+    $$("[data-rapido-ya]").forEach((b) => (b.onclick = async () => {
+      b.disabled = true;
+      if (await enviarMensaje(c.id, usuario.uid, cliente.nombre, b.dataset.rapidoYa)) { vibrar(10); aviso(`Enviado: «${b.dataset.rapidoYa}»`); }
+      b.disabled = false;
+    }));
     if ($("#chat")) $("#chat").onclick = () => abrirChat(c.id, usuario.uid, cliente.nombre, c.motoNombre.split(" ")[0]);
     const av = $("#activar-avisos");
     if (av) av.onclick = async () => { await pedirPermisoAvisos(); vistaCarrera(); };
@@ -1918,7 +2186,7 @@ function iniciar() {
       } catch (e) {
         console.error(e);
         $("#calificar").disabled = false;
-        aviso(bloqueado ? "Tu cédula está bloqueada: no puedes calificar. Comunícate con el administrador." : "No se pudo enviar. Revisa tu internet e intenta de nuevo.");
+        aviso(bloqueado ? textoBloqueo() : "No se pudo enviar. Revisa tu internet e intenta de nuevo.");
       }
     };
     $("#omitir").onclick = async () => { await updateDoc(doc(db, "carreras", c.id), { calificada: true }).catch(() => {}); if (rutaActual === "carrera") ir("inicio"); };
@@ -1931,6 +2199,7 @@ function iniciar() {
   async function pedirPermisoAvisos() {
     if (!avisosPosibles() || Notification.permission !== "default") return;
     try { await Notification.requestPermission(); } catch {}
+    if (usuario) activarPush(usuario.uid, "cliente");
   }
 
   const notificarCarrera = (...a) => notificar(...a);
@@ -2014,6 +2283,14 @@ function iniciar() {
       if (seguimiento.memoria.recogido !== !!c.recogido) seguimiento.memoria = { recogido: !!c.recogido };
       seguimiento.info = progreso(c, seguimiento.ubic, seguimiento.memoria);
       afinarEta(c, seguimiento.ubic, seguimiento.memoria, refrescarVivo);
+      // A menos de ~80 m del punto A: suena y avisa (aunque el motorizado no haya tocado «Llegué»).
+      const inf = seguimiento.info;
+      if (!c.recogido && !c.llegoEn && inf && inf.km != null && inf.km < 0.08 && seguimiento.avisoCerca !== c.id) {
+        seguimiento.avisoCerca = c.id;
+        const quien = String(c.motoNombre || "Tu motorizado").split(" ")[0];
+        isla(`¡${quien} ya está llegando!`, c.negocio ? "Está por llegar al negocio" : "Sal y busca la moto con la placa " + (c.motoPlaca || ""), icono("campana"));
+        notificar(`¡${quien} ya está llegando!`, c.motoPlaca ? `Placa ${c.motoPlaca}` : "Prepárate para salir", { sonar: true });
+      }
     }
     const info = c.estado === "aceptada" ? seguimiento.info : { titulo: c.paraMoto ? `Esperando a ${c.paraMotoNombre}` : "Buscando motorizado…", detalle: "Te avisamos apenas acepten", pct: null, min: null };
     const visible = rutaActual !== "carrera";

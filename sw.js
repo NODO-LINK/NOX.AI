@@ -56,3 +56,16 @@ self.addEventListener("notificationclick", (e) => {
     return misma ? misma.focus() : self.clients.openWindow(destino);
   }));
 });
+
+// Aviso push del servidor (llega aunque la app esté cerrada).
+self.addEventListener("push", (e) => {
+  let d = {};
+  try { const j = e.data ? e.data.json() : {}; d = j.data || j.notification || j; } catch {}
+  if (!d.titulo && !d.title) return;
+  const urgente = !!d.urgente;
+  e.waitUntil(self.registration.showNotification(d.titulo || d.title, {
+    body: d.cuerpo || d.body || "", tag: d.tag || "whereapp", renotify: true, requireInteraction: urgente,
+    icon: "icono-192.png", badge: "icono-192.png", data: { url: d.url || "./" },
+    vibrate: urgente ? [150, 80, 400, 120, 400] : [200, 100, 200],
+  }));
+});

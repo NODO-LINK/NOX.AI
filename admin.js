@@ -16,7 +16,7 @@ import {
   DOCUMENTOS, estadoDoc, resumenDocs,
   filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles, textoDescuento,
   TIPOS_NEGOCIO, CENTRO,
-} from "./comun.js?v=81";
+} from "./comun.js?v=82";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -206,19 +206,21 @@ function iniciar() {
       ${motos.some((x) => x.usuario === "prueba") ? "" : `<button class="boton secundario" id="prueba">${icono("moto")} Crear motorizado de prueba</button>`}
       <div class="lista" style="margin-top:12px">${motos.map((m) => `
         <article class="tarjeta"><div class="avatar" data-foto-moto="${m.id}">${esc(String(m.nombre).split(" ").slice(0, 2).map((x) => x[0] || "").join("").toUpperCase())}</div><div class="info">
-          <h3>${esc(m.nombre)} ${habilitado(m) ? `<span class="pildora ok">En la app</span>` : `<span class="pildora mal">No sale</span>`}${m.enCarrera ? ` <span class="pildora ocupado">Carrera en curso</span>` : m.deTurno === false ? ` <span class="pildora">Descansando</span>` : ""}</h3>
+          <h3>${esc(m.nombre)} ${habilitado(m) ? `<span class="pildora ok">En la app</span>` : `<span class="pildora mal">No sale</span>`}${m.verificado ? ` <span class="pildora verificado">${icono("check")} Verificado</span>` : ""}${m.enCarrera ? ` <span class="pildora ocupado">Carrera en curso</span>` : m.deTurno === false ? ` <span class="pildora">Descansando</span>` : ""}</h3>
           <p>Usuario: <b>${esc(m.usuario)}</b> · ${icono("telefono")} ${esc(m.telefono)}</p>
           <p>${icono("moto")} ${esc(m.moto)}${m.color ? ` · ${esc(m.color)}` : ""} · Placa ${esc(m.placa)} · <span class="rating">${estrellas(m)}</span></p>
           ${(() => { const r = resumenDocs(documentos[m.id]); return `<p><span class="pildora ${r.c}" style="cursor:pointer" data-docs="${m.id}">${icono("tarjeta")} ${r.t}</span>
             ${r.n >= 1 && /^\+58\d{10}$/.test(m.telefono || "") ? ` <a class="pildora wa-docs" target="_blank" rel="noopener" href="${esc(enlaceWhatsapp(m.telefono, mensajeFallas(m)))}">${icono("chat")} Pedirle por WhatsApp</a>` : ""}</p>`; })()}
           ${m.pagoMovil && m.pagoMovil.telefono ? `<p>${icono("telefono")} Pago móvil: ${esc(m.pagoMovil.banco)} · ${esc(m.pagoMovil.telefono)} · ${esc(m.pagoMovil.cedula)}</p>` : ""}
           ${insigniasSeguridad(m) || Object.keys(m.malos || {}).length ? `<div class="etiquetas">${insigniasSeguridad(m, 3)}${Object.entries(m.malos || {}).filter(([, n]) => n > 0).map(([k, n]) => `<span class="pildora riesgo">${icono("alerta")} ${esc((ASPECTOS.malos.find((a) => a.k === k) || { t: k }).t)} (${n})</span>`).join("")}</div>` : ""}
+          ${!m.activo && m.motivoBloqueo ? `<p class="texto-rojo">${icono("bloquear")} Bloqueado: ${esc(m.motivoBloqueo)}</p>` : ""}
           <p>${estadoPago(m)} · ${llamadas[m.id] || 0} llamadas</p></div>
           <div class="acciones">
             <button class="boton ${m.activo ? "peligro" : "verde"}" data-activo="${m.id}">${m.activo ? "Desactivar" : "Activar"}</button>
             <button class="boton secundario" data-editar="${m.id}">Editar</button>
             <button class="boton secundario" data-fotos="${m.id}">${icono("usuario")} Fotos</button>
-            <button class="boton secundario" data-docs="${m.id}">${icono("tarjeta")} Documentos</button></div>
+            <button class="boton secundario" data-docs="${m.id}">${icono("tarjeta")} Documentos</button>
+            <button class="boton secundario" data-verificar="${m.id}">${icono("check")} ${m.verificado ? "Quitar verificado" : "Verificar"}</button></div>
         </article>`).join("") || `<div class="vacio">${icono("moto")}Aún no hay motorizados.</div>`}</div>`;
     mapaVivo = nuevoMapa("mapa-vivo");
     moverMapaVivo();
@@ -229,7 +231,23 @@ function iniciar() {
     if ($("#prueba")) $("#prueba").onclick = () => crearMotoPrueba($("#prueba"));
     $$("[data-activo]").forEach((b) => (b.onclick = () => {
       const m = motos.find((x) => x.id === b.dataset.activo);
-      updateDoc(doc(db, "motorizados", m.id), { activo: !m.activo });
+      if (m.activo) {
+        // Al desactivar se puede escribir el motivo: el motorizado lo ve en su app.
+        const motivo = prompt(`Motivo para desactivar a ${m.nombre} (lo verá en su app). Déjalo vacío si solo está de reposo:`, "");
+        if (motivo === null) return;
+        updateDoc(doc(db, "motorizados", m.id), { activo: false, motivoBloqueo: motivo.trim().slice(0, 120) });
+      } else updateDoc(doc(db, "motorizados", m.id), { activo: true, motivoBloqueo: "" });
+    }));
+    $$("[data-verificar]").forEach((b) => (b.onclick = async () => {
+      const m = motos.find((x) => x.id === b.dataset.verificar);
+      if (!m.verificado) {
+        const f = await fotosDe(m.id);
+        const ced = await getDoc(doc(db, "documentos", m.id, "fotos", "cedula")).then((d) => d.exists() && !!d.data().foto).catch(() => false);
+        const falta = [!f.persona && "selfie", !f.moto && "foto de la moto con placa", !ced && "foto de la cédula"].filter(Boolean);
+        if (falta.length && !confirm(`A ${m.nombre} le falta: ${falta.join(", ")}.\n\n¿Marcarlo como verificado de todos modos?`)) return;
+        if (!falta.length && !confirm(`¿Revisaste que la selfie, la moto con la placa y la cédula de ${m.nombre} coinciden? Los pasajeros verán «Verificado».`)) return;
+      }
+      updateDoc(doc(db, "motorizados", m.id), { verificado: !m.verificado }).then(() => aviso(m.verificado ? "Ya no sale como verificado" : `${m.nombre} sale como verificado`), () => aviso("No se pudo guardar"));
     }));
     $$("[data-editar]").forEach((b) => (b.onclick = () => formularioMoto(motos.find((x) => x.id === b.dataset.editar))));
     $$("[data-fotos]").forEach((b) => (b.onclick = () => fotosMoto(motos.find((x) => x.id === b.dataset.fotos))));
@@ -302,8 +320,8 @@ function iniciar() {
     const cuadro = (k, titulo) => `<label class="foto-subir"><span class="foto-vista" data-vista="${k}" style="${nuevas[k] ? `background-image:url('${nuevas[k]}')` : ""}">${nuevas[k] ? "" : icono(k === "moto" ? "moto" : "usuario")}</span>
       <b>${titulo}</b><small>Toca para elegir</small><input type="file" accept="image/*" data-archivo="${k}" hidden></label>`;
     fondo.innerHTML = `<div class="ventana"><h2>Fotos de ${esc(m.nombre)}</h2>
-      <div class="fotos-dos">${cuadro("persona", "Motorizado")}${cuadro("moto", "Moto")}</div>
-      <p class="nota">Que se vea bien la cara y la moto con la placa. Se guardan en tamaño pequeño.</p>
+      <div class="fotos-dos">${cuadro("persona", "Selfie del motorizado")}${cuadro("moto", "Moto con la placa visible")}</div>
+      <p class="nota">Que se vea bien la cara y la moto con la placa. Los pasajeros las ven en grande al subir. La cédula va en «Documentos» (solo la ves tú).</p>
       <button class="boton" data-ok>Guardar fotos</button><button class="boton secundario" data-no>Cancelar</button></div>`;
     document.body.append(fondo);
     $$("[data-archivo]", fondo).forEach((inp) => (inp.onchange = async () => {
@@ -558,7 +576,7 @@ function iniciar() {
         const cancel = [...(Array.isArray(c.cancelaciones) ? c.cancelaciones : []).map((x) => `${icono("moto")} ${esc(x.motoNombre)} canceló: ${esc(x.motivo)}`),
           c.cancelacion ? `${c.cancelacion.por === "admin" ? `${icono("escudo")} Admin` : `${icono("usuario")} Cliente`} canceló: ${esc(c.cancelacion.motivo)}` : ""].filter(Boolean);
         return `<article class="tarjeta tocable-carrera" data-ver-carrera="${esc(c.id)}"><div class="info">
-          <h3>${c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`} · ${usd(c.precio)} · ${esc(c.km)} km <span class="pildora ${cl}">${tx}</span>${c.descuento ? ` <span class="pildora pill-descuento">-50%</span>` : ""}</h3>
+          <h3>${c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`} · ${usd(c.precio)} · ${esc(c.km)} km <span class="pildora ${cl}">${tx}</span>${c.descuento ? ` <span class="pildora pill-descuento">-50%</span>` : c.codigo ? ` <span class="pildora pill-descuento">${esc(c.codigo.c)} -${c.codigo.pct}%</span>` : ""}</h3>
           <p>${icono("usuario")} ${esc(c.clienteNombre)}${cedulas[c.clienteUid] ? ` · C.I. ${esc(cedulas[c.clienteUid])}` : ""} · ${esc(c.clienteTel)}</p>
           <p>${icono("moto")} ${c.motoNombre && c.motoUid ? esc(c.motoNombre) : c.paraMotoNombre ? `Pedida a ${esc(c.paraMotoNombre)}` : "—"}</p>
           <p>A: ${esc(c.origen?.dir)} ${icono("flecha")} B: ${esc(c.destino?.dir)}${c.paradas?.length ? ` · ${c.paradas.length} parada${c.paradas.length > 1 ? "s" : ""}` : ""}${c.retorno ? " · ida y vuelta" : ""}</p>
@@ -637,7 +655,7 @@ function iniciar() {
         ${c.tasa ? fila("Tasa usada", `Bs ${Number(c.tasa).toFixed(2).replace(".", ",")} por $1`) : ""}
         ${c.ofertaCliente ? fila("Precio del cliente", `${usd(c.precioCliente ?? c.precio)}${c.precioSugerido ? ` (sugerido ${usd(c.precioSugerido)})` : ""}`) : ""}
         ${c.contraoferta ? fila("Contraoferta aceptada", usd(c.precio)) : ""}
-        ${c.descuento ? fila("Descuento", esc(textoDescuento(c))) : ""}
+        ${c.descuento || c.codigo ? fila("Descuento", esc(textoDescuento(c))) : ""}
         ${(c.recargos || []).map((r) => fila(`Recargo ${esc(r.nombre)}`, `+${usd(r.monto)}`)).join("")}</div>
       <h3 class="sub-detalle">${icono("usuario")} Cliente</h3>
       <div class="caja-detalle">${fila("Nombre", esc(c.clienteNombre))}${fila("Cédula", esc(cliente?.cedula || cedulas[c.clienteUid] || "—"))}${fila("Teléfono", tel(c.clienteTel))}
@@ -694,6 +712,7 @@ function iniciar() {
   }
 
   // ---------- Clientes ----------
+  const bloqueoDe = (c) => bloqueados[c.id] || (c.telefono && bloqueados[c.telefono]) || (c.cedula && bloqueados[c.cedula]) || null;
   function vistaClientes() {
     const q = filtroClientes.toLowerCase();
     const cuenta = (uid) => carreras.filter((c) => c.clienteUid === uid).length;
@@ -717,19 +736,20 @@ function iniciar() {
       <h1 class="titulo">Clientes (${clientes.length})</h1>
       <input id="filtro-clientes" type="search" placeholder="Buscar por nombre, cédula o teléfono" value="${esc(filtroClientes)}">
       <div class="lista" style="margin-top:12px">${lista.map((c) => {
-        const b = !!bloqueados[c.cedula];
+        const bq = bloqueoDe(c), b = !!bq;
         return `<article class="tarjeta"><div class="info">
           <h3>${esc(c.nombre)} ${b ? `<span class="pildora mal">${icono("bloquear")} Bloqueado</span>` : ""}${c.enApp ? ` <span class="pildora ok">${icono("descargar")} App</span>` : ` <span class="pildora">Página web</span>`}</h3>
-          <p>C.I. ${esc(c.cedula || "—")} · ${icono("telefono")} ${esc(c.telefono || "—")}</p>
+          <p>${c.cedula ? `C.I. ${esc(c.cedula)} · ` : ""}${icono("telefono")} ${esc(c.telefono || "—")}</p>
+          ${bq && bq.motivo ? `<p class="texto-rojo">${icono("bloquear")} Motivo: ${esc(bq.motivo)}</p>` : ""}
           <p>Desde ${fechaTexto(c.creado)} · ${cuenta(c.id)} carrera${cuenta(c.id) === 1 ? "" : "s"} recientes</p>
           ${notasClientes[c.id] ? `<p><span class="rating">${icono("estrella")} ${(notasClientes[c.id].suma / notasClientes[c.id].cant).toFixed(1)} (${notasClientes[c.id].cant})</span> según los motorizados${notasClientes[c.id].ultimo ? ` · “${esc(notasClientes[c.id].ultimo.comentario)}” — ${esc(notasClientes[c.id].ultimo.motoNombre)}` : ""}</p>` : `<p>Sin calificaciones de motorizados</p>`}</div>
           <div class="acciones">
             <a class="boton secundario" href="tel:${esc(c.telefono)}">${icono("telefono")} Llamar</a>
             ${/^\+58\d{10}$/.test(c.telefono || "") ? `<a class="boton verde" target="_blank" rel="noopener" href="${esc(enlaceWhatsapp(c.telefono, `Hola ${String(c.nombre || "").split(" ")[0]}, te escribe Whereapp. ${textoWa}`))}">${icono("chat")} WhatsApp</a>` : ""}
-            <button class="boton ${b ? "verde" : "peligro"}" data-bloquear="${esc(c.cedula)}" data-nombre="${esc(c.nombre)}">${b ? "Desbloquear" : "Bloquear"}</button></div>
+            <button class="boton ${b ? "verde" : "peligro"}" data-bloquear="${esc(c.id)}">${b ? "Desbloquear" : "Bloquear"}</button></div>
         </article>`;
       }).join("") || `<div class="vacio">${icono("usuario")}${q ? "Nadie coincide con la búsqueda." : "Aún no hay clientes."}</div>`}</div>
-      <p class="nota">Bloquear usa la cédula: aunque el cliente vuelva a registrarse con la misma cédula, no podrá pedir carreras.</p>`;
+      <p class="nota">Bloquear usa su cuenta, su teléfono y su cédula (si la tiene): aunque vuelva a registrarse con el mismo número, no podrá pedir carreras.</p>`;
     $("#anuncio").onsubmit = async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
@@ -752,10 +772,19 @@ function iniciar() {
     const f = $("#filtro-clientes");
     f.oninput = () => { filtroClientes = f.value; const pos = f.selectionStart; vistaClientes(); const n = $("#filtro-clientes"); n.focus(); n.setSelectionRange(pos, pos); };
     $$("[data-bloquear]").forEach((b) => (b.onclick = async () => {
-      const ced = b.dataset.bloquear;
-      if (!ced) return;
-      if (bloqueados[ced]) await deleteDoc(doc(db, "bloqueados", ced));
-      else if (confirm(`¿Bloquear a ${b.dataset.nombre} (C.I. ${ced})? No podrá pedir carreras.`)) await setDoc(doc(db, "bloqueados", ced), { nombre: b.dataset.nombre, fecha: serverTimestamp() });
+      const c = clientes.find((x) => x.id === b.dataset.bloquear);
+      if (!c) return;
+      const ids = [c.id, c.telefono, c.cedula].filter(Boolean);
+      const lote = writeBatch(db);
+      if (bloqueoDe(c)) {
+        if (!confirm(`¿Desbloquear a ${c.nombre}?`)) return;
+        ids.forEach((id) => { if (bloqueados[id]) lote.delete(doc(db, "bloqueados", id)); });
+      } else {
+        const motivo = prompt(`¿Por qué bloqueas a ${c.nombre}? (lo verá en su app)`, "");
+        if (motivo === null) return;
+        ids.forEach((id) => lote.set(doc(db, "bloqueados", id), { nombre: c.nombre, uid: c.id, motivo: motivo.trim().slice(0, 120), fecha: serverTimestamp() }));
+      }
+      await lote.commit().then(() => aviso("Listo"), () => aviso("No se pudo guardar"));
     }));
   }
 
@@ -871,7 +900,31 @@ function iniciar() {
         <label>Monto extra ($)</label><input name="lluviaExtra" type="number" step="0.01" min="0" value="${t.lluvia.extra}">
         <p class="nota">Apágalo cuando pare de llover. Los clientes lo ven al instante en el precio.</p></div>
       ${recargos(t).length ? `<p class="pildora alerta">Ahora se está cobrando: ${recargos(t).map((x) => `${x.nombre} +${usd(x.monto)}`).join(" y ")}</p>` : ""}
-      <button class="boton">Guardar tarifas</button></form>`;
+      <button class="boton">Guardar tarifas</button></form>
+      <div class="caja" id="caja-codigos"><h2>${icono("dinero")} Códigos de promoción</h2>
+        <p class="nota">Crea un código (ej. <b>MOJAN10</b>) con un % de descuento y fecha de vencimiento. El cliente lo escribe al pedir. No se junta con el 50%: se usa el que sea mejor.</p>
+        <form id="nuevo-codigo" class="fila-codigo-admin">
+          <input name="c" maxlength="20" required placeholder="CÓDIGO" autocapitalize="characters">
+          <input name="pct" type="number" min="1" max="90" step="1" required placeholder="% (1-90)">
+          <input name="vence" type="date" required>
+          <button class="boton chico">Crear</button></form>
+        <div id="lista-codigos"><p class="nota">Cargando…</p></div></div>`;
+    pintarCodigos();
+    $("#nuevo-codigo").onsubmit = async (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const c = String(f.get("c")).toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const pct = Math.round(Number(f.get("pct")));
+      const vence = new Date(f.get("vence") + "T23:59:59");
+      if (c.length < 3) return aviso("El código debe tener al menos 3 letras o números (sin espacios)");
+      if (!(pct >= 1 && pct <= 90)) return aviso("El descuento va de 1% a 90%");
+      if (!(vence > new Date())) return aviso("La fecha de vencimiento ya pasó");
+      try {
+        if ((await getDoc(doc(db, "codigos", c))).exists() && !confirm(`El código ${c} ya existe. ¿Reemplazarlo?`)) return;
+        await setDoc(doc(db, "codigos", c), { pct, vence: Timestamp.fromDate(vence), activo: true, creado: serverTimestamp() });
+        e.target.reset(); aviso(`Código ${c} creado: ${pct}% hasta el ${vence.toLocaleDateString("es-VE")}`); pintarCodigos();
+      } catch (err) { console.error(err); aviso("No se pudo crear. ¿Publicaste las reglas nuevas?"); }
+    };
     $("#tarifas").onsubmit = async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
@@ -895,6 +948,111 @@ function iniciar() {
         ir(ruta, true);
       } catch (err) { console.error(err); aviso("No se pudieron guardar las tarifas. Revisa la conexión."); bt.disabled = false; }
     };
+  }
+
+  async function pintarCodigos() {
+    const caja = $("#lista-codigos");
+    if (!caja) return;
+    let lista = [];
+    try { lista = (await getDocs(collection(db, "codigos"))).docs.map((d) => ({ id: d.id, ...d.data() })); }
+    catch (e) { console.error(e); caja.innerHTML = `<p class="nota">No se pudieron leer. ¿Publicaste las reglas nuevas?</p>`; return; }
+    if (!$("#lista-codigos")) return;
+    lista.sort((a, b) => (fecha(b.vence) || 0) - (fecha(a.vence) || 0));
+    caja.innerHTML = lista.length ? lista.map((x) => {
+      const vencido = !(fecha(x.vence) > new Date());
+      return `<div class="fila-codigo-item"><b>${esc(x.id)}</b><span>${x.pct}% · hasta ${fecha(x.vence) ? fecha(x.vence).toLocaleDateString("es-VE") : "—"}</span>
+        <span class="pildora ${vencido ? "mal" : x.activo ? "ok" : ""}">${vencido ? "Vencido" : x.activo ? "Activo" : "Pausado"}</span>
+        <button class="boton secundario chico" data-pausar-codigo="${esc(x.id)}" ${vencido ? "disabled" : ""}>${x.activo ? "Pausar" : "Activar"}</button>
+        <button class="quitar" data-borrar-codigo="${esc(x.id)}" aria-label="Borrar">${icono("basura")}</button></div>`;
+    }).join("") : `<p class="nota">Todavía no hay códigos.</p>`;
+    $$("[data-pausar-codigo]", caja).forEach((b) => (b.onclick = async () => {
+      const x = lista.find((y) => y.id === b.dataset.pausarCodigo);
+      await updateDoc(doc(db, "codigos", x.id), { activo: !x.activo }).catch(() => aviso("No se pudo cambiar"));
+      pintarCodigos();
+    }));
+    $$("[data-borrar-codigo]", caja).forEach((b) => (b.onclick = async () => {
+      if (!confirm(`¿Borrar el código ${b.dataset.borrarCodigo}?`)) return;
+      await deleteDoc(doc(db, "codigos", b.dataset.borrarCodigo)).catch(() => aviso("No se pudo borrar"));
+      pintarCodigos();
+    }));
+  }
+
+  // ---------- Reportes de los últimos 30 días ----------
+  let reporte30 = null;   // { t: cuándo se cargó, lista }
+  async function cargarReportes(forzar = false) {
+    const caja = $("#reportes");
+    if (!caja) return;
+    if (!reporte30 || forzar || Date.now() - reporte30.t > 5 * 60000) {
+      caja.innerHTML = `<p class="nota">Cargando reportes…</p>`;
+      try {
+        const desde = Timestamp.fromDate(new Date(Date.now() - 30 * DIA));
+        const s = await getDocs(query(collection(db, "carreras"), where("creada", ">=", desde), orderBy("creada", "desc"), limit(3000)));
+        reporte30 = { t: Date.now(), lista: s.docs.map((d) => ({ id: d.id, ...d.data() })) };
+      } catch (e) { console.error(e); if ($("#reportes")) $("#reportes").innerHTML = `<p class="nota">No se pudieron cargar los reportes.</p>`; return; }
+    }
+    if (!$("#reportes")) return;
+    $("#reportes").innerHTML = htmlReportes(reporte30.lista);
+    if ($("#actualizar-reportes")) $("#actualizar-reportes").onclick = () => cargarReportes(true);
+  }
+  function htmlReportes(lista) {
+    const dia = (c) => { const f = fecha(c.creada); return f ? f.toLocaleDateString("en-CA", { timeZone: "America/Caracas" }) : null; };
+    const hora = (c) => { const f = fecha(c.creada); return f ? Number(f.toLocaleString("en-US", { timeZone: "America/Caracas", hour: "numeric", hour12: false })) % 24 : null; };
+    const term = lista.filter((c) => c.estado === "terminada"), canc = lista.filter((c) => c.estado === "cancelada");
+    // Viajes por día (30 días): terminados y cancelados.
+    const dias = [...Array(30)].map((_, k) => new Date(Date.now() - (29 - k) * DIA).toLocaleDateString("en-CA", { timeZone: "America/Caracas" }));
+    const porDia = Object.fromEntries(dias.map((d) => [d, { t: 0, c: 0 }]));
+    lista.forEach((c) => { const d = porDia[dia(c)]; if (!d) return; if (c.estado === "terminada") d.t++; else if (c.estado === "cancelada") d.c++; });
+    const maxDia = Math.max(1, ...dias.map((d) => porDia[d].t + porDia[d].c));
+    // Horas pico: a qué hora piden más.
+    const porHora = Array(24).fill(0);
+    lista.forEach((c) => { const h = hora(c); if (h != null) porHora[h]++; });
+    const maxHora = Math.max(1, ...porHora);
+    const pico = porHora.indexOf(Math.max(...porHora));
+    // Top motorizados.
+    const top = {};
+    term.forEach((c) => { if (!c.motoUid) return; const x = (top[c.motoUid] ??= { nombre: c.motoNombre || "—", n: 0, dinero: 0 }); x.n++; x.dinero += Number(c.precio) || 0; });
+    const topLista = Object.entries(top).map(([id, x]) => ({ ...x, m: motos.find((m) => m.id === id) })).sort((a, b) => b.n - a.n).slice(0, 10);
+    // Cancelaciones: quién cancela y por qué (también las de motorizados que la soltaron y volvió a esperar).
+    const motivos = {}, porCliente = {}, porMoto = {};
+    canc.forEach((c) => {
+      const x = c.cancelacion || {};
+      const m = String(x.motivo || "Sin motivo").split(":")[0];
+      motivos[m] = (motivos[m] || 0) + 1;
+      if (x.por === "cliente") { const k = (porCliente[c.clienteUid] ??= { nombre: c.clienteNombre, n: 0 }); k.n++; }
+    });
+    lista.forEach((c) => (c.cancelaciones || []).forEach((x) => {
+      if (x.por !== "motorizado") return;
+      const k = (porMoto[x.motoUid] ??= { nombre: x.motoNombre, n: 0 }); k.n++;
+      const m = "Motorizado: " + String(x.motivo || "Sin motivo").split(":")[0];
+      motivos[m] = (motivos[m] || 0) + 1;
+    }));
+    const filas = (o) => Object.values(o).sort((a, b) => b.n - a.n).slice(0, 5);
+    const totalDinero = term.reduce((s, c) => s + (Number(c.precio) || 0), 0);
+    const hh = (h) => `${((h + 11) % 12) + 1}${h < 12 ? "am" : "pm"}`;
+    return `
+      <div class="cifras">
+        <div class="cifra"><b>${lista.length}</b><span>Pedidos (30 días)</span></div>
+        <div class="cifra"><b>${term.length}</b><span>Terminados</span></div>
+        <div class="cifra"><b>${canc.length}</b><span>Cancelados (${lista.length ? Math.round((canc.length / lista.length) * 100) : 0}%)</span></div>
+        <div class="cifra"><b>${usd(totalDinero)}</b><span>Movido por los motorizados</span></div>
+      </div>
+      <div class="caja"><h2>${icono("grafica")} Viajes por día</h2>
+        <div class="barras-dias">${dias.map((d) => `<div class="col" title="${d}: ${porDia[d].t} terminados, ${porDia[d].c} cancelados">
+          <i class="b-canc" style="height:${(porDia[d].c / maxDia) * 100}%"></i><i class="b-term" style="height:${(porDia[d].t / maxDia) * 100}%"></i></div>`).join("")}</div>
+        <div class="eje"><span>${dias[0].slice(5).split("-").reverse().join("/")}</span><span>Hoy</span></div>
+        <div class="leyenda"><span><i style="background:var(--marca)"></i>Terminados</span><span><i style="background:#f87171"></i>Cancelados</span></div></div>
+      <div class="caja"><h2>${icono("reloj")} Horas pico</h2>
+        <p class="nota">${lista.length ? `La hora con más pedidos es de <b>${hh(pico)} a ${hh((pico + 1) % 24)}</b>. Ten más motorizados de turno a esa hora.` : "Todavía no hay pedidos."}</p>
+        <div class="barras-horas">${porHora.map((n, h) => `<div class="col ${h === pico && n ? "pico" : ""}" title="${hh(h)}: ${n}"><i style="height:${(n / maxHora) * 100}%"></i><small>${h % 3 === 0 ? hh(h) : ""}</small></div>`).join("")}</div></div>
+      <div class="caja"><h2>${icono("estrella")} Top motorizados</h2>
+        <table class="tabla"><tr><th>Motorizado</th><th class="num">Carreras</th><th class="num">Cobrado</th><th class="num">Nota</th></tr>
+        ${topLista.map((x) => `<tr><td>${esc(x.nombre)}</td><td class="num">${x.n}</td><td class="num">${usd(x.dinero)}</td><td class="num">${x.m && x.m.ratingCount ? (x.m.ratingSum / x.m.ratingCount).toFixed(1) : "—"}</td></tr>`).join("") || `<tr><td colspan="4">Sin carreras terminadas</td></tr>`}</table></div>
+      <div class="caja"><h2>${icono("alerta")} Cancelaciones</h2>
+        <table class="tabla"><tr><th>Motivo</th><th class="num">Veces</th></tr>
+        ${Object.entries(motivos).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([m, n]) => `<tr><td>${esc(m)}</td><td class="num">${n}</td></tr>`).join("") || `<tr><td colspan="2">Sin cancelaciones</td></tr>`}</table>
+        ${filas(porCliente).length ? `<p class="nota"><b>Clientes que más cancelan:</b> ${filas(porCliente).map((x) => `${esc(x.nombre)} (${x.n})`).join(" · ")}</p>` : ""}
+        ${filas(porMoto).length ? `<p class="nota"><b>Motorizados que más sueltan carreras:</b> ${filas(porMoto).map((x) => `${esc(x.nombre)} (${x.n})`).join(" · ")}</p>` : ""}</div>
+      <button class="boton secundario chico" id="actualizar-reportes">${icono("deshacer")} Actualizar reportes</button>`;
   }
 
   // Pestaña "Más": tarifas y números.
@@ -976,6 +1134,11 @@ function iniciar() {
       <label>Foto o logo</label>
       <div class="foto-negocio-fila"><div class="logo-negocio grande" id="vista-foto">${foto ? `<img src="${esc(foto)}" alt="">` : icono("carrito")}</div>
         <label class="boton secundario">${icono("descargar")} Elegir foto<input type="file" accept="image/*" id="foto-negocio" hidden></label></div>
+      <fieldset class="caja-pm"><legend>${icono("telefono")} Pago móvil del negocio (opcional)</legend>
+        <p class="nota">El cliente lo ve con botones para copiar y paga los productos directo al negocio.</p>
+        <label>Banco<input name="pmBanco" maxlength="60" value="${esc(n?.pagoMovil?.banco || "")}" placeholder="Ej.: Banesco"></label>
+        <div class="dos"><div><label>Teléfono<input name="pmTel" maxlength="20" inputmode="tel" value="${esc(n?.pagoMovil?.telefono || "")}" placeholder="0414-1234567"></label></div>
+        <div><label>Cédula o RIF<input name="pmCed" maxlength="20" value="${esc(n?.pagoMovil?.cedula || "")}" placeholder="V-12345678"></label></div></div></fieldset>
       <label class="opcion"><input type="checkbox" name="activo" ${n?.activo === false ? "" : "checked"}><span>Visible para los clientes</span></label>
       <button class="boton">Guardar</button>
       <button class="boton secundario" type="button" data-no>Cancelar</button></form>`;
@@ -1000,7 +1163,10 @@ function iniciar() {
       const datos = {
         nombre: String(f.get("nombre")).trim(), tipo: f.get("tipo"), rif: String(f.get("rif")).trim().toUpperCase(), telefono: tel,
         dir: String(f.get("dir")).trim(), ubicacion: { lat: ubic.lat, lng: ubic.lng }, foto: foto || null, activo: f.get("activo") === "on",
+        pagoMovil: String(f.get("pmTel") || "").trim()
+          ? { banco: String(f.get("pmBanco") || "").trim(), telefono: String(f.get("pmTel")).trim(), cedula: String(f.get("pmCed") || "").trim().toUpperCase() } : null,
       };
+      if (datos.pagoMovil && (!datos.pagoMovil.banco || String(datos.pagoMovil.telefono).replace(/\D/g, "").length < 10)) return aviso("Completa el banco y el teléfono del pago móvil (o déjalos vacíos)");
       const bt = $("button:not([type])", e.target); bt.disabled = true;
       try {
         const ref = n ? doc(db, "negocios", n.id) : doc(collection(db, "negocios"));
@@ -1026,7 +1192,7 @@ function iniciar() {
     caja.innerHTML = lista.length ? lista.map((p) => `
       <div class="fila-producto${p.activo === false ? " apagado" : ""}">
         <div class="foto-producto">${p.foto ? `<img src="${esc(p.foto)}" alt="">` : icono(TIPOS_NEGOCIO[p.tipo]?.icono || "carrito")}</div>
-        <div class="info"><b>${esc(p.nombre)}</b><span>${usd(p.precio)}${p.activo === false ? " · agotado" : ""}</span></div>
+        <div class="info"><b>${esc(p.nombre)}</b><span>${usd(p.precio)}${p.categoria ? ` · ${esc(p.categoria)}` : ""}${p.vendidos ? ` · ${p.vendidos} pedidos` : ""}${p.activo === false ? " · agotado" : ""}</span></div>
         <button type="button" class="boton secundario chico" data-editar-producto="${p.id}">Editar</button>
         <button type="button" class="boton secundario chico" data-agotado="${p.id}">${p.activo === false ? "Hay" : "Agotado"}</button>
         <button type="button" class="quitar" data-borrar-producto="${p.id}" aria-label="Borrar">${icono("basura")}</button>
@@ -1066,10 +1232,14 @@ function iniciar() {
       <label>Nombre<input name="nombre" maxlength="60" required value="${esc(p?.nombre || "")}" placeholder="Ej.: Hamburguesa clásica, Harina PAN 1 kg"></label>
       <label>Precio ($)<input name="precio" type="number" step="0.01" min="0.01" required value="${p ? Number(p.precio).toFixed(2) : ""}" placeholder="0.00"></label>
       <label>Descripción (opcional)<input name="desc" maxlength="100" value="${esc(p?.desc || "")}" placeholder="Ej.: Con papas y refresco"></label>
+      <label>Categoría (opcional)<input name="categoria" maxlength="30" list="categorias-${esc(n.id)}" value="${esc(p?.categoria || "")}" placeholder="Ej.: Bebidas, Víveres, Combos"></label>
+      <datalist id="categorias-${esc(n.id)}">${[...new Set(productos.filter((x) => x.negocioId === n.id && x.categoria).map((x) => x.categoria))].map((c) => `<option value="${esc(c)}">`).join("")}</datalist>
+      ${p && p.vendidos ? `<p class="nota">${icono("estrella")} Pedido ${p.vendidos} ${p.vendidos === 1 ? "vez" : "veces"} · <button type="button" class="enlace" data-cero>Poner en cero</button></p>` : ""}
       <button class="boton">Guardar</button>
       <button class="boton secundario" type="button" data-no>Cancelar</button></form>`;
     document.body.append(fondo);
     $("[data-no]", fondo).onclick = () => fondo.remove();
+    if ($("[data-cero]", fondo)) $("[data-cero]", fondo).onclick = () => updateDoc(doc(db, "productos", p.id), { vendidos: 0 }).then(() => { aviso("Contador en cero"); $("[data-cero]", fondo).closest("p").remove(); }, () => aviso("No se pudo"));
     $("#foto-producto", fondo).onchange = async (e) => {
       const a = e.target.files[0]; if (!a) return;
       try { foto = await achicarFoto(a, 320); $("#vista-foto-p", fondo).innerHTML = `<img src="${foto}" alt="">`; } catch { aviso("No se pudo leer esa imagen"); }
@@ -1079,7 +1249,8 @@ function iniciar() {
       const f = new FormData(e.target);
       const precio = Math.round(Number(f.get("precio")) * 100) / 100;
       if (!(precio > 0)) return aviso("Escribe el precio");
-      const datos = { nombre: String(f.get("nombre")).trim(), precio, desc: String(f.get("desc")).trim(), foto: foto || null, negocioId: n.id, ...copiaNegocio(n) };
+      const cat = String(f.get("categoria") || "").trim().replace(/\s+/g, " ");
+      const datos = { nombre: String(f.get("nombre")).trim(), precio, desc: String(f.get("desc")).trim(), categoria: cat ? cat.charAt(0).toUpperCase() + cat.slice(1) : "", foto: foto || null, negocioId: n.id, ...copiaNegocio(n) };
       const bt = $("button:not([type])", e.target); bt.disabled = true;
       try {
         if (p) await updateDoc(doc(db, "productos", p.id), datos);
@@ -1251,6 +1422,8 @@ function iniciar() {
     const motoApp = motosReales.filter((m) => m.enApp).length;
     const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
     $("#vista").innerHTML = `
+      <h1 class="titulo">${icono("grafica")} Reportes · últimos 30 días</h1>
+      <div id="reportes"></div>
       <h1 class="titulo">${icono("descargar")} App instalada</h1>
       <div class="cifras">
         <div class="cifra"><b>${cliApp}</b><span>Clientes con la app (${pct(cliApp, clientes.length)}%)</span></div>
@@ -1274,5 +1447,6 @@ function iniciar() {
       <div class="caja"><table class="tabla"><tr><th>Motorizado</th><th class="num">Llamadas</th><th class="num">Carreras*</th></tr>
         ${ranking.map((x) => `<tr><td>${esc(x.m.nombre)}</td><td class="num">${x.n}</td><td class="num">${x.c}</td></tr>`).join("") || `<tr><td colspan="3">Sin motorizados</td></tr>`}</table>
         <p class="nota">* Carreras terminadas entre las últimas 100.</p></div>`;
+    cargarReportes();
   }
 }

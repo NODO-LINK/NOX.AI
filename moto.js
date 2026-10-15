@@ -10,7 +10,8 @@ import {
   hoyLocal,
   DOCUMENTOS, estadoDoc,
   enApp, textoDescuento, totalPedido, enlaceDescarga,
-} from "./comun.js?v=81";
+  RAPIDOS_MOTO, enviarMensaje, botonesRapidos, activarPush,
+} from "./comun.js?v=82";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -109,6 +110,7 @@ function iniciar() {
   function pararCarreras() { subsCarreras.forEach((f) => f()); subsCarreras = []; }
   function escucharCarreras() {
     pararCarreras();
+    activarPush(yo.uid, "moto");
     // Su carrera aceptada (aunque lo hayan desactivado, debe poder terminarla).
     subsCarreras.push(onSnapshot(query(collection(db, "carreras"), where("motoUid", "==", yo.uid), where("estado", "==", "aceptada")), (s) => {
       const antes = miCarrera;
@@ -161,12 +163,13 @@ function iniciar() {
       nuevas.forEach((c) => conocidas.add(c.id));
       if (nuevas.length && !primeraCarga && !miCarrera) {
         sonar();
+        iniciarAlarma();
         aviso(nuevas.length > 1 ? `¡${nuevas.length} carreras nuevas!` : nuevas[0].ofertaCliente ? "¡Carrera publicada! El cliente puso su precio" : "¡Carrera nueva!");
         // Una notificación por cada carrera, en la barra del teléfono (aunque la app esté minimizada).
         nuevas.forEach((c) => {
           const titulo = c.paraMoto ? "🏍️ ¡Un cliente te pidió a ti!" : c.ofertaCliente ? "🏍️ Carrera publicada · precio del cliente" : "🏍️ ¡Carrera nueva!";
           const ruta = `${c.origen.dir} → ${c.destino.dir}${(c.paradas || []).length ? ` (+${c.paradas.length} parada${c.paradas.length > 1 ? "s" : ""})` : ""}`;
-          notificar(titulo, `${textoCobro(c)} · ${Number(c.km) || 0} km${c.descuento ? " · -50%" : ""}\n${ruta}`, { tag: "carrera-" + c.id, urgente: true });
+          notificar(titulo, `${textoCobro(c)} · ${Number(c.km) || 0} km${c.descuento ? " · -50%" : c.codigo ? ` · -${c.codigo.pct}%` : ""}\n${ruta}`, { tag: "carrera-" + c.id, urgente: true });
         });
       }
       primeraCarga = false;
@@ -352,6 +355,25 @@ function iniciar() {
   }
   document.addEventListener("visibilitychange", aplicarPantalla);
 
+  // ---------- Alarma de carrera nueva: suena cada 4 s hasta que toque la pantalla (máximo 2 minutos) ----------
+  let alarma = null;
+  function iniciarAlarma() {
+    pararAlarma();
+    const fin = Date.now() + 120000;
+    alarma = setInterval(() => {
+      if (Date.now() > fin || miCarrera || !disponibles.length) return pararAlarma();
+      sonar();
+    }, 4000);
+    const b = document.createElement("button");
+    b.id = "alarma"; b.className = "banda-alarma";
+    b.innerHTML = `${icono("campana")} ¡Carrera nueva! Toca para silenciar`;
+    b.onclick = pararAlarma;
+    document.body.append(b);
+  }
+  function pararAlarma() { clearInterval(alarma); alarma = null; const b = $("#alarma"); if (b) b.remove(); }
+  // Cualquier toque en la pantalla = ya la vio.
+  addEventListener("pointerdown", () => { if (alarma) pararAlarma(); }, { capture: true });
+
   // ---------- Sonido ----------
   // Corneta de moto (la misma de la app del cliente); solo después de tocar "Activar sonido".
   function sonar() { sonarAlerta(); }
@@ -407,7 +429,9 @@ function iniciar() {
     $("#cabecera .derecha").prepend(botonInstalar(), botonTema());
 
     let html = "";
-    if (!perfil.activo) html += `<div class="caja"><h2>Estás inactivo</h2><p class="nota">El administrador debe activarte para que recibas carreras y salgas en la app.</p></div>`;
+    if (!perfil.activo) html += perfil.motivoBloqueo
+      ? `<div class="caja"><h2>${icono("bloquear")} Estás bloqueado</h2><p class="nota">Motivo: ${esc(perfil.motivoBloqueo)}. Habla con el administrador por WhatsApp (0412-3042896).</p></div>`
+      : `<div class="caja"><h2>Estás inactivo</h2><p class="nota">El administrador debe activarte para que recibas carreras y salgas en la app.</p></div>`;
     else if (!ok) html += `<div class="caja"><h2>${vence ? "Quincena vencida" : "Falta tu primera cuota"}</h2><p class="nota">${vence ? `Tu pago venció el ${fechaTexto(vence)}.` : "Todavía no tienes una cuota pagada."} Paga la cuota y repórtala abajo en «Tu cuota» para volver a salir en la app.</p></div>`;
     else if (vence && vence - new Date() < 3 * 864e5) html += `<p class="pildora alerta" style="display:inline-block;margin-top:12px">Tu quincena vence el ${fechaTexto(vence)}</p>`;
 
@@ -478,6 +502,7 @@ function iniciar() {
     if (s) s.onclick = async () => {
       sonido = true; sonar();
       await pedirPermisoAvisos();
+      activarPush(yo.uid, "moto");
       if ("Notification" in window && Notification.permission === "granted") notificar("🏍️ Avisos activados", "Así te llegará cada carrera nueva, aunque tengas la app minimizada.", { tag: "prueba-aviso" });
       else if ("Notification" in window && Notification.permission === "denied") aviso("Las notificaciones están bloqueadas: actívalas en Ajustes → Apps → Whereapp → Notificaciones");
       pintar();
@@ -515,8 +540,9 @@ function iniciar() {
   const tipoTexto = (c) => (c.tipo === "mototaxi" ? `${icono("moto")} Mototaxi` : `${icono("paquete")} Delivery`);
   const tarjetaCarrera = (c) => `
     <article class="tarjeta"><div class="info">
-      <h3>${tipoTexto(c)} · ${usd(c.precio)} · ${esc(c.km)} km ${c.paraMoto ? `<span class="pildora">Para ti</span>` : ""}${c.ofertaCliente ? `<span class="pildora oferta-pill">Precio del cliente</span>` : ""}${c.descuento ? `<span class="pildora pill-descuento">-50%</span>` : ""}</h3>
+      <h3>${tipoTexto(c)} · ${usd(c.precio)} · ${esc(c.km)} km ${c.paraMoto ? `<span class="pildora">Para ti</span>` : ""}${c.ofertaCliente ? `<span class="pildora oferta-pill">Precio del cliente</span>` : ""}${c.descuento ? `<span class="pildora pill-descuento">-50%</span>` : c.codigo ? `<span class="pildora pill-descuento">-${c.codigo.pct}%</span>` : ""}</h3>
       ${c.descuento ? `<p class="aviso-descuento">${icono("dinero")} <b>Carrera con 50% de descuento.</b> Motivo: ${esc(c.descuento.motivo)}</p>` : ""}
+      ${c.codigo ? `<p class="aviso-descuento">${icono("dinero")} <b>Carrera con código de promoción (${c.codigo.pct}% menos).</b> Cobra el precio que ves.</p>` : ""}
       ${cajaNegocio(c)}
       <p class="cobro">${icono((FORMAS_PAGO[c.formaPago] || FORMAS_PAGO.usd).icono)} <b>Cobrar:</b> ${esc(textoCobro(c))}</p>
       <p><b>A:</b> ${esc(c.origen.dir)}</p>
@@ -748,7 +774,7 @@ function iniciar() {
         <div class="fila"><span>Servicio</span><b>${tipoTexto(c)}</b></div>
         <div class="fila"><span>Cliente</span><span>${esc(c.clienteNombre)}</span></div>
         <div class="fila cobrar"><span>Cobrar</span><b>${esc(textoCobro(c))}</b></div>
-        ${c.descuento ? `<div class="fila"><span>Descuento</span><b class="texto-descuento">${esc(textoDescuento(c))}</b></div>` : ""}
+        ${c.descuento || c.codigo ? `<div class="fila"><span>Descuento</span><b class="texto-descuento">${esc(textoDescuento(c))}</b></div>` : ""}
         <div class="fila"><span>Distancia</span><span>${esc(c.km)} km</span></div>
         ${c.nota && !c.negocio ? `<div class="fila"><span>Llevar</span><span>${esc(c.nota)}</span></div>` : ""}
       </div>
@@ -763,6 +789,8 @@ function iniciar() {
         <a class="boton" href="tel:${esc(c.clienteTel)}">${icono("telefono")} Llamar</a>
         <button class="boton" id="chat">${icono("chat")} Chat<b class="contador" id="chat-sin-leer" ${chat.sinLeer ? "" : "hidden"}>${chat.sinLeer || ""}</b></button>
       </div>
+      ${botonesRapidos(RAPIDOS_MOTO)}
+      ${c.conPin && !c.recogido ? `<p class="aviso-pin">${icono("escudo")} El pasajero tiene un <b>código de 4 números</b>. Pídeselo cuando se monte: lo escribes al tocar «Ya lo recogí».</p>` : ""}
       ${!c.recogido && !c.llegoEn ? `<button class="boton" id="llegue">${icono("campana")} ${c.negocio ? "Llegué al negocio (avisar al cliente)" : "Llegué al punto A (avisar al cliente)"}</button>` : ""}
       ${!c.recogido && c.llegoEn ? `<p class="pildora ok" style="margin-top:12px">${icono("check")} Le avisaste al cliente que llegaste</p>` : ""}
       ${c.recogido
@@ -800,6 +828,29 @@ function iniciar() {
     };
   }
 
+  // Ventana para escribir el código de 4 números que dice el pasajero.
+  function pedirPin(c) {
+    return new Promise((resolver) => {
+      const fondo = document.createElement("div");
+      fondo.className = "modal";
+      fondo.innerHTML = `<form class="ventana"><h2>${icono("escudo")} Código del pasajero</h2>
+        <p class="nota">Pídele a ${esc(String(c.clienteNombre).split(" ")[0])} su código de 4 números (lo ve en su app).</p>
+        <input id="pin" class="campo-pin" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="0000" required>
+        <button class="boton">Confirmar y salir hacia B</button><button class="boton secundario" type="button" data-no>Cancelar</button></form>`;
+      document.body.append(fondo);
+      const campo = $("#pin", fondo);
+      setTimeout(() => campo.focus(), 50);
+      campo.oninput = () => { campo.value = campo.value.replace(/\D/g, "").slice(0, 4); };
+      const cerrar = (v) => { fondo.remove(); resolver(v); };
+      $("[data-no]", fondo).onclick = () => cerrar(null);
+      $("form", fondo).onsubmit = (e) => {
+        e.preventDefault();
+        if (!/^\d{4}$/.test(campo.value)) return aviso("Son 4 números");
+        cerrar(campo.value);
+      };
+    });
+  }
+
   function activarMiCarrera(c) {
     $("#chat").onclick = () => {
       cerrarChat();
@@ -816,11 +867,22 @@ function iniciar() {
       try { await updateDoc(doc(db, "carreras", c.id), { llegoEn: serverTimestamp() }); aviso("Le avisamos al cliente que llegaste"); }
       catch { llegue.disabled = false; aviso("No se pudo avisar. Revisa tu internet."); }
     };
+    $$("[data-rapido-ya]").forEach((b) => (b.onclick = async () => {
+      b.disabled = true;
+      if (await enviarMensaje(c.id, yo.uid, perfil.nombre, b.dataset.rapidoYa)) aviso(`Enviado: «${b.dataset.rapidoYa}»`);
+      b.disabled = false;
+    }));
     const recogi = $("#recogi");
     if (recogi) recogi.onclick = async () => {
+      // Con código: el pasajero se lo dice al montarse (así sabe que es la moto correcta).
+      const pin = c.conPin ? await pedirPin(c) : null;
+      if (c.conPin && !pin) return;
       recogi.disabled = true;
-      try { await updateDoc(doc(db, "carreras", c.id), { recogido: true, recogidoEn: serverTimestamp() }); aviso("¡Vamos hacia el punto B!"); }
-      catch { recogi.disabled = false; aviso("No se pudo guardar. Puede que el cliente haya cancelado; revisa tu internet."); }
+      try { await updateDoc(doc(db, "carreras", c.id), { recogido: true, recogidoEn: serverTimestamp(), ...(pin ? { pin } : {}) }); aviso("¡Vamos hacia el punto B!"); }
+      catch (e) {
+        recogi.disabled = false;
+        aviso(c.conPin && e.code === "permission-denied" ? "Ese código no es. Pídeselo otra vez al pasajero." : "No se pudo guardar. Puede que el cliente haya cancelado; revisa tu internet.");
+      }
     };
     const termine = $("#termine");
     if (termine) termine.onclick = async () => {

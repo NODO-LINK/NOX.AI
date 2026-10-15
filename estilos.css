@@ -1196,3 +1196,125 @@ body.modo-viaje #vista > .titulo:first-of-type, body.modo-viaje .asa-y + .titulo
 .lista.productos .producto .info { padding: 0 10px; }
 .lista.productos .contador-producto { flex-direction: row; justify-content: space-between; padding: 0 10px; }
 .lista.productos .contador-producto .boton { width: 34px; height: 34px; }
+
+/* =========================================================================
+   Mejoras: atajos, recientes, consejos, código, PIN, tarjeta del motorizado,
+   mensajes rápidos, buscador de tiendas, reportes y alarma
+   ========================================================================= */
+.atajos-y { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.atajo-y { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--borde); border-radius: 18px; background: var(--superficie);
+  color: var(--texto); font: inherit; text-align: left; cursor: pointer; box-shadow: var(--sombra-1); min-width: 0; }
+.atajo-y > .ico { width: 34px; height: 34px; padding: 7px; border-radius: 12px; background: var(--marca-suave); color: var(--marca); flex: 0 0 auto; }
+.atajo-y span { display: flex; flex-direction: column; min-width: 0; }
+.atajo-y b { font-size: .9rem; font-weight: 900; }
+.atajo-y small { color: var(--texto-2); font-size: .76rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.atajo-y.vacio-y { border-style: dashed; box-shadow: none; }
+.atajo-y.vacio-y small { color: var(--marca); }
+.recientes-y { margin-top: 10px; border-radius: 18px; background: var(--superficie); box-shadow: var(--sombra-1); overflow: hidden; }
+.recientes-y button { width: 100%; display: flex; align-items: center; gap: 12px; padding: 11px 14px; border: 0; border-bottom: 1px solid var(--borde); background: none;
+  color: var(--texto); font: inherit; text-align: left; cursor: pointer; }
+.recientes-y button:last-child { border-bottom: 0; }
+.recientes-y button > .ico:first-child { width: 20px; height: 20px; color: var(--texto-2); flex: 0 0 auto; }
+.recientes-y button > .ico:last-child { width: 16px; height: 16px; color: var(--texto-2); }
+.recientes-y span { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.recientes-y b { font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.recientes-y small { color: var(--texto-2); font-size: .74rem; font-weight: 700; }
+
+/* Consejos de la primera vez */
+.consejo { position: fixed; inset: 0; z-index: 3000; pointer-events: none; }
+.consejo-foco { position: fixed; border-radius: 22px; box-shadow: 0 0 0 9999px rgba(8, 15, 40, .55); transition: all .35s var(--suave); }
+.consejo-burbuja { position: fixed; left: 16px; right: 16px; max-width: 420px; margin: 0 auto; padding: 14px 16px; border-radius: 20px; background: var(--superficie); color: var(--texto);
+  box-shadow: var(--sombra-2); pointer-events: auto; animation: entrar .35s var(--suave) both; }
+.consejo-burbuja p { margin: 0 0 10px; font-weight: 800; }
+.consejo-burbuja .botones { display: flex; gap: 8px; justify-content: flex-end; margin: 0; }
+.consejo-burbuja .boton { width: auto; margin: 0; }
+
+/* Código de promoción */
+.codigo-promo { margin-top: 10px; display: flex; align-items: center; gap: 8px; }
+details.codigo-promo { display: block; }
+.codigo-promo summary { cursor: pointer; color: var(--marca); font-weight: 800; font-size: .9rem; list-style: none; display: flex; align-items: center; gap: 6px; }
+.codigo-promo summary::-webkit-details-marker { display: none; }
+.fila-codigo { display: flex; gap: 8px; margin-top: 8px; }
+.fila-codigo input { flex: 1; text-transform: uppercase; margin: 0; }
+.fila-codigo .boton { width: auto; margin: 0; }
+
+/* Código de 4 números para subir a la moto */
+.caja-pin { margin-top: 14px; padding: 14px 16px; border-radius: 22px; background: var(--degradado); color: #fff; text-align: center; box-shadow: var(--brillo); }
+.caja-pin span { display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 800; font-size: .9rem; opacity: .95; }
+.caja-pin b { display: block; font-size: 2.4rem; font-weight: 900; letter-spacing: .12em; margin: 4px 0; font-variant-numeric: tabular-nums; }
+.caja-pin small { display: block; font-weight: 700; opacity: .9; font-size: .8rem; }
+.aviso-pin { margin-top: 12px; padding: 10px 12px; border-radius: 16px; background: var(--marca-suave); color: var(--texto); font-size: .88rem; }
+.campo-pin { font-size: 2rem !important; text-align: center; letter-spacing: .4em; font-weight: 900; }
+
+/* Tarjeta grande del motorizado (al aceptar) */
+.tarjeta-moto-y { margin-top: 14px; padding: 14px; border-radius: 24px; background: var(--superficie); box-shadow: var(--sombra-2); text-align: center; }
+.fotos-moto-y { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fotos-moto-y figure { margin: 0; }
+.fotos-moto-y figcaption { font-size: .75rem; font-weight: 800; color: var(--texto-2); margin-top: 4px; }
+.foto-grande-y { aspect-ratio: 1; border-radius: 18px; display: grid; place-items: center; background: var(--marca-suave) center / cover no-repeat; color: var(--marca); }
+.foto-grande-y .ico { width: 44px; height: 44px; }
+.foto-grande-y.con-foto .ico { display: none; }
+.tarjeta-moto-y h3 { margin: 12px 0 2px; font-size: 1.2rem; font-weight: 900; }
+.tarjeta-moto-y > p { margin: 2px 0; }
+.placa-grande { display: inline-block; margin: 8px auto 4px; padding: 6px 18px; border: 3px solid var(--texto); border-radius: 10px; background: #fde047; color: #111;
+  font-size: 1.5rem; font-weight: 900; letter-spacing: .12em; font-family: ui-monospace, "Roboto Mono", monospace; }
+.tarjeta-moto-y .botones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.tarjeta-moto-y .botones .boton { margin: 0; }
+.pildora.verificado { background: #dbeafe; color: #1d4ed8; }
+:root[data-tema="oscuro"] .pildora.verificado { background: rgba(59, 130, 246, .2); color: #93c5fd; }
+
+/* Mensajes rápidos */
+.rapidos { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 6px; margin: 4px 0; scrollbar-width: none; grid-column: 1 / -1; width: 100%; }
+.rapidos::-webkit-scrollbar { display: none; }
+.rapidos .pildora { border: 1px solid var(--borde); font: inherit; font-weight: 800; font-size: .82rem; padding: 8px 14px; cursor: pointer; }
+.banner-aviso.sin-senal { background: var(--suave-rojo); color: var(--rojo); }
+
+/* Tiendas: buscador, categorías, lo más pedido, precios en Bs */
+.buscador-tienda { display: flex; align-items: center; gap: 10px; margin: 10px 0 6px; padding: 0 14px; border-radius: 18px; background: var(--superficie); border: 1px solid var(--borde); box-shadow: var(--sombra-1); }
+.buscador-tienda .ico { width: 20px; height: 20px; color: var(--marca); flex: 0 0 auto; }
+.buscador-tienda input { flex: 1; border: 0; background: none; box-shadow: none; margin: 0; padding: 13px 0; font-weight: 700; }
+.buscador-tienda input:focus { outline: none; box-shadow: none; }
+.fila-productos-y { display: flex; gap: 12px; overflow-x: auto; margin: 0 -16px 8px; padding: 4px 16px 12px; scrollbar-width: none; }
+.fila-productos-y::-webkit-scrollbar { display: none; }
+.fila-productos-y .producto { flex: 0 0 150px; flex-direction: column; align-items: stretch; gap: 8px; padding: 0 0 10px; border-radius: 20px; overflow: hidden; }
+.fila-productos-y .producto .foto-producto { width: 100%; height: 110px; border-radius: 0; box-shadow: none; }
+.fila-productos-y .producto .info { padding: 0 10px; }
+.fila-productos-y .contador-producto { flex-direction: row; justify-content: space-between; padding: 0 10px; }
+.fila-productos-y .contador-producto .boton { width: 34px; height: 34px; }
+.filtro-negocios.categorias button { padding: 7px 14px; }
+.filtro-negocios button.on { background: var(--marca); color: #fff; border-color: var(--marca); }
+.precio-producto small { display: block; font-size: .72rem; color: var(--texto-2); font-weight: 800; }
+.barra-carrito .total small { display: block; font-size: .7rem; opacity: .85; font-weight: 800; }
+.pm-negocio { margin-top: 10px; padding: 10px 12px; border-radius: 16px; background: var(--marca-suave); }
+.pm-negocio h4 { margin: 0 0 6px; display: flex; align-items: center; gap: 6px; }
+.caja-pm { border: 1px solid var(--borde); border-radius: 16px; padding: 8px 12px 4px; margin: 10px 0; }
+.caja-pm legend { font-weight: 800; padding: 0 6px; display: flex; align-items: center; gap: 6px; }
+
+/* Alarma de carrera nueva (motorizado) */
+.banda-alarma { position: fixed; left: 12px; right: 12px; top: calc(env(safe-area-inset-top) + 10px); z-index: 4000; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 14px; border: 0; border-radius: 18px; background: var(--rojo); color: #fff; font: inherit; font-weight: 900; font-size: 1rem; box-shadow: 0 10px 30px rgba(220, 38, 38, .4);
+  animation: alarma-latido 1s ease-in-out 120; }
+@keyframes alarma-latido { 50% { transform: scale(1.03); } }
+
+/* Admin: códigos y reportes */
+.fila-codigo-admin { display: grid; grid-template-columns: 1.3fr .8fr 1.2fr auto; gap: 6px; align-items: center; margin: 8px 0 10px; }
+.fila-codigo-admin input { margin: 0; min-width: 0; }
+.fila-codigo-admin .boton { margin: 0; width: auto; }
+.fila-codigo-item { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 0; border-top: 1px solid var(--borde); }
+.fila-codigo-item b { font-family: ui-monospace, monospace; }
+.fila-codigo-item span:not(.pildora) { flex: 1; color: var(--texto-2); font-size: .85rem; }
+.fila-codigo-item .boton { width: auto; margin: 0; }
+.barras-dias, .barras-horas { display: flex; align-items: flex-end; gap: 3px; height: 120px; margin-top: 8px; }
+.barras-dias .col, .barras-horas .col { flex: 1; height: 100%; display: flex; flex-direction: column-reverse; justify-content: flex-start; position: relative; }
+.barras-dias i, .barras-horas i { display: block; border-radius: 4px 4px 0 0; min-height: 0; }
+.barras-dias .b-term { background: var(--marca); }
+.barras-dias .b-canc { background: #f87171; border-radius: 0; }
+.barras-horas .col { flex-direction: column; justify-content: flex-end; }
+.barras-horas i { background: var(--marca-suave); }
+.barras-horas .col.pico i { background: var(--marca); }
+.barras-horas small { position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%); font-size: .6rem; color: var(--texto-2); white-space: nowrap; }
+.barras-horas { margin-bottom: 20px; }
+.eje { display: flex; justify-content: space-between; font-size: .72rem; color: var(--texto-2); margin-top: 4px; }
+@media (max-width: 380px) { .fila-codigo-admin { grid-template-columns: 1fr 1fr; } }
+.botones.apilados .boton { flex: 1 1 100%; }
+.rapidos { flex: 1 1 100%; }
