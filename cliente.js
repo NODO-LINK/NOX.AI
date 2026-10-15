@@ -13,9 +13,9 @@ import {
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca, enlaceDescarga, TIPOS_NEGOCIO, numeroWhatsapp, totalPedido, resumenPedido, mensajePedido,
-  precioCodigo, textoRecibo, RAPIDOS_CLIENTE, enviarMensaje, botonesRapidos, conBs, activarPush,
-} from "./comun.js?v=82";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=82";
+  precioCodigo, textoRecibo, RAPIDOS_CLIENTE, enviarMensaje, botonesRapidos, conBs, activarPush, avisosAlEntrar, hayBuscadorGoogle, buscarGoogle, lugarGoogle,
+} from "./comun.js?v=83";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=83";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -196,18 +196,17 @@ function iniciar() {
     }));
     contarVisita();
     marcarUso();
-    activarPush(usuario.uid, "cliente");
+    avisosAlEntrar(usuario.uid, "cliente");
     // Anuncio del administrador (ej.: "pide la app por WhatsApp"): solo para quien usa la página web.
     if (!enApp()) cancelarSubs.push(onSnapshot(doc(db, "config", "anuncio"), (d) => {
       anuncio = d.exists() ? d.data() : null;
       if (rutaActual === "motorizados") vistaMotorizados();
       if (rutaActual === "inicio") vistaInicio();
     }, () => {}));
-    // Publicidad de negocios: la ven todos los clientes (en la página y en la app).
-    cancelarSubs.push(onSnapshot(doc(db, "config", "publicidad"), (d) => {
-      publicidad = d.exists() ? d.data() : null;
-      if (rutaActual === "motorizados") vistaMotorizados();
-      if (rutaActual === "inicio") vistaInicio();
+    // Publicidad de negocios: banners en el carrusel del inicio (hasta 5, en otro orden cada vez que abre la app).
+    cancelarSubs.push(onSnapshot(query(collection(db, "anuncios"), where("activo", "==", true)), (s) => {
+      anuncios = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (rutaActual === "inicio" && !tecleando()) vistaInicio();
     }, () => {}));
     // Bloqueado por el administrador (por su cuenta, su teléfono o su cédula): no puede pedir.
     bloqueado = false;
@@ -256,6 +255,17 @@ function iniciar() {
       if (rutaActual === "carrera") vistaCarrera();
     }));
     ir(carreraActual() ? "carrera" : "inicio");
+    // Accesos directos del ícono (mantener presionado) o del widget: ?ir=viaje | casa | carrera
+    const atajo = new URLSearchParams(location.search).get("ir");
+    if (atajo) {
+      try { history.replaceState(null, "", location.pathname); } catch {}
+      if (carreraActual() || atajo === "carrera") ir("carrera");
+      else if (atajo === "casa") {
+        const casa = favoritos.leer().find((f) => f.tipo === "casa");
+        if (casa) irConDestino({ lat: casa.lat, lng: casa.lng, n: casa.n });
+        else { aviso("Guarda tu casa: márcala como destino (B) y toca la estrella"); ir("viaje"); }
+      } else if (atajo === "viaje") ir("viaje");
+    }
   }
 
   const textoBloqueo = () => `Tu cuenta está bloqueada${bloqueado && bloqueado.motivo ? `: ${bloqueado.motivo}` : ""}. Comunícate con el administrador por WhatsApp (0412-3042896).`;
@@ -279,9 +289,22 @@ function iniciar() {
 
   // "pedir" (a un motorizado) y "publicar" (a todos, con el precio que pone el cliente) usan la misma pantalla.
   let cerrarSelector = null, ultimoPrecio = 0;
-  let anuncio = null, publicidad = null;
-  const clavePublicidad = () => "whereapp.publicidad." + ((publicidad && fecha(publicidad.actualizado)?.getTime()) || 0);
-  const verPublicidad = () => { try { if (localStorage.getItem(clavePublicidad()) === "x") return ""; } catch {} return htmlPublicidad(publicidad); };
+  let anuncio = null, anuncios = [];
+  // Orden al azar fijo mientras la app está abierta (rota cada vez que se abre).
+  const azar = new Map();
+  const anunciosVigentes = () => {
+    const ahora = new Date();
+    return anuncios.filter((x) => x.imagen && (!fecha(x.desde) || fecha(x.desde) <= ahora) && fecha(x.hasta) > ahora)
+      .map((x) => { if (!azar.has(x.id)) azar.set(x.id, Math.random()); return x; })
+      .sort((a, b) => azar.get(a.id) - azar.get(b.id)).slice(0, 5);
+  };
+  // Cada anuncio cuenta una vista por vez que se abre la app (no cada vez que se redibuja el inicio).
+  const vistos = new Set();
+  const contarVistas = (lista) => lista.forEach((x) => {
+    if (vistos.has(x.id)) return;
+    vistos.add(x.id);
+    updateDoc(doc(db, "anuncios", x.id), { vistas: increment(1) }).catch(() => {});
+  });
   const claveAnuncio = () => "whereapp.anuncio." + String((anuncio && anuncio.texto) || "").length + ":" + String((anuncio && anuncio.texto) || "").slice(0, 30);
   function htmlAnuncio() {
     if (!anuncio || !anuncio.activo || enApp()) return "";
@@ -296,11 +319,6 @@ function iniciar() {
   }
   // Botones de cerrar del anuncio y la publicidad (salen en Publicar y en Motorizados).
   function atarAnuncios() {
-    if ($("#cerrar-publicidad")) $("#cerrar-publicidad").onclick = () => { try { localStorage.setItem(clavePublicidad(), "x"); } catch {} $(".publicidad").remove(); };
-    // Cuenta los toques del botón (para decirle al negocio cuánta gente se interesó).
-    if ($("#tocar-publicidad")) $("#tocar-publicidad").addEventListener("click", () => {
-      setDoc(doc(db, "stats", "publicidad"), { toques: increment(1) }, { merge: true }).catch(() => {});
-    });
     if ($("#cerrar-anuncio")) $("#cerrar-anuncio").onclick = () => { try { localStorage.setItem(claveAnuncio(), "x"); } catch {} $(".anuncio").remove(); };
   }
   function enPedido() { return rutaActual === "pedir" || rutaActual === "publicar" || rutaActual === "encargo" || rutaActual === "viaje"; }
@@ -357,13 +375,16 @@ function iniciar() {
       { a: "comida", c: "b-comida", t: "¿Hambre?", s: "Pide comida rápida y te la llevan", i: "comida" },
       { a: "mercado", c: "b-mercado", t: "Mercado a tu casa", s: "Haz tus compras sin salir", i: "carrito" },
     ].filter(Boolean);
+    // Publicidad de negocios: después del primer banner de Whereapp.
+    const pubs = anunciosVigentes();
+    banners.splice(1, 0, ...pubs.map((x) => ({ pub: x })));
     const cerca = negocios.slice(0, 10);
     // Atajos: Casa y Trabajo (de "Mis lugares") y los últimos destinos a los que fue.
     const favs = favoritos.leer();
     const atajos = ["casa", "trabajo"].map((t) => ({ t, f: favs.find((f) => f.tipo === t) }));
     const recientes = destinosRecientes(3);
     $("#vista").innerHTML = `<div class="inicio-y">
-      <div class="saludo-y"><div><h1>Hola, ${esc(String(cliente.nombre).split(" ")[0])} 👋</h1><p>${icono("pin")} El Moján, Zulia</p></div>
+      <div class="saludo-y"><div><h1>Hola, ${esc(String(cliente.nombre).split(" ")[0])}</h1><p>${icono("pin")} El Moján, Zulia</p></div>
         <button class="avatar-y" data-ir="cuenta" aria-label="Tu cuenta">${esc(iniciales(cliente.nombre))}</button></div>
       <button class="buscador-y" data-ir="viaje">${icono("buscar")}<span>¿A dónde vas?</span><b>${icono("moto")}</b></button>
       <div class="atajos-y">${atajos.map(({ t, f }) => f
@@ -374,14 +395,15 @@ function iniciar() {
       ${activa ? `<button class="activa-y" data-ir="carrera"><span class="en-curso"></span><b>${activa.negocio ? "Tu pedido está en curso" : "Tu viaje está en curso"}</b><small>Ver ${icono("flecha")}</small></button>` : ""}
       <div class="servicios-y">${SECCIONES.map((x, k) => `
         <button class="recuadro servicio-y" data-seccion="${x.r}" style="animation-delay:${k * 0.05}s"><span class="ico-y">${icono(x.i)}</span><b>${x.t}</b></button>`).join("")}</div>
-      <div class="carrusel-y">${banners.map((x) => `
+      <div class="carrusel-y">${banners.map((x) => x.pub ? `
+        <button class="banner-y anuncio-y" data-anuncio="${esc(x.pub.id)}" aria-label="Publicidad de ${esc(x.pub.negocio)}"><img src="${esc(x.pub.imagen)}" alt="" loading="lazy"><i class="etiqueta-pub">Publicidad</i></button>` : `
         <button class="banner-y ${x.c}" data-ir="${x.a}"><span><b>${esc(x.t)}</b><small>${esc(x.s)}</small></span>${icono(x.i)}</button>`).join("")}</div>
       ${cerca.length ? `<div class="titulo-y"><h2>Negocios cerca de ti</h2><button data-ir="comida">Ver todo ${icono("flecha")}</button></div>
         <div class="fila-negocios-y">${cerca.map((n) => `
           <button class="negocio-mini-y" data-negocio="${n.id}">
             <span class="portada-y">${n.foto ? `<img src="${esc(n.foto)}" alt="" loading="lazy">` : icono(TIPOS_NEGOCIO[n.tipo]?.icono || "carrito")}</span>
             <b>${esc(n.nombre)}</b><small>${esc(TIPOS_NEGOCIO[n.tipo]?.corto || "")}</small></button>`).join("")}</div>` : ""}
-      ${htmlAnuncio()}${verPublicidad()}
+      ${htmlAnuncio()}
       <p class="nota pie-legal">${ENLACE_POLITICAS}</p></div>`;
     atarAnuncios();
     const abrir = (el, r) => { if (!tarifas) return aviso("Cargando… un momento"); transicionCompartida(el, () => ir(r, true), () => $("#vista")); };
@@ -396,8 +418,16 @@ function iniciar() {
       irConDestino({ lat: l.lat, lng: l.lng, n: l.n || l.dir }, b);
     }));
     $$("[data-guardar-atajo]").forEach((b) => (b.onclick = () => {
-      aviso(`Marca ${b.dataset.guardarAtajo === "casa" ? "tu casa" : "tu trabajo"} como destino (B) y toca la estrella ☆ para guardarla`);
+      aviso(`Marca ${b.dataset.guardarAtajo === "casa" ? "tu casa" : "tu trabajo"} como destino (B) y toca la estrella para guardarla`);
       abrir(b, "viaje");
+    }));
+    contarVistas(pubs);
+    $$("[data-anuncio]").forEach((b) => (b.onclick = () => {
+      const x = pubs.find((y) => y.id === b.dataset.anuncio);
+      const n = x && numeroWhatsapp(x.telefono);
+      if (!n) return;
+      updateDoc(doc(db, "anuncios", x.id), { toques: increment(1) }).catch(() => {});
+      window.open(enlaceWhatsapp(n, `Hola ${x.negocio}, vi su anuncio en Whereapp.`), "_blank");
     }));
     consejosInicio();
   }
@@ -460,13 +490,11 @@ function iniciar() {
       <div class="caja opciones-cuenta">
         <button data-op="lugares">${icono("casa")}<span>Mis lugares<small>${lugaresMios ? `${lugaresMios} guardado${lugaresMios === 1 ? "" : "s"}` : "Casa, trabajo…"}</small></span>${icono("flecha")}</button>
         <button data-op="contacto">${icono("usuario")}<span>Contacto de confianza<small>${contactoSos.leer() ? esc(contactoSos.leer().nombre) : "Para avisarle de tus viajes y en un SOS"}</small></span>${icono("flecha")}</button>
-        <div class="fila-op" id="op-tema">${icono("luna")}<span>Modo oscuro</span></div>
         <div class="fila-op" id="op-instalar">${icono("descargar")}<span>Instalar la app</span></div>
         <a href="${esc(enlaceWhatsapp(WHATSAPP, `Hola, soy ${cliente.nombre}. Necesito ayuda con Whereapp.`))}" target="_blank" rel="noopener">${icono("chat")}<span>Ayuda por WhatsApp<small>0412-3042896</small></span>${icono("flecha")}</a>
         <a href="privacidad.html">${icono("escudo")}<span>Privacidad y cookies</span>${icono("flecha")}</a>
       </div>
       <button class="boton peligro" id="salir">Salir</button>`;
-    $("#op-tema").append(botonTema());
     const inst = botonInstalar(); $("#op-instalar").append(inst); $("#op-instalar").hidden = inst.hidden;
     $("[data-op=lugares]").onclick = () => editarLugares(() => { if (rutaActual === "cuenta") vistaCuenta(); });
     $("[data-op=contacto]").onclick = async () => { if ((await elegirContacto()) && rutaActual === "cuenta") vistaCuenta(); };
@@ -743,7 +771,7 @@ function iniciar() {
       <textarea id="nota" placeholder="Ej.: una pizza de la pizzería…, un sobre, unas compras">${esc(pedido.nota)}</textarea></div>
       <button class="boton" id="pedir" ${activa ? "disabled" : ""}>${enc ? `${icono("moto")} Pedir el envío` : pedido.para ? `Pedir a ${esc(pedido.para.nombre)}` : rutaActual === "viaje" ? `${icono("moto")} Pedir mototaxi` : "Pedir a todos los motorizados"}</button>
       ${activa ? `<p class="nota">Ya tienes una carrera en curso. Mírala en "Mi carrera".</p>` : ""}
-      ${pub ? htmlAnuncio() + verPublicidad() : ""}`;
+      ${pub ? htmlAnuncio() : ""}`;
     if (pub) atarAnuncios();
 
     // Vista previa quieta: tocarla abre el mapa en pantalla completa.
@@ -1233,6 +1261,9 @@ function iniciar() {
         e.preventDefault(); caja.hidden = true; input.blur();
         abrirSelector(input.dataset.nuevo === "P");
       });
+      // Además, lo que encuentra Google Maps (llega un momento después).
+      clearTimeout(input._google);
+      if (q.length >= 3 && hayBuscadorGoogle()) input._google = setTimeout(() => masDeGoogle(input, caja, alElegir), 450);
     };
     input.addEventListener("input", pintar);
     input.addEventListener("focus", () => {
@@ -1242,6 +1273,26 @@ function iniciar() {
     });
     input.addEventListener("blur", (e) => { if (!caja.contains(e.relatedTarget)) setTimeout(() => { caja.hidden = true; }, 250); });
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") { const b = $("[data-k]", caja); if (b) b.click(); } });
+  }
+
+  // Resultados de Google en la lista de sugerencias (debajo de los lugares propios).
+  async function masDeGoogle(input, caja, alElegir) {
+    const texto = input.value.trim();
+    const res = await buscarGoogle(texto, pedido.puntos[0] || null);
+    if (!res.length || input.value.trim() !== texto || caja.hidden) return;
+    $$(".de-google, .sugerencias .nota", caja).forEach((x) => x.remove());
+    $("[data-mapa]", caja).insertAdjacentHTML("beforebegin", res.map((g, k) => `<button type="button" class="de-google" data-g="${k}"><span class="lugar" style="background:#1d4ed8">${icono("pin")}</span><span><b>${esc(g.n)}</b><small>${esc(g.sub)} · Google</small></span></button>`).join(""));
+    $$("[data-g]", caja).forEach((b) => {
+      b.addEventListener("mousedown", (e) => e.preventDefault());
+      b.addEventListener("click", async (e) => {
+        e.preventDefault(); caja.hidden = true; input.blur();
+        const g = res[Number(b.dataset.g)];
+        const l = await lugarGoogle(g.id, g.n);
+        if (!l) return aviso("No se pudo abrir ese lugar. Márcalo en el mapa.");
+        if (!enZona(l)) return aviso("Ese lugar queda fuera de la zona de Whereapp.");
+        alElegir(l);
+      });
+    });
   }
 
   // ---------- Mapa en pantalla completa para elegir A, paradas y B ----------
@@ -1460,6 +1511,25 @@ function iniciar() {
       res.hidden = false;
       res.innerHTML = hallados.length ? hallados.map((l, i) => `<button data-i="${i}"><span class="lugar" style="background:${tipoLugar(l.t).color}">${icono(tipoLugar(l.t).icono)}</span><span><b>${esc(l.n)}</b><small>${esc(tipoLugar(l.t).nombre)}</small></span></button>`).join("")
         : `<p class="nota">No encontramos «${esc(buscar.value)}». Toca el mapa en su lugar.</p>`;
+      // Lo que encuentra Google Maps, debajo.
+      clearTimeout(buscar._google);
+      if (q.length >= 3 && hayBuscadorGoogle()) buscar._google = setTimeout(async () => {
+        const texto = buscar.value.trim();
+        const gs = await buscarGoogle(texto, pedido.puntos[0] || null);
+        if (!gs.length || buscar.value.trim() !== texto) return;
+        if (!hallados.length) res.innerHTML = "";
+        res.insertAdjacentHTML("beforeend", gs.map((g, k) => `<button data-gi="${k}"><span class="lugar" style="background:#1d4ed8">${icono("pin")}</span><span><b>${esc(g.n)}</b><small>${esc(g.sub)} · Google</small></span></button>`).join(""));
+        $$("[data-gi]", res).forEach((b) => (b.onclick = async () => {
+          const g = gs[Number(b.dataset.gi)];
+          res.hidden = true; buscar.value = ""; buscar.blur();
+          const l = await lugarGoogle(g.id, g.n);
+          if (!l) return aviso("No se pudo abrir ese lugar");
+          if (!enZona(l)) return aviso("Ese lugar queda fuera de la zona de Whereapp.");
+          if (guardando) return ir([l.lat, l.lng], 18);
+          ir([l.lat, l.lng], 17);
+          usar(L.latLng(l.lat, l.lng), l.n);
+        }));
+      }, 450);
       $$("[data-i]", res).forEach((b) => (b.onclick = () => {
         const l = hallados[Number(b.dataset.i)];
         res.hidden = true; buscar.value = ""; buscar.blur();
@@ -1645,7 +1715,7 @@ function iniciar() {
       || (a.cerca ? a.cerca.km : 1e9) - (b.cerca ? b.cerca.km : 1e9)
       || promedio(b.m) - promedio(a.m));
     const libres = motos.filter((m) => !m.enCarrera).length;
-    $("#vista").innerHTML = `${htmlAnuncio()}${verPublicidad()}<h1 class="titulo">Motorizados activos</h1>
+    $("#vista").innerHTML = `${htmlAnuncio()}<h1 class="titulo">Motorizados activos</h1>
       ${motos.length && !libres ? `<div class="banner-aviso">${icono("reloj")}<span><b>Todos están ocupados ahora mismo.</b> Puedes pedirle a uno y tu carrera le llega apenas termine la que tiene.</span></div>` : ""}
       <p class="nota">${miPos ? "Primero los disponibles y los más cerca de ti." : "Primero los disponibles, por calificación. Activa tu ubicación para ver quién está más cerca."}</p>
       <div class="lista">${motos.length ? lista.map(({ m, cerca, visto }) => `
@@ -1836,7 +1906,7 @@ function iniciar() {
     fondo.className = "modal";
     let ubic = null; // se llena con tu GPS
     const enlace = new URL(`seguir.html?c=${encodeURIComponent(c.id)}`, location.href).href;
-    const texto = () => `🚨 NECESITO AYUDA. Voy en una moto de ${NOMBRE}: ${c.motoNombre}, ${c.motoMoto || "moto"}${c.motoPlaca ? `, placa ${c.motoPlaca}` : ""}.`
+    const texto = () => `NECESITO AYUDA. Voy en una moto de ${NOMBRE}: ${c.motoNombre}, ${c.motoMoto || "moto"}${c.motoPlaca ? `, placa ${c.motoPlaca}` : ""}.`
       + (ubic ? ` Mi ubicación: https://maps.google.com/?q=${ubic.lat},${ubic.lng}` : "")
       + ` Sígueme en vivo: ${enlace}`;
     const pintar = () => {
@@ -2203,7 +2273,7 @@ function iniciar() {
   }
 
   const notificarCarrera = (...a) => notificar(...a);
-  async function notificar(titulo, cuerpo, { sonar = false } = {}) {
+  async function notificar(titulo, cuerpo, { sonar = false, carrera = null } = {}) {
     if (sonar) sonarAlerta();
     if (!avisosPosibles() || Notification.permission !== "granted") return;
     const reg = (await registroSw) || (await navigator.serviceWorker.ready.catch(() => null));
@@ -2214,7 +2284,13 @@ function iniciar() {
     // Las alertas (aceptó, llegó, terminó, mensaje) van aparte para que la actualización silenciosa del recorrido no las tape.
     reg.showNotification(titulo, {
       body: cuerpo, tag: sonar ? "whereapp-alerta" : "whereapp-carrera", renotify: sonar, silent: !sonar, requireInteraction: sonar,
-      icon: "icono-192.png", badge: "icono-192.png", data: { url: location.href.split("#")[0] },
+      icon: "icono-192.png", badge: "icono-192.png",
+      // Viaje en curso: botones para llamar al motorizado y compartir el viaje sin abrir la app.
+      ...(carrera && !sonar ? {
+        actions: [{ action: "llamar", title: "Llamar" }, { action: "compartir", title: "Compartir" }],
+        data: { url: location.href.split("#")[0], tel: carrera.motoTel || "",
+          compartir: `https://wa.me/?text=${encodeURIComponent(`Sigue mi viaje en ${NOMBRE}: ${new URL(`seguir.html?c=${encodeURIComponent(carrera.id)}`, location.href).href}`)}` },
+      } : { data: { url: location.href.split("#")[0] } }),
       vibrate: sonar ? [200, 100, 200] : undefined,
     }).catch(() => {});
   }
@@ -2303,7 +2379,7 @@ function iniciar() {
       ${info.min ? `<div class="widget-min">${info.min}<small>min</small></div>` : ""}`;
     if (c.estado === "aceptada") {
       if (seguimiento.alMover) seguimiento.alMover(info, seguimiento.ubic);
-      notificar(info.titulo, `${info.detalle} · ${c.motoNombre.split(" ")[0]}${c.motoPlaca ? ` (${c.motoPlaca})` : ""}`);
+      notificar(info.titulo, `${info.detalle} · ${c.motoNombre.split(" ")[0]}${c.motoPlaca ? ` (${c.motoPlaca})` : ""}`, { carrera: c });
     }
   }
 

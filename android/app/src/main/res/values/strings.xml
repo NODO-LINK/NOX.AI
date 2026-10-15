@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Whereapp</string>
+    <string name="acceso_pedir">Pedir mototaxi</string>
+    <string name="acceso_casa">Ir a mi casa</string>
+    <string name="widget_nombre">Whereapp: pedir moto</string>
+    <string name="asset_statements">[{\"relation\": [\"delegate_permission/common.handle_all_urls\"], \"target\": {\"namespace\": \"web\", \"site\": \"https://nodo-link.github.io\"}}]</string>
+</resources>

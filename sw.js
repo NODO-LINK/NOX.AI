@@ -48,6 +48,10 @@ self.addEventListener("fetch", (e) => {
 
 // Al tocar el aviso, se abre (o se trae al frente) la ventana de esa misma app.
 self.addEventListener("notificationclick", (e) => {
+  const d = e.notification.data || {};
+  // Botones de la notificación del viaje: llamar al motorizado o compartir el viaje por WhatsApp.
+  if (e.action === "llamar" && d.tel) { e.waitUntil(self.clients.openWindow("tel:" + d.tel)); return; }
+  if (e.action === "compartir" && d.compartir) { e.waitUntil(self.clients.openWindow(d.compartir)); return; }
   e.notification.close();
   const destino = new URL((e.notification.data && e.notification.data.url) || "./", self.registration.scope).href;
   const ruta = new URL(destino).pathname;

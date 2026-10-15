@@ -35,5 +35,31 @@
       "type": "image/svg+xml",
       "purpose": "any"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Pedir mototaxi",
+      "short_name": "Pedir moto",
+      "url": "./?ir=viaje",
+      "icons": [
+        {
+          "src": "atajo-moto.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Ir a mi casa",
+      "short_name": "Ir a casa",
+      "url": "./?ir=casa",
+      "icons": [
+        {
+          "src": "atajo-casa.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }

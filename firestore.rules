@@ -399,9 +399,25 @@ service cloud.firestore {
     match /tokens/{uid} {
       allow create, update: if dentro() && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['t', 'rol', 'actualizado'])
-        && texto(request.resource.data.t, 4096) && request.resource.data.rol in ['cliente', 'moto']
+        && texto(request.resource.data.t, 4096) && request.resource.data.rol in ['cliente', 'moto', 'admin']
+        && (request.resource.data.rol != 'admin' || esAdmin())
+        && (request.resource.data.rol != 'moto' || esMoto())
         && request.resource.data.actualizado == request.time;
       allow delete: if dentro() && request.auth.uid == uid;
+    }
+
+    // Publicidad de negocios (banners del inicio): la carga el admin. Los pasajeros solo suman 1 vista o 1 toque.
+    match /anuncios/{id} {
+      allow read: if dentro();
+      allow write: if esAdmin();
+      allow update: if dentro()
+        && ((soloCambia(['vistas']) && request.resource.data.vistas == resource.data.get('vistas', 0) + 1)
+            || (soloCambia(['toques']) && request.resource.data.toques == resource.data.get('toques', 0) + 1));
+    }
+
+    // Avisos (push) a todos los pasajeros: los escribe el admin y los envía el servidor.
+    match /promos/{id} {
+      allow read, write: if esAdmin();
     }
 
     match /pagos/{id} {

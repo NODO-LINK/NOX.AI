@@ -1,0 +1,40 @@
+plugins { id "com.android.application" }
+
+// Firma: la misma llave de la APK actual (así se instala encima). Se toma de los "secrets" de GitHub.
+def llave = System.getenv("WHEREAPP_KEYSTORE")
+
+android {
+    namespace "com.whereapp.cliente"
+    compileSdk 34
+    defaultConfig {
+        applicationId "com.whereapp.cliente"
+        minSdk 21
+        targetSdk 34
+        versionCode Integer.parseInt(System.getenv("WHEREAPP_VERSION_CODE") ?: "100")
+        versionName System.getenv("WHEREAPP_VERSION_NAME") ?: "2.0"
+    }
+    signingConfigs {
+        if (llave) {
+            release {
+                storeFile file(llave)
+                storePassword System.getenv("WHEREAPP_STORE_PASSWORD")
+                keyAlias System.getenv("WHEREAPP_KEY_ALIAS")
+                keyPassword System.getenv("WHEREAPP_KEY_PASSWORD")
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (llave) signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation "com.google.androidbrowserhelper:androidbrowserhelper:2.5.0"
+}

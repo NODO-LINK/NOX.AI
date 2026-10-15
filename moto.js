@@ -10,14 +10,26 @@ import {
   hoyLocal,
   DOCUMENTOS, estadoDoc,
   enApp, textoDescuento, totalPedido, enlaceDescarga,
-  RAPIDOS_MOTO, enviarMensaje, botonesRapidos, activarPush,
-} from "./comun.js?v=82";
+  RAPIDOS_MOTO, enviarMensaje, botonesRapidos, activarPush, avisosAlEntrar,
+} from "./comun.js?v=83";
 
 if (!avisoSinConfigurar()) iniciar();
 
 function iniciar() {
   const L = window.L;
   let yo = null, perfil = null, subs = [], subsCarreras = [];
+  // Accesos directos del ícono (mantener presionado): moto.html?accion=turno | ganancias | qr
+  let accionInicial = new URLSearchParams(location.search).get("accion");
+  function hacerAccion() {
+    const a = accionInicial; accionInicial = null;
+    try { history.replaceState(history.state, "", location.pathname); } catch {}
+    if (a === "turno") {
+      if (!habilitado(perfil)) return aviso("Todavía no puedes ponerte de turno: revisa tu cuota o habla con el administrador.");
+      if (perfil.deTurno !== false) return aviso("Ya estás de turno");
+      updateDoc(doc(db, "motorizados", yo.uid), { deTurno: true }).then(() => aviso("¡Estás de turno! Ya recibes carreras."), () => aviso("No se pudo cambiar el turno"));
+    } else if (a === "ganancias") setTimeout(() => $("#ganancias")?.scrollIntoView({ behavior: "smooth", block: "start" }), 400);
+    else if (a === "qr") setTimeout(() => mostrarQr(), 300);
+  }
   let tarifas = null, reportes = [], misDocs = null;
   // Contraofertas: lo que ofreció este motorizado en carreras con precio del cliente, y las que aceptó él mismo.
   const misOfertas = new Map(), aceptadasPorMi = new Set();   // tarifas (cuota, tasa, datos de cobro) y pagos de cuota reportados
@@ -72,6 +84,7 @@ function iniciar() {
       gpsSegunEstado();
       // Los cambios de ubicación (cada pocos segundos) no redibujan la pantalla.
       if (firma(perfil) !== firmaAntes) pintar();
+      if (accionInicial) hacerAccion();
     }));
     // Con una carrera en curso no se redibuja (el mapa perdería el zoom); se verá al terminarla.
     subs.push(escucharTarifas((t) => { tarifas = t; if (perfil && !miCarrera) pintar(); }));
@@ -110,7 +123,7 @@ function iniciar() {
   function pararCarreras() { subsCarreras.forEach((f) => f()); subsCarreras = []; }
   function escucharCarreras() {
     pararCarreras();
-    activarPush(yo.uid, "moto");
+    avisosAlEntrar(yo.uid, "moto");
     // Su carrera aceptada (aunque lo hayan desactivado, debe poder terminarla).
     subsCarreras.push(onSnapshot(query(collection(db, "carreras"), where("motoUid", "==", yo.uid), where("estado", "==", "aceptada")), (s) => {
       const antes = miCarrera;
@@ -125,7 +138,7 @@ function iniciar() {
           if (d.exists() && d.data().estado === "cancelada") {
             const por = d.data().cancelacion?.por === "admin" ? "El administrador" : "El cliente";
             sonar(); aviso(`${por} canceló la carrera`);
-            notificar("❌ Carrera cancelada", `${por} canceló: ${previa.origen?.dir || ""}`, { tag: "whereapp-moto", urgente: true });
+            notificar("Carrera cancelada", `${por} canceló: ${previa.origen?.dir || ""}`, { tag: "whereapp-moto", urgente: true });
           }
         }).catch(() => {});
       }
@@ -167,7 +180,7 @@ function iniciar() {
         aviso(nuevas.length > 1 ? `¡${nuevas.length} carreras nuevas!` : nuevas[0].ofertaCliente ? "¡Carrera publicada! El cliente puso su precio" : "¡Carrera nueva!");
         // Una notificación por cada carrera, en la barra del teléfono (aunque la app esté minimizada).
         nuevas.forEach((c) => {
-          const titulo = c.paraMoto ? "🏍️ ¡Un cliente te pidió a ti!" : c.ofertaCliente ? "🏍️ Carrera publicada · precio del cliente" : "🏍️ ¡Carrera nueva!";
+          const titulo = c.paraMoto ? "¡Un cliente te pidió a ti!" : c.ofertaCliente ? "Carrera publicada · precio del cliente" : "¡Carrera nueva!";
           const ruta = `${c.origen.dir} → ${c.destino.dir}${(c.paradas || []).length ? ` (+${c.paradas.length} parada${c.paradas.length > 1 ? "s" : ""})` : ""}`;
           notificar(titulo, `${textoCobro(c)} · ${Number(c.km) || 0} km${c.descuento ? " · -50%" : c.codigo ? ` · -${c.codigo.pct}%` : ""}\n${ruta}`, { tag: "carrera-" + c.id, urgente: true });
         });
@@ -316,7 +329,7 @@ function iniciar() {
       <div class="caja">
         <div class="meta-cabeza"><b>Meta de la semana</b><button class="boton secundario chico" id="poner-meta">${meta ? "Cambiar" : "Poner meta"}</button></div>
         ${meta ? `<div class="barra-meta"><i style="width:${pct}%"></i></div>
-          <p class="nota">${usd(semana)} de ${usd(meta)} en los últimos 7 días · ${pct >= 100 ? "¡Meta cumplida! 🎉" : `te faltan ${usd(Math.max(0, meta - semana))}`}</p>`
+          <p class="nota">${usd(semana)} de ${usd(meta)} en los últimos 7 días · ${pct >= 100 ? "¡Meta cumplida!" : `te faltan ${usd(Math.max(0, meta - semana))}`}</p>`
         : `<p class="nota">Ponte una meta de ganancias por semana y mira cómo avanzas.</p>`}
         <div class="grafica-dias">${dias.map((x) => `<div class="dia" title="${usd(x.monto)} · ${x.n} carreras">
           <small>${x.monto ? usd(x.monto).replace(".00", "") : ""}</small><i style="height:${Math.round((x.monto / max) * 72)}%"></i><span>${nombreDia(x.d)}</span></div>`).join("")}</div>
@@ -452,7 +465,7 @@ function iniciar() {
     }
     if (!miCarrera) {
       const g = ganancias();
-      html += `<h1 class="titulo">${icono("dinero")} Tus ganancias</h1>
+      html += `<h1 class="titulo" id="ganancias">${icono("dinero")} Tus ganancias</h1>
         <div class="cifras">${g.map((x) => `<div class="cifra"><b>${usd(x.monto)}</b><span>${x.n} · ${x.cant} carrera${x.cant === 1 ? "" : "s"}</span></div>`).join("")}</div>
         <p class="nota">Suma de lo que cobraste en las carreras terminadas.</p>`;
       html += estadisticas();
@@ -503,7 +516,7 @@ function iniciar() {
       sonido = true; sonar();
       await pedirPermisoAvisos();
       activarPush(yo.uid, "moto");
-      if ("Notification" in window && Notification.permission === "granted") notificar("🏍️ Avisos activados", "Así te llegará cada carrera nueva, aunque tengas la app minimizada.", { tag: "prueba-aviso" });
+      if ("Notification" in window && Notification.permission === "granted") notificar("Avisos activados", "Así te llegará cada carrera nueva, aunque tengas la app minimizada.", { tag: "prueba-aviso" });
       else if ("Notification" in window && Notification.permission === "denied") aviso("Las notificaciones están bloqueadas: actívalas en Ajustes → Apps → Whereapp → Notificaciones");
       pintar();
     };

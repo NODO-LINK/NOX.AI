@@ -6,8 +6,8 @@ import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
-import { firebaseConfig as configReal, appCheckClave, vapidClave } from "./firebase-config.js?v=82";
-import { icono, pintarIconos } from "./iconos.js?v=82";
+import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=83";
+import { icono, pintarIconos } from "./iconos.js?v=83";
 
 export { icono };
 pintarIconos();
@@ -280,7 +280,7 @@ export const textoDescuento = (c) => (c && c.descuento ? `50% de descuento · ${
 export function textoRecibo(c) {
   const f = fecha(c.terminada) || fecha(c.creada);
   const lineas = [
-    `🧾 Recibo de ${NOMBRE}`,
+    `Recibo de ${NOMBRE}`,
     f ? f.toLocaleString("es-VE", { dateStyle: "medium", timeStyle: "short" }) : "",
     c.negocio ? `Pedido de ${c.negocio.nombre}` : c.tipo === "mototaxi" ? "Viaje en mototaxi" : "Delivery",
     `Desde: ${c.origen?.dir || ""}`,
@@ -394,12 +394,62 @@ const LIMITES = [[CENTRO[0] - 0.15, CENTRO[1] - 0.15], [CENTRO[0] + 0.15, CENTRO
 // modo "mini": vista previa quieta, sin botones; tocarla abre el mapa completo.
 // Fondo del mapa: satelital (por defecto) o de calles. Se recuerda en el teléfono.
 const CLAVE_FONDO = "whereapp.fondo";
-const leerFondo = () => { try { return localStorage.getItem(CLAVE_FONDO) || "satelite"; } catch { return "satelite"; } };
+// Con mapa de Google, por defecto el de calles (el más completo); sin Google, el satelital.
+const leerFondo = () => { const def = googleActivo() ? "calles" : "satelite"; try { return localStorage.getItem(CLAVE_FONDO) || def; } catch { return def; } };
 const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/";
+
+// ---------- Mapa de Google (Map Tiles API) ----------
+// Se usa con la clave de firebase-config.js (mapsClave). Si falla (clave mala, sin cupo, sin señal), vuelve al mapa gratis.
+let googleFallo = false;
+const googleActivo = () => !!mapsClave && !googleFallo && !simulador;
+const sesionesGoogle = {}, sesionLista = {};
+function sesionGoogle(tipo) {
+  if (!googleActivo()) return Promise.resolve(null);
+  if (!sesionesGoogle[tipo]) sesionesGoogle[tipo] = (async () => {
+    const k = "whereapp.gmaps." + tipo;
+    try { const g = JSON.parse(localStorage.getItem(k)); if (g && g.exp * 1000 > Date.now() + 3600e3) return (sesionLista[tipo] = g.s); } catch {}
+    const cuerpo = tipo === "satelite"
+      ? { mapType: "satellite", language: "es-419", region: "VE", layerTypes: ["layerRoadmap"] }
+      : { mapType: "roadmap", language: "es-419", region: "VE" };
+    const r = await traer(`https://tile.googleapis.com/v1/createSession?key=${encodeURIComponent(mapsClave)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo) });
+    if (!r.ok) throw new Error("google " + r.status);
+    const j = await r.json();
+    try { localStorage.setItem(k, JSON.stringify({ s: j.session, exp: Number(j.expiry) })); } catch {}
+    return (sesionLista[tipo] = j.session);
+  })().catch((e) => { console.warn("Mapa de Google", e); googleFallo = true; return null; });
+  return sesionesGoogle[tipo];
+}
+function capaGoogle(m, fondo, sesion) {
+  const L = window.L;
+  const capa = L.tileLayer(`https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${sesion}&key=${encodeURIComponent(mapsClave)}`,
+    { maxZoom: 21, maxNativeZoom: fondo === "satelite" ? 20 : 21, keepBuffer: 4, updateWhenZooming: false, attribution: "Mapa © Google" });
+  // Si Google no responde (clave, cupo o sesión vencida), se cambia solo al mapa gratis.
+  let errores = 0;
+  capa.on("tileerror", () => {
+    if (++errores < 6 || googleFallo) return;
+    googleFallo = true;
+    try { localStorage.removeItem("whereapp.gmaps.satelite"); localStorage.removeItem("whereapp.gmaps.calles"); } catch {}
+    if (m._loaded) ponerFondo(m, fondo);
+  });
+  return capa;
+}
 function ponerFondo(m, fondo) {
   const L = window.L;
   if (m._fondo) m._fondo.forEach((c) => m.removeLayer(c));
+  m._fondoActual = fondo;
   const op = { maxZoom: 19, keepBuffer: 4, updateWhenZooming: false };
+  if (googleActivo()) {
+    if (sesionLista[fondo]) {
+      m._fondo = [capaGoogle(m, fondo, sesionLista[fondo])];
+      m._fondo.forEach((c) => c.addTo(m));
+      m.getContainer().classList.toggle("satelital", fondo === "satelite");
+      m.getContainer().classList.add("mapa-google");
+      return;
+    }
+    // Mientras se pide la sesión de Google se ve el mapa gratis; al llegar, se cambia.
+    sesionGoogle(fondo).then((s) => { if (s && m.getContainer().isConnected && m._fondoActual === fondo) ponerFondo(m, fondo); });
+  }
+  m.getContainer().classList.remove("mapa-google");
   m._fondo = fondo === "satelite"
     ? [
         L.tileLayer(ESRI + "World_Imagery/MapServer/tile/{z}/{y}/{x}", { ...op, maxNativeZoom: 18, attribution: "Imágenes © Esri, Maxar" }),
@@ -782,6 +832,41 @@ async function descargarLugares() {
   return lugares;
 }
 
+// ---------- Buscador de Google (Places): encuentra casi cualquier dirección ----------
+let tokenGoogle = null;
+const nuevoToken = () => (tokenGoogle = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)));
+export const hayBuscadorGoogle = () => !!mapsClave && !simulador;
+// Sugerencias de Google cerca de El Moján: [{ id, n, sub }]
+export async function buscarGoogle(texto, cerca) {
+  if (!hayBuscadorGoogle() || String(texto).trim().length < 3) return [];
+  if (!tokenGoogle) nuevoToken();
+  const c = cerca || { lat: CENTRO[0], lng: CENTRO[1] };
+  try {
+    const r = await traer("https://places.googleapis.com/v1/places:autocomplete", {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Goog-Api-Key": mapsClave },
+      body: JSON.stringify({ input: texto, languageCode: "es", regionCode: "ve", sessionToken: tokenGoogle,
+        locationBias: { circle: { center: { latitude: c.lat, longitude: c.lng }, radius: 15000 } } }),
+    }, 6000);
+    if (!r.ok) return [];
+    const j = await r.json();
+    return (j.suggestions || []).map((x) => x.placePrediction).filter(Boolean).slice(0, 5).map((p) => ({
+      id: p.placeId, n: (p.structuredFormat && p.structuredFormat.mainText && p.structuredFormat.mainText.text) || (p.text && p.text.text) || "",
+      sub: (p.structuredFormat && p.structuredFormat.secondaryText && p.structuredFormat.secondaryText.text) || "Google Maps",
+    }));
+  } catch { return []; }
+}
+// Ubicación de un lugar de Google: { n, lat, lng } o null.
+export async function lugarGoogle(id, nombre) {
+  try {
+    const r = await traer(`https://places.googleapis.com/v1/places/${encodeURIComponent(id)}?languageCode=es${tokenGoogle ? `&sessionToken=${tokenGoogle}` : ""}`,
+      { headers: { "X-Goog-Api-Key": mapsClave, "X-Goog-FieldMask": "location,displayName" } }, 6000);
+    tokenGoogle = null;   // la sesión de búsqueda termina al elegir
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j.location ? { n: nombre || (j.displayName && j.displayName.text) || "Lugar", lat: j.location.latitude, lng: j.location.longitude } : null;
+  } catch { return null; }
+}
+
 // Quita acentos y mayúsculas para buscar por nombre.
 export const normalizar = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
@@ -833,30 +918,19 @@ export function mostrarLugares(m, alTocar) {
   return { capa, listo, recargar };
 }
 
-// ---------- Modo oscuro ----------
-// Sigue al teléfono, y el botón de la luna/sol lo cambia y lo recuerda.
-const CLAVE_TEMA = "whereapp.tema";
+// ---------- Tema: siempre claro (blanco y azul rey) ----------
 export function aplicarTema() {
-  let t = null;
-  try { t = localStorage.getItem(CLAVE_TEMA); } catch {}
-  if (!t) t = matchMedia("(prefers-color-scheme: dark)").matches ? "oscuro" : "claro";
-  document.documentElement.dataset.tema = t;
+  document.documentElement.dataset.tema = "claro";
+  try { localStorage.removeItem("whereapp.tema"); } catch {}
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = t === "oscuro" ? "#0b1220" : "#ffffff";
-  return t;
+  if (meta) meta.content = "#ffffff";
+  return "claro";
 }
 aplicarTema();
+// Ya no hay modo oscuro: se deja la función para no romper las pantallas (no muestra nada).
 export function botonTema() {
-  const b = document.createElement("button");
-  b.className = "boton secundario chico redondo-chico";
-  b.setAttribute("aria-label", "Cambiar entre modo claro y oscuro");
-  const pintar = () => { b.innerHTML = icono(document.documentElement.dataset.tema === "oscuro" ? "sol" : "luna"); };
-  b.onclick = () => {
-    const nuevo = document.documentElement.dataset.tema === "oscuro" ? "claro" : "oscuro";
-    try { localStorage.setItem(CLAVE_TEMA, nuevo); } catch {}
-    aplicarTema(); pintar();
-  };
-  pintar();
+  const b = document.createElement("span");
+  b.hidden = true;
   return b;
 }
 
@@ -1057,6 +1131,15 @@ export async function activarPush(uid, rol) {
     await guardar(doc(db, "tokens", uid), { t, rol, actualizado: serverTimestamp() });
     localStorage.setItem(clave, t);
   } catch (e) { console.warn("Avisos push", e); }
+}
+// Avisos push apenas entra: si ya dio permiso se activan; si no, se pide con el primer toque (los teléfonos lo exigen así).
+export function avisosAlEntrar(uid, rol) {
+  if (!avisosPosibles()) return;
+  if (Notification.permission === "granted") return activarPush(uid, rol);
+  if (Notification.permission !== "default") return;
+  addEventListener("pointerdown", () => {
+    Notification.requestPermission().then((p) => { if (p === "granted") activarPush(uid, rol); }).catch(() => {});
+  }, { once: true, capture: true });
 }
 // Pide permiso de notificaciones con el primer toque en la pantalla (algunos teléfonos solo lo permiten así).
 export function pedirAvisosAlTocar() {

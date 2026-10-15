@@ -35,5 +35,43 @@
       "type": "image/svg+xml",
       "purpose": "any"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Ponerme de turno",
+      "short_name": "De turno",
+      "url": "./moto.html?accion=turno",
+      "icons": [
+        {
+          "src": "atajo-turno.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Mis ganancias",
+      "short_name": "Ganancias",
+      "url": "./moto.html?accion=ganancias",
+      "icons": [
+        {
+          "src": "atajo-ganancias.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Mi QR",
+      "short_name": "Mi QR",
+      "url": "./moto.html?accion=qr",
+      "icons": [
+        {
+          "src": "atajo-qr.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }

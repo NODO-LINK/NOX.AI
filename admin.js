@@ -15,16 +15,19 @@ import {
   enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad, enlacePublicidad,
   DOCUMENTOS, estadoDoc, resumenDocs,
   filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles, textoDescuento,
-  TIPOS_NEGOCIO, CENTRO,
-} from "./comun.js?v=82";
+  TIPOS_NEGOCIO, CENTRO, numeroWhatsapp, avisosAlEntrar,
+} from "./comun.js?v=83";
 
 if (!avisoSinConfigurar()) iniciar();
+// Estrellas dibujadas (sin emojis): llenas y, si se pide, también las apagadas.
+const estrellasVec = (n, conApagadas = false) => [1, 2, 3, 4, 5].filter((k) => conApagadas || k <= n).map((k) => icono("estrella", k <= n ? "" : "apagada")).join("");
 
 function iniciar() {
   let subs = [], ruta = "motos", tarifas = null;
   let motos = [], carreras = [], resenas = [], pagos = [], llamadas = {}, visitas = {}, cedulas = {}, clientes = [], bloqueados = {}, notasClientes = {};
   let mapaVivo = null, marcasVivo = {}, filtroClientes = "";
   let lugaresPropios = [], mapaLugares = null, reportesPago = [];
+  let anuncios = [], promos = [];
   let anuncio = null, publicidad = null, toquesPub = 0;
   let negocios = [], productos = [];   // Mercado a tu casa y Comida rápida
   let documentos = {}, califClientes = [];   // documentos de cada motorizado (licencia, médico, RCV, trimestres): fechas, sin fotos
@@ -61,6 +64,8 @@ function iniciar() {
     $("#cabecera .derecha").prepend(botonInstalar(), botonTema());
     $$("#barra button").forEach((b) => (b.onclick = () => ir(b.dataset.ruta)));
     tarifas = await leerTarifas();
+    // Avisos en el teléfono del admin: SOS, pagos reportados, carreras sin aceptar, reseñas malas y tasa del día.
+    avisosAlEntrar(auth.currentUser.uid, "admin");
 
     // Si fn devuelve false, no hace falta redibujar la pantalla.
     const escuchar = (q, fn) => subs.push(onSnapshot(q, (s) => { if (fn(s) !== false) refrescar(); }, (e) => console.error(e)));
@@ -80,6 +85,8 @@ function iniciar() {
     escuchar(collection(db, "documentos"), (s) => { documentos = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); });
     escuchar(doc(db, "config", "anuncio"), (d) => { anuncio = d.exists() ? d.data() : null; });
     escuchar(doc(db, "config", "publicidad"), (d) => { publicidad = d.exists() ? d.data() : null; });
+    escuchar(collection(db, "anuncios"), (s) => { anuncios = s.docs.map((d) => ({ id: d.id, ...d.data() })); return ruta === "mas" && subMas === "publicidad"; });
+    escuchar(query(collection(db, "promos"), orderBy("creado", "desc"), limit(20)), (s) => { promos = s.docs.map((d) => ({ id: d.id, ...d.data() })); return ruta === "mas" && subMas === "publicidad"; });
     subs.push(onSnapshot(doc(db, "stats", "publicidad"), (d) => {
       toquesPub = (d.exists() && d.data().toques) || 0;
       const t = $("#toques-pub"); if (t) t.textContent = toquesPub;
@@ -137,7 +144,9 @@ function iniciar() {
     $("#punto-resenas").hidden = !resenas.some((r) => !r.aprobada);
     const foco = document.activeElement;
     if (foco && /INPUT|TEXTAREA|SELECT/.test(foco.tagName) && $("#vista").contains(foco)) return;
-    if (ruta === "mas" && (subMas === "lugares" || subMas === "tarifas" || subMas === "publicidad")) return;   // no borrar el mapa ni lo que se está escribiendo
+    if (ruta === "mas" && (subMas === "lugares" || subMas === "tarifas")) return;
+    // Publicidad: se redibuja (vistas, toques, avisos) salvo que esté escribiendo un aviso.
+    if (ruta === "mas" && subMas === "publicidad" && ($("#form-promo input")?.value || $("#form-promo textarea")?.value)) return;   // no borrar el mapa ni lo que se está escribiendo
     if (!$(".modal")) ir(ruta, true);
   }
 
@@ -351,9 +360,9 @@ function iniciar() {
     const hoy = new Date().toLocaleDateString("es-VE", { day: "numeric", month: "long", year: "numeric" });
     return `*Whereapp · Documentos pendientes*\n_${hoy}_\n\n`
       + lista.map((m) => `*${m.nombre}*${m.telefono ? ` (${telLocal(m.telefono)})` : ""}\n${pendientes(m).join("\n")}`).join("\n\n")
-      + `\n\nPor favor, traigan o envíen foto de los documentos pendientes para tenerlos al día. ¡Gracias! 🏍️`;
+      + `\n\nPor favor, traigan o envíen foto de los documentos pendientes para tenerlos al día. ¡Gracias!`;
   }
-  const mensajeFallas = (m) => `Hola ${String(m.nombre).split(" ")[0]}, te escribe Whereapp. Para seguir trabajando con la app necesitamos que tengas al día estos documentos:\n\n${pendientes(m).join("\n")}\n\nEnvíanos la foto por aquí o tráelos cuando puedas. ¡Gracias! 🏍️`;
+  const mensajeFallas = (m) => `Hola ${String(m.nombre).split(" ")[0]}, te escribe Whereapp. Para seguir trabajando con la app necesitamos que tengas al día estos documentos:\n\n${pendientes(m).join("\n")}\n\nEnvíanos la foto por aquí o tráelos cuando puedas. ¡Gracias!`;
 
   // Documentos del motorizado: foto de cada uno y su fecha de vencimiento (solo los ve el admin y el motorizado).
   async function documentosMoto(m) {
@@ -659,7 +668,7 @@ function iniciar() {
         ${(c.recargos || []).map((r) => fila(`Recargo ${esc(r.nombre)}`, `+${usd(r.monto)}`)).join("")}</div>
       <h3 class="sub-detalle">${icono("usuario")} Cliente</h3>
       <div class="caja-detalle">${fila("Nombre", esc(c.clienteNombre))}${fila("Cédula", esc(cliente?.cedula || cedulas[c.clienteUid] || "—"))}${fila("Teléfono", tel(c.clienteTel))}
-        ${notaCli ? fila("El motorizado lo calificó", `${"★".repeat(notaCli.estrellas)}${notaCli.comentario ? ` “${esc(notaCli.comentario)}”` : ""}`) : ""}
+        ${notaCli ? fila("El motorizado lo calificó", `${estrellasVec(notaCli.estrellas)}${notaCli.comentario ? ` “${esc(notaCli.comentario)}”` : ""}`) : ""}
         ${botonesTel(c.clienteTel, c.clienteNombre)}</div>
       <h3 class="sub-detalle">${icono("moto")} Motorizado</h3>
       <div class="caja-detalle">${c.motoUid ? `${fila("Nombre", esc(c.motoNombre || moto?.nombre || "—"))}${fila("Moto", esc(c.motoMoto || moto?.moto || "—"))}${fila("Placa", `<span class="placa">${esc(c.motoPlaca || moto?.placa || "—")}</span>`)}${fila("Teléfono", tel(c.motoTel || moto?.telefono))}
@@ -668,7 +677,7 @@ function iniciar() {
       <div class="caja-detalle linea-tiempo">${pasos.map((p) => `<div class="paso">${p.i}<div><b>${p.txt}</b><small>${p.t ? p.t.toLocaleString("es-VE", { hour: "numeric", minute: "2-digit", day: "numeric", month: "short" }) : ""}</small></div></div>`).join("")}
         ${c.aceptada && c.terminada ? `<p class="nota">Duración desde que la aceptó: ${duracion(c.aceptada, c.terminada)}${c.recogidoEn ? ` · viaje: ${duracion(c.recogidoEn, c.terminada)}` : ""}</p>` : ""}</div>
       ${resena ? `<h3 class="sub-detalle">${icono("estrella")} Calificación del cliente</h3>
-      <div class="caja-detalle">${fila("Estrellas", "★".repeat(resena.estrellas) + "☆".repeat(5 - resena.estrellas))}${fila("¿Viaje seguro?", resena.seguro === false ? `<span style="color:var(--rojo)">No</span>` : "Sí")}
+      <div class="caja-detalle">${fila("Estrellas", estrellasVec(resena.estrellas, true))}${fila("¿Viaje seguro?", resena.seguro === false ? `<span style="color:var(--rojo)">No</span>` : "Sí")}
         ${resena.comentario ? `<p>“${esc(resena.comentario)}”</p>` : ""}${resena.aprobada ? "" : `<p class="nota">Pendiente de aprobar en Reseñas.</p>`}</div>` : ""}
       <h3 class="sub-detalle">${icono("chat")} Chat</h3>
       <div class="caja-detalle" id="chat-detalle"><button class="boton secundario chico" id="ver-chat">${icono("chat")} Ver mensajes</button></div>
@@ -1264,63 +1273,108 @@ function iniciar() {
 
   // ---------- Publicidad: un anuncio de un negocio que ven todos los clientes ----------
   function vistaPublicidad() {
-    const p = publicidad || {};
-    let foto = p.foto || null;
+    const hoy = new Date();
+    const estado = (x) => !x.activo ? ["", "Pausado"] : fecha(x.hasta) <= hoy ? ["mal", "Vencido"] : fecha(x.desde) > hoy ? ["alerta", "Programado"] : ["ok", "Activo"];
+    const enAire = anuncios.filter((x) => estado(x)[1] === "Activo").length;
+    const viejo = publicidad && publicidad.activo && publicidad.foto && !anuncios.length;
     $("#vista").innerHTML = `
-      <form class="caja" id="form-pub"><h2>${icono("megafono")} Publicidad para clientes</h2>
-        <p class="nota">Sale arriba en la lista de motorizados de <b>todos</b> los clientes (en la página y en la app instalada), marcado como «Publicidad». Si el cliente lo cierra, no le vuelve a salir hasta que guardes un anuncio nuevo.</p>
-        <label class="opcion"><input type="checkbox" name="activo" ${p.activo ? "checked" : ""}><span>Mostrar la publicidad</span></label>
-        <label>Nombre del negocio</label><input name="negocio" maxlength="40" placeholder="Ej.: Pizzería El Moján" value="${esc(p.negocio || "")}">
-        <label>Mensaje</label><textarea name="texto" maxlength="160" placeholder="Ej.: 2x1 en pizzas los viernes. ¡Pide tu mototaxi y ven!">${esc(p.texto || "")}</textarea>
-        <label>Foto (opcional)</label>
-        <div class="botones"><label class="boton secundario">${icono("descargar")} Elegir foto<input type="file" accept="image/*" id="foto-pub" hidden></label>
-          <button type="button" class="boton secundario" id="quitar-foto-pub" ${foto ? "" : "hidden"}>Quitar foto</button></div>
-        <label>Texto del botón</label><input name="boton" maxlength="30" placeholder="Ej.: Escribir por WhatsApp" value="${esc(p.boton || "")}">
-        <label>WhatsApp del negocio o enlace</label><input name="enlace" maxlength="300" placeholder="0414-1234567 o https://instagram.com/…" value="${esc(p.enlace || "")}">
-        <p class="nota" id="enlace-pub-nota"></p>
-        <label class="opcion"><input type="checkbox" name="reiniciar" ${p.activo ? "" : "checked"}><span>Es un anuncio nuevo: volver a mostrarlo a todos y empezar a contar los toques desde cero</span></label>
-        <button class="boton">Guardar publicidad</button></form>
-      <div class="caja"><h2>${icono("grafica")} Resultados</h2>
-        <p><b id="toques-pub">${toquesPub}</b> toques en el botón${p.actualizado ? ` desde el ${fechaTexto(p.actualizado)}` : ""}</p>
-        <p class="nota">Sirve para mostrarle al negocio cuánta gente se interesó. Cada toque abre su WhatsApp o su página.</p></div>
-      <h2 class="subtitulo">Así lo ven los clientes</h2>
-      <div class="pub-vista-previa" id="vista-pub"></div>`;
-    const f = $("#form-pub");
-    const datos = () => {
-      const fd = new FormData(f);
-      return { activo: true, negocio: String(fd.get("negocio") || "").trim(), texto: String(fd.get("texto") || "").trim(), boton: String(fd.get("boton") || "").trim(), enlace: String(fd.get("enlace") || "").trim(), foto };
-    };
-    const previa = () => {
-      const d = datos();
-      $("#vista-pub").innerHTML = htmlPublicidad(d, { cerrable: false }) || `<p class="nota">Escribe un mensaje o elige una foto para ver cómo queda.</p>`;
-      const url = enlacePublicidad(d);
-      $("#enlace-pub-nota").textContent = !d.enlace ? "Sin enlace: no saldrá botón." : url ? (url.startsWith("https://wa.me/") ? "El botón abrirá el WhatsApp del negocio." : "El botón abrirá ese enlace.") : "No se entiende: pon un número de teléfono o un enlace que empiece con https://";
-      $("#quitar-foto-pub").hidden = !foto;
-    };
-    f.addEventListener("input", previa);
-    $("#foto-pub").onchange = async (e) => {
-      const a = e.target.files[0]; if (!a) return;
-      try { foto = await achicarFoto(a, 720); previa(); } catch { aviso("No se pudo leer esa imagen"); }
-    };
-    $("#quitar-foto-pub").onclick = () => { foto = null; previa(); };
-    f.onsubmit = async (e) => {
+      <div class="caja"><h2>${icono("megafono")} Publicidad de negocios</h2>
+        <p class="nota">Los anuncios salen como <b>banner en el carrusel del inicio</b> de los pasajeros (no a los motorizados). Se muestran hasta <b>5</b> a la vez, en otro orden cada vez que abren la app. Al tocarlo se abre el <b>WhatsApp del negocio</b>. Se apaga solo el día de vencimiento.</p>
+        <p><b>${enAire}</b> en el aire ahora${enAire > 5 ? ` (se muestran 5 al azar)` : ""}.</p>
+        <button class="boton" id="nuevo-anuncio">${icono("mas")} Nuevo anuncio</button>
+        ${viejo ? `<button class="boton secundario" id="importar-viejo">${icono("deshacer")} Pasar el anuncio anterior («${esc(publicidad.negocio || "sin nombre")}») al sistema nuevo</button>` : ""}</div>
+      <div class="lista">${anuncios.length ? anuncios.slice().sort((x, y) => (fecha(y.hasta) || 0) - (fecha(x.hasta) || 0)).map((x) => {
+        const [c, t] = estado(x);
+        const pct = x.vistas ? Math.round(((x.toques || 0) / x.vistas) * 100) : 0;
+        return `<article class="tarjeta anuncio-admin">
+          <img src="${esc(x.imagen)}" alt="">
+          <div class="info"><h3>${esc(x.negocio)} <span class="pildora ${c}">${t}</span></h3>
+            <p>${icono("reloj")} ${fechaCortaDe(x.desde)} al ${fechaCortaDe(x.hasta)} · ${icono("telefono")} ${esc(x.telefono)}</p>
+            <p><b>${x.vistas || 0}</b> vistas · <b>${x.toques || 0}</b> toques (${pct}%)</p></div>
+          <div class="acciones">
+            <a class="boton verde chico" target="_blank" rel="noopener" href="${esc(enlaceWhatsapp(numeroWhatsapp(x.telefono), reporteAnuncio(x)))}">${icono("chat")} Enviar reporte</a>
+            <button class="boton secundario chico" data-push-anuncio="${x.id}">${icono("campana")} Aviso a todos</button>
+            <button class="boton secundario chico" data-editar-anuncio="${x.id}">Editar</button>
+            <button class="boton secundario chico" data-pausar-anuncio="${x.id}">${x.activo ? "Pausar" : "Activar"}</button>
+            <button class="quitar" data-borrar-anuncio="${x.id}" aria-label="Borrar">${icono("basura")}</button></div>
+        </article>`;
+      }).join("") : `<div class="vacio">${icono("megafono")}Todavía no hay anuncios.</div>`}</div>
+      <form class="caja" id="form-promo"><h2>${icono("campana")} Aviso a todos los pasajeros</h2>
+        <p class="nota">Les llega como notificación aunque tengan la app cerrada. Entre las 9 p.m. y las 7 a.m. no se envía: queda programado para las 7 a.m.</p>
+        <label>Título<input name="titulo" maxlength="60" required placeholder="Ej.: ¡Hoy 50% en mototaxi!"></label>
+        <label>Mensaje<textarea name="cuerpo" maxlength="160" required placeholder="Ej.: Solo hasta las 6 p.m. Pide desde la app."></textarea></label>
+        <button class="boton">${icono("enviar")} Enviar aviso</button></form>
+      <div class="caja"><h2>${icono("reloj")} Últimos avisos</h2><div id="lista-promos">${promos.length ? promos.slice(0, 10).map((x) => `
+        <div class="fila"><span><b>${esc(x.titulo)}</b>${x.negocio ? ` <small class="nota">· patrocinado por ${esc(x.negocio)}</small>` : ""}<br><small class="nota">${fechaTexto(x.creado)}</small></span>
+          <span class="pildora ${x.estado === "enviado" ? "ok" : x.estado === "error" ? "mal" : "alerta"}">${x.estado === "enviado" ? `Enviado a ${x.enviados || 0}` : x.estado === "programado" ? "Sale a las 7 a.m." : x.estado === "error" ? "No se pudo" : "Enviando…"}</span></div>`).join("") : `<p class="nota">Todavía no has enviado avisos.</p>`}</div></div>`;
+    $("#nuevo-anuncio").onclick = () => editarAnuncio(null);
+    if ($("#importar-viejo")) $("#importar-viejo").onclick = () => editarAnuncio({ negocio: publicidad.negocio || "", telefono: /^https?:/.test(publicidad.enlace || "") ? "" : publicidad.enlace || "", imagen: publicidad.foto, activo: true }, true);
+    $$("[data-editar-anuncio]").forEach((b) => (b.onclick = () => editarAnuncio(anuncios.find((x) => x.id === b.dataset.editarAnuncio))));
+    $$("[data-pausar-anuncio]").forEach((b) => (b.onclick = () => { const x = anuncios.find((y) => y.id === b.dataset.pausarAnuncio); updateDoc(doc(db, "anuncios", x.id), { activo: !x.activo }).catch(() => aviso("No se pudo cambiar")); }));
+    $$("[data-borrar-anuncio]").forEach((b) => (b.onclick = () => { const x = anuncios.find((y) => y.id === b.dataset.borrarAnuncio); if (confirm(`¿Borrar el anuncio de ${x.negocio}?`)) deleteDoc(doc(db, "anuncios", x.id)).catch(() => aviso("No se pudo borrar")); }));
+    $$("[data-push-anuncio]").forEach((b) => (b.onclick = () => {
+      const x = anuncios.find((y) => y.id === b.dataset.pushAnuncio);
+      const titulo = prompt(`Título del aviso patrocinado por ${x.negocio}:`, x.negocio);
+      if (!titulo) return;
+      const cuerpo = prompt("Mensaje (al tocarlo se abre su WhatsApp):", "Toca aquí para escribirles por WhatsApp");
+      if (!cuerpo) return;
+      enviarPromo({ titulo, cuerpo, negocio: x.negocio, telefono: x.telefono });
+    }));
+    $("#form-promo").onsubmit = (e) => {
       e.preventDefault();
-      const fd = new FormData(f);
-      const d = datos(); d.activo = fd.get("activo") === "on";
-      if (d.activo && !d.texto && !d.foto) return aviso("Escribe un mensaje o elige una foto");
-      if (d.enlace && !enlacePublicidad(d)) return aviso("El WhatsApp o el enlace no es válido");
-      const nuevo = fd.get("reiniciar") === "on";
-      const bt = $("button.boton:not([type])", f) || $("button:last-of-type", f); bt.disabled = true;
-      try {
-        // "actualizado" cambia solo con un anuncio nuevo: así vuelve a salirle a quien cerró el anterior.
-        await setDoc(doc(db, "config", "publicidad"), { ...d, boton: d.boton || "Ver más", actualizado: nuevo || !p.actualizado ? serverTimestamp() : p.actualizado });
-        if (nuevo) await setDoc(doc(db, "stats", "publicidad"), { toques: 0 });
-        aviso(d.activo ? "Publicidad guardada. Los clientes la ven al instante." : "Publicidad guardada (apagada).");
-        ir(ruta, true);
-      } catch (err) { console.error(err); aviso("No se pudo guardar. ¿Publicaste las reglas nuevas?"); }
-      bt.disabled = false;
+      const f = new FormData(e.target);
+      if (!confirm("¿Enviar este aviso a todos los pasajeros?")) return;
+      enviarPromo({ titulo: String(f.get("titulo")).trim(), cuerpo: String(f.get("cuerpo")).trim() }).then((ok) => ok && e.target.reset());
     };
-    previa();
+  }
+  const fechaCortaDe = (t) => { const f = fecha(t); return f ? f.toLocaleDateString("es-VE", { day: "numeric", month: "short" }) : "—"; };
+  const reporteAnuncio = (x) => `Hola ${x.negocio}, te escribe Whereapp. Así va tu anuncio (del ${fechaCortaDe(x.desde)} al ${fechaCortaDe(x.hasta)}):\n\n`
+    + `• ${x.vistas || 0} personas lo vieron\n• ${x.toques || 0} tocaron para escribirte por WhatsApp\n\n¡Gracias por anunciarte con nosotros!`;
+  // Aviso (push) a todos los pasajeros: lo envía el servidor (Cloud Functions).
+  async function enviarPromo(datos) {
+    try {
+      await addDoc(collection(db, "promos"), { ...datos, estado: "pendiente", creado: serverTimestamp() });
+      aviso("Aviso en camino. Mira abajo cuándo sale.");
+      return true;
+    } catch (e) { console.error(e); aviso("No se pudo enviar. ¿Publicaste las reglas nuevas?"); return false; }
+  }
+  function editarAnuncio(x, importar = false) {
+    let imagen = x?.imagen || null;
+    const dia = (t, extra = 0) => { const f = fecha(t) || new Date(Date.now() + extra * DIA); return f.toLocaleDateString("en-CA", { timeZone: "America/Caracas" }); };
+    const fondo = document.createElement("div");
+    fondo.className = "modal";
+    fondo.innerHTML = `<form class="ventana"><h2>${x && !importar ? "Editar anuncio" : "Nuevo anuncio"}</h2>
+      <label>Negocio<input name="negocio" maxlength="40" required value="${esc(x?.negocio || "")}" placeholder="Ej.: Guajira Network"></label>
+      <label>WhatsApp del negocio<input name="telefono" maxlength="20" inputmode="tel" required value="${esc(x?.telefono || "")}" placeholder="0414-1234567"></label>
+      <label>Imagen del banner (horizontal, ej. 1200 × 700)</label>
+      <label class="foto-banner" id="vista-banner">${imagen ? `<img src="${esc(imagen)}" alt="">` : `${icono("descargar")}<span>Toca para elegir la imagen</span>`}<input type="file" accept="image/*" id="imagen-anuncio" hidden></label>
+      <div class="dos"><div><label>Desde<input name="desde" type="date" required value="${dia(x?.desde)}"></label></div>
+        <div><label>Hasta (se apaga solo)<input name="hasta" type="date" required value="${dia(x?.hasta, 30)}"></label></div></div>
+      <label class="opcion"><input type="checkbox" name="activo" ${x?.activo === false ? "" : "checked"}><span>Activo</span></label>
+      <button class="boton">Guardar</button><button class="boton secundario" type="button" data-no>Cancelar</button></form>`;
+    document.body.append(fondo);
+    $("[data-no]", fondo).onclick = () => fondo.remove();
+    $("#imagen-anuncio", fondo).onchange = async (e) => {
+      const a = e.target.files[0]; if (!a) return;
+      try { imagen = await achicarFoto(a, 1200); $("#vista-banner", fondo).querySelector("img")?.remove(); $("#vista-banner", fondo).insertAdjacentHTML("afterbegin", `<img src="${imagen}" alt="">`); $("#vista-banner span", fondo)?.remove(); $("#vista-banner .ico", fondo)?.remove(); }
+      catch { aviso("No se pudo leer esa imagen"); }
+    };
+    $("form", fondo).onsubmit = async (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      if (!imagen) return aviso("Elige la imagen del banner");
+      if (!numeroWhatsapp(f.get("telefono"))) return aviso("Escribe un WhatsApp válido, ej. 0414-1234567");
+      const desde = new Date(f.get("desde") + "T00:00:00-04:00"), hasta = new Date(f.get("hasta") + "T23:59:59-04:00");
+      if (!(hasta > desde)) return aviso("La fecha «hasta» debe ser después de «desde»");
+      const datos = { negocio: String(f.get("negocio")).trim(), telefono: String(f.get("telefono")).trim(), imagen, desde: Timestamp.fromDate(desde), hasta: Timestamp.fromDate(hasta), activo: f.get("activo") === "on" };
+      const bt = $("button:not([type])", e.target); bt.disabled = true;
+      try {
+        if (x && x.id) await updateDoc(doc(db, "anuncios", x.id), datos);
+        else await addDoc(collection(db, "anuncios"), { ...datos, vistas: 0, toques: 0, creado: serverTimestamp() });
+        if (importar) await setDoc(doc(db, "config", "publicidad"), { activo: false }, { merge: true });
+        aviso("Anuncio guardado"); fondo.remove(); ir(ruta, true);
+      } catch (err) { console.error(err); aviso("No se pudo guardar (¿imagen muy pesada o faltan las reglas nuevas?)"); bt.disabled = false; }
+    };
   }
 
   // ---------- Lugares: puntos de referencia que ven clientes y motorizados ----------

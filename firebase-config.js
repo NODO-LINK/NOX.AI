@@ -1,5 +1,5 @@
 // Datos de tu proyecto de Firebase.
-// Los copias de: Consola de Firebase → ⚙️ Configuración del proyecto → Tus apps → App web → "Configuración".
+// Los copias de: Consola de Firebase → Configuración del proyecto → Tus apps → App web → "Configuración".
 export const firebaseConfig = {
   apiKey: "AIzaSyD4a3YW1KJeURbqnaAKLllYWOqpif0fFf8",
   authDomain: "giftcard-aecf0.firebaseapp.com",
@@ -14,6 +14,11 @@ export const firebaseConfig = {
 export const appCheckClave = "6LdeFOQtAAAAANqUXqGagMnYL8WBRl2j2Sw1nYzb";
 
 // Avisos push (con la app cerrada): pega aquí la "Clave pública" del par de claves de Web Push.
-// Se saca en: Consola de Firebase → ⚙️ Configuración del proyecto → Cloud Messaging → Certificados push web → Generar par de claves.
+// Se saca en: Consola de Firebase → Configuración del proyecto → Cloud Messaging → Certificados push web → Generar par de claves.
 // Mientras esté vacía, los avisos solo llegan con la app abierta (como antes).
 export const vapidClave = "";
+
+// Mapa y buscador de Google: pega aquí la "clave de API" de Google Maps (Google Cloud → APIs y servicios → Credenciales).
+// Necesita activadas "Map Tiles API" y "Places API (New)". Restríngela a tu página (nodo-link.github.io).
+// Mientras esté vacía, se usa el mapa gratis de siempre.
+export const mapsClave = "";
