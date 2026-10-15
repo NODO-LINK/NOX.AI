@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Accesos al mantener presionado el ícono (motorizados). -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="turno" android:enabled="true" android:icon="@drawable/acceso_turno"
+        android:shortcutShortLabel="@string/acceso_turno" android:shortcutLongLabel="@string/acceso_turno">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="com.whereapp.moto"
+            android:targetClass="com.google.androidbrowserhelper.trusted.LauncherActivity" android:data="https://nodo-link.github.io/NOX.AI/moto.html?accion=turno" />
+    </shortcut>
+    <shortcut android:shortcutId="ganancias" android:enabled="true" android:icon="@drawable/acceso_ganancias"
+        android:shortcutShortLabel="@string/acceso_ganancias" android:shortcutLongLabel="@string/acceso_ganancias">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="com.whereapp.moto"
+            android:targetClass="com.google.androidbrowserhelper.trusted.LauncherActivity" android:data="https://nodo-link.github.io/NOX.AI/moto.html?accion=ganancias" />
+    </shortcut>
+    <shortcut android:shortcutId="qr" android:enabled="true" android:icon="@drawable/acceso_qr"
+        android:shortcutShortLabel="@string/acceso_qr" android:shortcutLongLabel="@string/acceso_qr">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="com.whereapp.moto"
+            android:targetClass="com.google.androidbrowserhelper.trusted.LauncherActivity" android:data="https://nodo-link.github.io/NOX.AI/moto.html?accion=qr" />
+    </shortcut>
+</shortcuts>

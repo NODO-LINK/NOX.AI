@@ -1,33 +1,56 @@
 plugins { id "com.android.application" }
 
-// Firma: la misma llave de la APK actual (así se instala encima). Se toma de los "secrets" de GitHub.
-def llave = System.getenv("WHEREAPP_KEYSTORE")
+// Firma: la MISMA llave de cada APK actual (así se instala encima). Se toman de los "secrets" de GitHub.
+def llaveCliente = System.getenv("WHEREAPP_KEYSTORE")
+def llaveMoto = System.getenv("WHEREAPP_MOTO_KEYSTORE")
 
 android {
     namespace "com.whereapp.cliente"
     compileSdk 34
     defaultConfig {
-        applicationId "com.whereapp.cliente"
         minSdk 21
         targetSdk 34
         versionCode Integer.parseInt(System.getenv("WHEREAPP_VERSION_CODE") ?: "100")
         versionName System.getenv("WHEREAPP_VERSION_NAME") ?: "2.0"
     }
     signingConfigs {
-        if (llave) {
-            release {
-                storeFile file(llave)
+        if (llaveCliente) {
+            cliente {
+                storeFile file(llaveCliente)
                 storePassword System.getenv("WHEREAPP_STORE_PASSWORD")
                 keyAlias System.getenv("WHEREAPP_KEY_ALIAS")
                 keyPassword System.getenv("WHEREAPP_KEY_PASSWORD")
             }
         }
+        if (llaveMoto) {
+            moto {
+                storeFile file(llaveMoto)
+                storePassword System.getenv("WHEREAPP_MOTO_STORE_PASSWORD")
+                keyAlias System.getenv("WHEREAPP_MOTO_KEY_ALIAS")
+                keyPassword System.getenv("WHEREAPP_MOTO_KEY_PASSWORD")
+            }
+        }
+    }
+    // Dos apps con el mismo código: pasajeros (con widget) y motorizados.
+    flavorDimensions "app"
+    productFlavors {
+        cliente {
+            dimension "app"
+            applicationId "com.whereapp.cliente"
+            resValue "string", "app_name", "Whereapp"
+            manifestPlaceholders = [urlInicio: "https://nodo-link.github.io/NOX.AI/", rutaApp: "/NOX.AI"]
+            if (llaveCliente) signingConfig signingConfigs.cliente
+        }
+        moto {
+            dimension "app"
+            applicationId "com.whereapp.moto"
+            resValue "string", "app_name", "Whereapp Moto"
+            manifestPlaceholders = [urlInicio: "https://nodo-link.github.io/NOX.AI/moto.html", rutaApp: "/NOX.AI/moto.html"]
+            if (llaveMoto) signingConfig signingConfigs.moto
+        }
     }
     buildTypes {
-        release {
-            minifyEnabled false
-            if (llave) signingConfig signingConfigs.release
-        }
+        release { minifyEnabled false }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="acceso_turno">Ponerme de turno</string>
+    <string name="acceso_ganancias">Mis ganancias</string>
+    <string name="acceso_qr">Mi QR</string>
+</resources>

@@ -1,0 +1,67 @@
+# Compila las APK de Whereapp (pasajeros con widget, y motorizados), con el claxon de moto en las notificaciones.
+# Quedan para descargar en Actions → esta ejecución → Artifacts.
+# Para que se instalen encima de las actuales se firman con la MISMA llave de cada una. Agrégalas en:
+# GitHub → Settings → Secrets and variables → Actions → New repository secret
+#   Pasajeros:   WHEREAPP_KEYSTORE_BASE64, WHEREAPP_STORE_PASSWORD, WHEREAPP_KEY_ALIAS, WHEREAPP_KEY_PASSWORD
+#   Motorizados: WHEREAPP_MOTO_KEYSTORE_BASE64, WHEREAPP_MOTO_STORE_PASSWORD, WHEREAPP_MOTO_KEY_ALIAS, WHEREAPP_MOTO_KEY_PASSWORD
+name: Compilar APK de Whereapp
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_code:
+        description: "Número de versión (más alto que el de la APK instalada)"
+        required: true
+        default: "100"
+  push:
+    paths:
+      - "android/**"
+      - ".github/workflows/apk.yml"
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.9"
+      - name: Preparar las llaves de firma
+        env:
+          LLAVE_CLIENTE: ${{ secrets.WHEREAPP_KEYSTORE_BASE64 }}
+          LLAVE_MOTO: ${{ secrets.WHEREAPP_MOTO_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$LLAVE_CLIENTE" ]; then
+            echo "$LLAVE_CLIENTE" | base64 -d > "$RUNNER_TEMP/cliente.keystore"
+            echo "WHEREAPP_KEYSTORE=$RUNNER_TEMP/cliente.keystore" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Falta WHEREAPP_KEYSTORE_BASE64: la APK de pasajeros sale SIN FIRMA (solo de prueba)."
+          fi
+          if [ -n "$LLAVE_MOTO" ]; then
+            echo "$LLAVE_MOTO" | base64 -d > "$RUNNER_TEMP/moto.keystore"
+            echo "WHEREAPP_MOTO_KEYSTORE=$RUNNER_TEMP/moto.keystore" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Falta WHEREAPP_MOTO_KEYSTORE_BASE64: la APK de motorizados sale SIN FIRMA (solo de prueba)."
+          fi
+      - name: Compilar
+        env:
+          WHEREAPP_STORE_PASSWORD: ${{ secrets.WHEREAPP_STORE_PASSWORD }}
+          WHEREAPP_KEY_ALIAS: ${{ secrets.WHEREAPP_KEY_ALIAS }}
+          WHEREAPP_KEY_PASSWORD: ${{ secrets.WHEREAPP_KEY_PASSWORD }}
+          WHEREAPP_MOTO_STORE_PASSWORD: ${{ secrets.WHEREAPP_MOTO_STORE_PASSWORD }}
+          WHEREAPP_MOTO_KEY_ALIAS: ${{ secrets.WHEREAPP_MOTO_KEY_ALIAS }}
+          WHEREAPP_MOTO_KEY_PASSWORD: ${{ secrets.WHEREAPP_MOTO_KEY_PASSWORD }}
+          WHEREAPP_VERSION_CODE: ${{ github.event.inputs.version_code || '100' }}
+        run: gradle -p android assembleClienteRelease assembleMotoRelease --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Whereapp-pasajeros-apk
+          path: android/app/build/outputs/apk/cliente/release/*.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Whereapp-motorizados-apk
+          path: android/app/build/outputs/apk/moto/release/*.apk
