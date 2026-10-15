@@ -11,7 +11,7 @@ import {
   DOCUMENTOS, estadoDoc,
   enApp, textoDescuento, totalPedido, enlaceDescarga,
   RAPIDOS_MOTO, enviarMensaje, botonesRapidos, activarPush, avisosAlEntrar,
-} from "./comun.js?v=86";
+} from "./comun.js?v=87";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -35,7 +35,7 @@ function iniciar() {
   const misOfertas = new Map(), aceptadasPorMi = new Set();   // tarifas (cuota, tasa, datos de cobro) y pagos de cuota reportados
   const opiniones = { abiertas: false, html: "" };   // se recuerda si la lista está abierta al redibujar
   let disponibles = [], miCarrera = null, conocidas = new Set(), primeraCarga = true;
-  let mapa = null, vigilaGps = null, sonido = null, ultimoModo = null;
+  let mapa = null, vigilaGps = null, ultimoModo = null;
   let terminadas = [], chat = { id: null, quitar: null, sinLeer: 0, ajenos: null }, bloqueoPantalla = null;
   let chatAbierto = null, aceptando = false;
   const cerradasPorMi = new Set();   // carreras que él terminó o canceló (para no avisarle "te cancelaron")
@@ -50,7 +50,8 @@ function iniciar() {
     await Promise.all(ids.map((id) => deleteDoc(doc(db, "carreras", id, "ofertas", yo.uid)).catch(() => {})));
   }
   // Mantener la pantalla encendida (se recuerda en este teléfono).
-  let pantallaFija = (() => { try { return localStorage.getItem("whereapp.pantalla") === "1"; } catch { return false; } })();
+  // La pantalla queda encendida sola mientras está de turno o en una carrera (para no perder avisos).
+  const pantallaFija = () => !!miCarrera || (!!perfil && habilitado(perfil) && perfil.deTurno !== false);
 
   onAuthStateChanged(auth, (u) => {
     subs.forEach((f) => f()); subs = [];
@@ -361,11 +362,11 @@ function iniciar() {
     if (pidiendoPantalla) return;
     pidiendoPantalla = true;
     try {
-      if (pantallaFija && "wakeLock" in navigator && !bloqueoPantalla && document.visibilityState === "visible") {
+      if (pantallaFija() && "wakeLock" in navigator && !bloqueoPantalla && document.visibilityState === "visible") {
         const b = await navigator.wakeLock.request("screen");
         bloqueoPantalla = b;
         b.addEventListener("release", () => { if (bloqueoPantalla === b) bloqueoPantalla = null; });
-      } else if (!pantallaFija && bloqueoPantalla) { const b = bloqueoPantalla; bloqueoPantalla = null; await b.release(); }
+      } else if (!pantallaFija() && bloqueoPantalla) { const b = bloqueoPantalla; bloqueoPantalla = null; await b.release(); }
     } catch {} finally { pidiendoPantalla = false; }
   }
   document.addEventListener("visibilitychange", aplicarPantalla);
@@ -390,9 +391,8 @@ function iniciar() {
   addEventListener("pointerdown", () => { if (alarma) pararAlarma(); }, { capture: true });
 
   // ---------- Sonido ----------
-  // Corneta de moto (la misma de la app del cliente); solo después de tocar "Activar sonido".
+  // Corneta de moto (la misma de la app del cliente). El navegador la deja sonar desde el primer toque en la pantalla.
   function sonar() { sonarAlerta(); }
-  const avisosListos = () => sonido && (!("Notification" in window) || Notification.permission === "granted");
 
 
   // ---------- Ubicación en vivo ----------
@@ -458,11 +458,7 @@ function iniciar() {
           <div><b>${deTurno ? "Estás de turno" : "Estás descansando"}</b><small>${deTurno ? "Los clientes te ven, recibes carreras y ven qué tan cerca estás" : "No sales en la app ni recibes carreras"}</small></div>
           <button class="interruptor-grande ${deTurno ? "on" : ""}" id="turno" aria-label="Cambiar turno"><span></span></button>
         </div>
-        ${deTurno ? `<div class="botones">
-          ${avisosListos() ? `<span class="pildora ok avisos-ok">${icono("campana")} Avisos activados</span>` : `<button class="boton" id="activar-sonido">${icono("campana")} Activar sonido y avisos</button>`}
-          <button class="boton secundario ${pantallaFija ? "activo-suave" : ""}" id="pantalla">${icono("pantalla")} ${pantallaFija ? "Pantalla siempre encendida" : "Mantener pantalla encendida"}</button>
-        </div>
-        <h1 class="titulo">Carreras disponibles (${disponibles.length})</h1>
+        ${deTurno ? `<h1 class="titulo">Carreras disponibles (${disponibles.length})</h1>
         <div class="lista">${disponibles.length ? disponibles.map(tarjetaCarrera).join("") : `<div class="vacio">${icono("ruta")}No hay carreras por ahora.<br>Deja esta pantalla abierta: te avisamos con un sonido.</div>`}</div>` : ""}`;
     }
     if (!miCarrera) {
@@ -514,28 +510,12 @@ function iniciar() {
       catch (e) { console.error(e); opiniones.html = `<p class="nota">No se pudieron cargar.</p>`; }
       if ($("#lista-opiniones")) $("#lista-opiniones").innerHTML = opiniones.html;
     });
-    const s = $("#activar-sonido");
-    if (s) s.onclick = async () => {
-      sonido = true; sonar();
-      await pedirPermisoAvisos();
-      activarPush(yo.uid, "moto");
-      if ("Notification" in window && Notification.permission === "granted") notificar("Avisos activados", "Así te llegará cada carrera nueva, aunque tengas la app minimizada.", { tag: "prueba-aviso" });
-      else if ("Notification" in window && Notification.permission === "denied") aviso("Las notificaciones están bloqueadas: actívalas en Ajustes → Apps → Whereapp → Notificaciones");
-      pintar();
-    };
     const t = $("#turno");
     if (t) t.onclick = async () => {
       t.disabled = true;
       // Al pasar a descanso se retiran sus contraofertas (si no, un cliente podría aceptarle sin que esté).
       if (deTurno) await retirarTodasOfertas();
       await updateDoc(doc(db, "motorizados", yo.uid), { deTurno: !deTurno }).catch(() => { t.disabled = false; aviso("No se pudo cambiar el turno"); });
-    };
-    const pf = $("#pantalla");
-    if (pf) pf.onclick = () => {
-      pantallaFija = !pantallaFija;
-      try { localStorage.setItem("whereapp.pantalla", pantallaFija ? "1" : "0"); } catch {}
-      if (pantallaFija && !("wakeLock" in navigator)) aviso("Tu teléfono no permite dejar la pantalla encendida desde la app");
-      aplicarPantalla(); pintar();
     };
     aplicarPantalla();
     $$("[data-aceptar]").forEach((b) => (b.onclick = () => aceptar(b.dataset.aceptar)));

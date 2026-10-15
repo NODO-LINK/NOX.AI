@@ -16,7 +16,7 @@ import {
   DOCUMENTOS, estadoDoc, resumenDocs,
   filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles, textoDescuento,
   TIPOS_NEGOCIO, CENTRO, numeroWhatsapp, avisosAlEntrar,
-} from "./comun.js?v=86";
+} from "./comun.js?v=87";
 
 if (!avisoSinConfigurar()) iniciar();
 // Estrellas dibujadas (sin emojis): llenas y, si se pide, también las apagadas.

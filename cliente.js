@@ -14,8 +14,8 @@ import {
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca, enlaceDescarga, TIPOS_NEGOCIO, numeroWhatsapp, totalPedido, resumenPedido, mensajePedido,
   precioCodigo, textoRecibo, RAPIDOS_CLIENTE, enviarMensaje, botonesRapidos, conBs, activarPush, avisosAlEntrar, hayBuscadorGoogle, buscarGoogle, lugarGoogle,
-} from "./comun.js?v=86";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=86";
+} from "./comun.js?v=87";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=87";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -2383,7 +2383,8 @@ function iniciar() {
       ${info.min ? `<div class="widget-min">${info.min}<small>min</small></div>` : ""}`;
     if (c.estado === "aceptada") {
       if (seguimiento.alMover) seguimiento.alMover(info, seguimiento.ubic);
-      notificar(info.titulo, `${info.detalle} · ${c.motoNombre.split(" ")[0]}${c.motoPlaca ? ` (${c.motoPlaca})` : ""}`, { carrera: c });
+      // "(NN%)" al final: la APK lo dibuja como barra de progreso en la notificación del viaje.
+      notificar(info.titulo, `${info.detalle}${c.motoPlaca ? ` · Placa ${c.motoPlaca}` : ""}${info.pct != null ? ` (${Math.round(info.pct)}%)` : ""}`, { carrera: c });
     }
   }
 

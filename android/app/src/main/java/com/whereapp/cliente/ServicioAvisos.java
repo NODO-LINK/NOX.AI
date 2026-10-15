@@ -7,6 +7,9 @@ import android.media.AudioAttributes;
 import android.net.Uri;
 import android.os.Build;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import com.google.androidbrowserhelper.locationdelegation.LocationDelegationExtraCommandHandler;
 import com.google.androidbrowserhelper.trusted.DelegationService;
 
@@ -38,8 +41,13 @@ public class ServicioAvisos extends DelegationService {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             crearCanales(nm, claxon);
-            Notification nueva = Notification.Builder.recoverBuilder(this, aviso).setChannelId(elegido).build();
-            nm.notify(etiqueta, id, nueva);
+            Notification.Builder b = Notification.Builder.recoverBuilder(this, aviso).setChannelId(elegido);
+            if (silencio) comoViaje(b, aviso);
+            nm.notify(etiqueta, id, b.build());
+        } else if (silencio && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            Notification.Builder b = Notification.Builder.recoverBuilder(this, aviso);
+            comoViaje(b, aviso);
+            nm.notify(etiqueta, id, b.build());
         } else {
             if (!silencio && !normal) {
                 aviso.sound = claxon;
@@ -48,6 +56,21 @@ public class ServicioAvisos extends DelegationService {
             nm.notify(etiqueta, id, aviso);
         }
         return true;
+    }
+
+    // Viaje en curso: notificación fija con barra de progreso. La página manda el avance al final del texto: "(62%)".
+    private static final Pattern AVANCE = Pattern.compile("\\s*\\((\\d{1,3})%\\)\\s*$");
+    private void comoViaje(Notification.Builder b, Notification aviso) {
+        CharSequence texto = aviso.extras != null ? aviso.extras.getCharSequence(Notification.EXTRA_TEXT) : null;
+        if (texto == null) return;
+        Matcher m = AVANCE.matcher(texto);
+        if (!m.find()) return;
+        int avance = Math.max(0, Math.min(100, Integer.parseInt(m.group(1))));
+        b.setContentText(texto.subSequence(0, m.start()))
+         .setProgress(100, avance, false)
+         .setOngoing(avance < 100)
+         .setOnlyAlertOnce(true)
+         .setSubText(avance + "% del viaje");
     }
 
     private void crearCanales(NotificationManager nm, Uri claxon) {

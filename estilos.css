@@ -1348,3 +1348,8 @@ details.codigo-promo { display: block; }
 /* Una sola app: enlace pequeño azul para cambiar entre pasajero y motorizado */
 .enlace-modo { display: block; margin: 12px auto 2px; text-align: center; color: var(--marca); font-size: .86rem; font-weight: 800; text-decoration: none; }
 .enlace-modo:active { opacity: .6; }
+
+/* Al escribir un lugar o referencia, su lista de sugerencias queda por encima de los botones de abajo */
+body.modo-viaje #vista > *:focus-within { z-index: 30; }
+.parada-fila:focus-within { position: relative; z-index: 30; }
+.campo-lugar .sugerencias { z-index: 40; }

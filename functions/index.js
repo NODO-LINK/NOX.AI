@@ -1,6 +1,6 @@
 // Whereapp — avisos push (llegan aunque la app esté cerrada).
 // Se suben a Firebase con: npx firebase-tools deploy --only functions --project giftcard-aecf0
-const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated, onDocumentUpdated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
@@ -13,7 +13,7 @@ const usd = (n) => "$" + Number(n || 0).toFixed(2);
 const nombre1 = (n) => String(n || "").split(" ")[0];
 
 // Envía un aviso a las personas (uids) que tienen un token guardado. Borra los tokens que ya no sirven.
-async function avisar(uids, { titulo, cuerpo, url, tag, urgente = true }) {
+async function avisar(uids, { titulo, cuerpo, url, tag, urgente = true, extra = {} }) {
   uids = [...new Set(uids.filter(Boolean))];
   if (!uids.length) return;
   const docs = await db.getAll(...uids.map((u) => db.doc(`tokens/${u}`)));
@@ -21,7 +21,7 @@ async function avisar(uids, { titulo, cuerpo, url, tag, urgente = true }) {
   if (!conToken.length) return;
   const r = await admin.messaging().sendEachForMulticast({
     tokens: conToken.map((d) => d.get("t")),
-    data: { titulo, cuerpo, url, tag, urgente: urgente ? "1" : "" },
+    data: { titulo, cuerpo, url, tag, urgente: urgente ? "1" : "", ...extra },
     webpush: { headers: { Urgency: "high", TTL: "600" } },
     android: { priority: "high" },
   });
@@ -94,6 +94,8 @@ exports.carreraCambio = onDocumentUpdated("carreras/{id}", async (e) => {
     return alCliente(`¡${quien} aceptó tu ${c.negocio ? "pedido" : "carrera"}!`, `${c.motoMoto || "Moto"}${c.motoPlaca ? ` · Placa ${c.motoPlaca}` : ""}`);
   if (!a.llegoEn && c.llegoEn && !c.recogido)
     return alCliente(`¡${quien} llegó!`, c.negocio ? `Está en ${c.negocio.nombre} retirando tu pedido` : "Está afuera esperándote");
+  if (a.estado === "aceptada" && (c.estado === "terminada" || c.estado === "cancelada" || c.estado === "esperando"))
+    await avisar([c.clienteUid], { titulo: "-", cuerpo: "-", url: PAGINA, tag: "whereapp-cerrar", urgente: false, extra: { cerrar: "whereapp-carrera" } });
   if (a.estado === "aceptada" && c.estado === "terminada")
     return alCliente("¡Llegaste!", `Toca para calificar a ${quien}`);
   if (a.estado === "aceptada" && c.estado === "cancelada" && a.motoUid)
@@ -222,3 +224,41 @@ async function teExtranamos() {
     await r.set({ extranado: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
   }
 }
+
+// ---------- Viaje en vivo en la barra de notificaciones del pasajero ----------
+// Cada vez que el motorizado manda su ubicación (cada ~8 s), como mucho cada 30 s se actualiza
+// la notificación fija del pasajero: minutos que faltan y barra de progreso (el "(NN%)" lo dibuja la APK).
+const kmEntre = (a, b) => {
+  const R = 6371, r = (x) => (x * Math.PI) / 180;
+  const h = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lng - a.lng) / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h)) * 1.3;
+};
+exports.viajeEnVivo = onDocumentWritten("ubicaciones/{uid}", async (e) => {
+  const u = e.data && e.data.after && e.data.after.data();
+  if (!u || typeof u.lat !== "number") return;
+  const s = await db.collection("carreras").where("motoUid", "==", e.params.uid).where("estado", "==", "aceptada").limit(1).get();
+  if (s.empty) return;
+  const d = s.docs[0], c = d.data();
+  const ref = db.doc(`seguimientoPush/${d.id}`);
+  const prev = (await ref.get()).data() || {};
+  if (prev.t && Date.now() - prev.t < 30000 && prev.recogido === !!c.recogido && prev.llego === !!c.llegoEn) return;
+  const meta = c.recogido ? c.destino : c.origen;
+  const km = kmEntre(u, meta);
+  const min = Math.max(1, Math.round((km / 25) * 60));
+  // Progreso: hasta A es la primera mitad de la barra; de A a B, la segunda.
+  const inicial = c.recogido ? prev.inicial : Math.max(prev.inicial || 0, km, 0.05);
+  let pct = c.recogido ? 50 + 50 * (1 - km / Math.max(Number(c.km) || km, 0.1)) : 50 * (1 - km / inicial);
+  pct = Math.round(Math.min(100, Math.max(0, pct)));
+  const quien = nombre1(c.motoNombre) || "Tu motorizado";
+  const titulo = c.llegoEn && !c.recogido ? `¡${quien} llegó!` : c.recogido ? (c.negocio ? "Tu pedido va en camino" : "En camino a tu destino")
+    : `${quien} va a buscar${c.negocio ? " tu pedido" : "te"}`;
+  const textoKm = km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
+  const cuerpo = (c.llegoEn && !c.recogido ? "Está afuera esperándote" : km < 0.1 ? "Está llegando" : `Faltan ${min} min · ${textoKm}`)
+    + `${c.motoPlaca ? ` · Placa ${c.motoPlaca}` : ""} (${pct}%)`;
+  await ref.set({ t: Date.now(), inicial: inicial || km, recogido: !!c.recogido, llego: !!c.llegoEn });
+  const enlace = `${PAGINA}seguir.html?c=${d.id}`;
+  await avisar([c.clienteUid], {
+    titulo, cuerpo, url: PAGINA, tag: "whereapp-carrera", urgente: false,
+    extra: { tel: c.motoTel || "", compartir: `https://wa.me/?text=${encodeURIComponent(`Sigue mi viaje en Whereapp: ${enlace}`)}` },
+  });
+});
