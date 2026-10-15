@@ -21,4 +21,4 @@ export const vapidClave = "BMpFkHUl1SGfs2yIvOjG8HmlZ1YNhBtYJbQ6QxAwLDdwGdS0c74zD
 // Mapa y buscador de Google: pega aquí la "clave de API" de Google Maps (Google Cloud → APIs y servicios → Credenciales).
 // Necesita activadas "Map Tiles API" y "Places API (New)". Restríngela a tu página (nodo-link.github.io).
 // Mientras esté vacía, se usa el mapa gratis de siempre.
-export const mapsClave = "";
+export const mapsClave = "AIzaSyAPwCIAQkS6A_6d3aRzY55wGKJ6Lt7_jts";
