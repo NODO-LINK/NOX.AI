@@ -14,8 +14,8 @@ import {
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca, enlaceDescarga, TIPOS_NEGOCIO, numeroWhatsapp, totalPedido, resumenPedido, mensajePedido,
   precioCodigo, textoRecibo, RAPIDOS_CLIENTE, enviarMensaje, botonesRapidos, conBs, activarPush, avisosAlEntrar, hayBuscadorGoogle, buscarGoogle, lugarGoogle,
-} from "./comun.js?v=90";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=90";
+} from "./comun.js?v=91";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=91";
 
 if (!avisoSinConfigurar()) iniciar();
 

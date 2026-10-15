@@ -6,8 +6,8 @@ import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
-import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=90";
-import { icono, pintarIconos } from "./iconos.js?v=90";
+import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=91";
+import { icono, pintarIconos } from "./iconos.js?v=91";
 
 export { icono };
 pintarIconos();
