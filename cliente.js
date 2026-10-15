@@ -13,8 +13,8 @@ import {
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca, enlaceDescarga, TIPOS_NEGOCIO, numeroWhatsapp, totalPedido, resumenPedido, mensajePedido,
-} from "./comun.js?v=80";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=80";
+} from "./comun.js?v=81";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=81";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -22,6 +22,8 @@ function iniciar() {
   const L = window.L;
   let usuario = null, cliente = null, tarifas = null, bloqueado = false;
   let rutaActual = "inicio", mapa = null;
+  const PRINCIPALES = ["inicio", "carrera", "cuenta"];
+  let accionSalir = () => {};
   // QR del motorizado (…/?moto=ID): al entrar se abre su perfil para pedirle.
   let motoDelQr = new URLSearchParams(location.search).get("moto");
   let motos = [], carreras = [], cancelarSubs = [];
@@ -168,19 +170,19 @@ function iniciar() {
 
   // ---------- App ----------
   async function arrancar() {
-    // Sin barra de abajo: se navega desde el inicio (5 recuadros) y se vuelve con la flecha de arriba o el "atrás" del teléfono.
-    document.body.classList.add("sin-barra");
-    $("#cabecera").hidden = false; $("#barra").hidden = true;
+    // Barra de abajo (Inicio · Actividad · Cuenta) en las pantallas principales; en las demás, flecha de volver arriba.
+    $("#cabecera").hidden = false;
     $("#cabecera").innerHTML = `<div class="dentro"><div class="con-atras"><button class="boton secundario redondo-chico atras-inicio" id="atras" aria-label="Volver al inicio" hidden>${icono("flecha", "girada")}</button>
-      <div><div class="logo">${NOMBRE}</div><div class="logo-sub">Hola, ${esc(cliente.nombre)}</div></div></div>
-      <div class="derecha"><button class="boton secundario chico" id="salir">Salir</button></div></div>`;
-    $("#salir").onclick = () => {
+      <div><div class="logo">${NOMBRE}</div><div class="logo-sub">Mototaxi, comida y mercado</div></div></div>
+      <div class="derecha"></div></div>`;
+    $("#cabecera .derecha").prepend(botonInstalar(), botonTema());
+    $$("#barra button").forEach((b) => (b.onclick = () => (!tarifas ? aviso("Cargando… un momento") : b.dataset.ruta === rutaActual ? null : cambiarPestana(b, () => ir(b.dataset.ruta, true)))));
+    const salir = () => {
       const c = carreraActual();
       if (c && c.estado !== "terminada") return aviso("Tienes una carrera en curso: termínala o cancélala antes de salir.");
       if (confirm("¿Salir de Whereapp?")) signOut(auth);
     };
-    $("#cabecera .derecha").prepend(botonInstalar(), botonTema());
-    $$("#barra button").forEach((b) => (b.onclick = () => (!tarifas ? aviso("Cargando… un momento") : b.dataset.ruta === rutaActual ? null : cambiarPestana(b, () => ir(b.dataset.ruta, true)))));
+    accionSalir = salir;
     $("#widget").onclick = () => ir("carrera");
     $("#atras").onclick = () => atras();
     addEventListener("popstate", (e) => {
@@ -296,61 +298,99 @@ function iniciar() {
     });
     if ($("#cerrar-anuncio")) $("#cerrar-anuncio").onclick = () => { try { localStorage.setItem(claveAnuncio(), "x"); } catch {} $(".anuncio").remove(); };
   }
-  function enPedido() { return rutaActual === "pedir" || rutaActual === "publicar" || rutaActual === "encargo"; }
+  function enPedido() { return rutaActual === "pedir" || rutaActual === "publicar" || rutaActual === "encargo" || rutaActual === "viaje"; }
   const publicando = () => rutaActual === "publicar";
 
   function ir(r, sinEntrada) {
     // "Pedir" ya no es pestaña: se llega desde "Pedir a este" y se marca Motorizados.
     if (r === "pedir" && !pedido.para) r = "motorizados";
-    if (r === "publicar") pedido.para = null;
+    if (r === "publicar" || r === "viaje") pedido.para = null;
     // Al salir de un pedido de negocio hacia un viaje normal, el formulario vuelve a empezar.
-    if ((r === "publicar" || r === "pedir") && pedido.negocio) limpiarEncargo();
+    if ((r === "publicar" || r === "pedir" || r === "viaje") && pedido.negocio) limpiarEncargo();
     if (r === "encargo" && !pedido.negocio) r = "inicio";
     rutaActual = r;
-    // Fuera del inicio: flecha de volver arriba, y una entrada en el historial para el "atrás" del teléfono.
-    if ($("#atras")) $("#atras").hidden = r === "inicio";
+    // Pantallas principales (Inicio, Actividad, Cuenta): con barra abajo. Las demás: flecha de volver arriba.
+    const principal = PRINCIPALES.includes(r);
+    if ($("#atras")) $("#atras").hidden = principal;
+    $("#barra").hidden = !principal;
+    document.body.classList.toggle("sin-barra", !principal);
+    document.body.classList.toggle("modo-viaje", r === "viaje" || r === "publicar" || r === "pedir" || r === "encargo");
     if (r !== "inicio" && !(history.state && history.state.seccion)) history.pushState({ seccion: 1 }, "");
-    activarBarra(r === "pedir" ? "motorizados" : r);
+    if (principal) activarBarra(r);
     if (mapa) { mapa.remove(); mapa = null; }
     // El mapa del selector se cierra bien (si no, su GPS seguiría encendido).
     if (cerrarSelector) cerrarSelector();
     const sel = $(".selector");
     if (sel) { sel.remove(); document.body.classList.remove("con-selector"); }
     seguimiento.alMover = null;
-    ({ inicio: vistaInicio, pedir: vistaPedir, publicar: vistaPedir, encargo: vistaPedir, motorizados: vistaMotorizados, carrera: vistaCarrera,
+    ({ inicio: vistaInicio, cuenta: vistaCuenta, viaje: vistaPedir, pedir: vistaPedir, publicar: vistaPedir, encargo: vistaPedir, motorizados: vistaMotorizados, carrera: vistaCarrera,
        mercado: vistaMercado, comida: vistaComida, negocio: vistaNegocio })[r]();
     refrescarVivo();
     if (!sinEntrada) transicion();
     window.scrollTo(0, 0);
   }
 
-  // ---------- Inicio: los 5 apartados en recuadros flotantes ----------
+  // ---------- Inicio estilo app de servicios: saludo, buscador, servicios, banners y negocios ----------
   const SECCIONES = [
-    { r: "publicar", t: "Publicar viaje", s: "Tú pones el precio", i: "dinero" },
-    { r: "motorizados", t: "Motorizados", s: "Elige quién te lleva", i: "moto" },
-    { r: "carrera", t: "Mi carrera", s: "Tu viaje o pedido", i: "ruta" },
-    { r: "mercado", t: "Mercado a tu casa", s: "Compras del mercado", i: "carrito" },
-    { r: "comida", t: "Comida rápida", s: "Pide y te la llevan", i: "comida" },
+    { r: "viaje", t: "Mototaxi", i: "moto" },
+    { r: "comida", t: "Comida rápida", i: "comida" },
+    { r: "mercado", t: "Mercado", i: "carrito" },
+    { r: "motorizados", t: "Motorizados", i: "usuario" },
   ];
   // A qué recuadro pertenece cada pantalla (para volver con la animación al recuadro correcto).
-  const seccionDe = (r) => (r === "pedir" ? "motorizados" : r === "negocio" ? (negocioActual?.tipo === "comida" ? "comida" : "mercado") : r === "encargo" ? (pedido.volverA || "mercado") : r);
+  const seccionDe = (r) => (r === "pedir" ? "motorizados" : r === "publicar" ? "viaje" : r === "negocio" ? (negocioActual?.tipo === "comida" ? "comida" : "mercado") : r === "encargo" ? (pedido.volverA || "mercado") : r);
   function vistaInicio() {
+    cargarTienda();
     const activa = carreraActual();
-    $("#vista").innerHTML = `<div class="inicio">
-      <h1 class="saludo">¡Hola, ${esc(String(cliente.nombre).split(" ")[0])}!</h1>
-      <p class="nota">¿Qué necesitas hoy?</p>
-      ${descuento(tarifas) ? `<div class="banner-descuento">${icono("dinero")}<span><b>¡50% de descuento en todas las carreras!</b>${esc(descuento(tarifas).motivo)}</span></div>` : ""}
-      <div class="recuadros">${SECCIONES.map((x, k) => `
-        <button class="recuadro" data-seccion="${x.r}" style="animation-delay:${k * 0.06}s">
-          <span class="recuadro-icono">${icono(x.i)}</span><b>${x.t}</b><small>${x.r === "carrera" && activa ? `<span class="en-curso"></span>En curso` : x.s}</small>
-        </button>`).join("")}</div>
+    const d = descuento(tarifas);
+    const banners = [
+      d && { a: "viaje", c: "b-descuento", t: "¡50% de descuento!", s: d.motivo, i: "dinero" },
+      { a: "motorizados", c: "b-seguro", t: "Viaja seguro", s: "Revisa foto, nombre y placa antes de montarte", i: "escudo" },
+      { a: "comida", c: "b-comida", t: "¿Hambre?", s: "Pide comida rápida y te la llevan", i: "comida" },
+      { a: "mercado", c: "b-mercado", t: "Mercado a tu casa", s: "Haz tus compras sin salir", i: "carrito" },
+    ].filter(Boolean);
+    const cerca = negocios.slice(0, 10);
+    $("#vista").innerHTML = `<div class="inicio-y">
+      <div class="saludo-y"><div><h1>Hola, ${esc(String(cliente.nombre).split(" ")[0])} 👋</h1><p>${icono("pin")} El Moján, Zulia</p></div>
+        <button class="avatar-y" data-ir="cuenta" aria-label="Tu cuenta">${esc(iniciales(cliente.nombre))}</button></div>
+      <button class="buscador-y" data-ir="viaje">${icono("buscar")}<span>¿A dónde vas?</span><b>${icono("moto")}</b></button>
+      ${activa ? `<button class="activa-y" data-ir="carrera"><span class="en-curso"></span><b>${activa.negocio ? "Tu pedido está en curso" : "Tu viaje está en curso"}</b><small>Ver ${icono("flecha")}</small></button>` : ""}
+      <div class="servicios-y">${SECCIONES.map((x, k) => `
+        <button class="recuadro servicio-y" data-seccion="${x.r}" style="animation-delay:${k * 0.05}s"><span class="ico-y">${icono(x.i)}</span><b>${x.t}</b></button>`).join("")}</div>
+      <div class="carrusel-y">${banners.map((x) => `
+        <button class="banner-y ${x.c}" data-ir="${x.a}"><span><b>${esc(x.t)}</b><small>${esc(x.s)}</small></span>${icono(x.i)}</button>`).join("")}</div>
+      ${cerca.length ? `<div class="titulo-y"><h2>Negocios cerca de ti</h2><button data-ir="comida">Ver todo ${icono("flecha")}</button></div>
+        <div class="fila-negocios-y">${cerca.map((n) => `
+          <button class="negocio-mini-y" data-negocio="${n.id}">
+            <span class="portada-y">${n.foto ? `<img src="${esc(n.foto)}" alt="" loading="lazy">` : icono(TIPOS_NEGOCIO[n.tipo]?.icono || "carrito")}</span>
+            <b>${esc(n.nombre)}</b><small>${esc(TIPOS_NEGOCIO[n.tipo]?.corto || "")}</small></button>`).join("")}</div>` : ""}
       ${htmlAnuncio()}${verPublicidad()}
       <p class="nota pie-legal">${ENLACE_POLITICAS}</p></div>`;
     atarAnuncios();
-    $$(".recuadro").forEach((b) => (b.onclick = () => {
-      if (!tarifas) return aviso("Cargando… un momento");
-      transicionCompartida(b, () => ir(b.dataset.seccion, true), () => $("#vista"));
-    }));
+    const abrir = (el, r) => { if (!tarifas) return aviso("Cargando… un momento"); transicionCompartida(el, () => ir(r, true), () => $("#vista")); };
+    $$(".servicio-y").forEach((b) => (b.onclick = () => abrir(b, b.dataset.seccion)));
+    $$("#vista [data-ir]").forEach((b) => (b.onclick = () => (PRINCIPALES.includes(b.dataset.ir) ? ir(b.dataset.ir) : abrir(b, b.dataset.ir))));
+    $$("[data-negocio]").forEach((b) => (b.onclick = () => { negocioActual = negocios.find((n) => n.id === b.dataset.negocio); if (negocioActual) abrir(b, "negocio"); }));
+  }
+
+  // ---------- Cuenta: tus datos y ajustes ----------
+  function vistaCuenta() {
+    const lugaresMios = favoritos.leer().length;
+    $("#vista").innerHTML = `<h1 class="titulo">Cuenta</h1>
+      <div class="caja perfil-cuenta"><span class="avatar">${esc(iniciales(cliente.nombre))}</span>
+        <div><b>${esc(cliente.nombre)}</b><small>C.I. ${esc(cliente.cedula || "—")} · ${esc(cliente.telefono || "")}</small></div></div>
+      <div class="caja opciones-cuenta">
+        <button data-op="lugares">${icono("casa")}<span>Mis lugares<small>${lugaresMios ? `${lugaresMios} guardado${lugaresMios === 1 ? "" : "s"}` : "Casa, trabajo…"}</small></span>${icono("flecha")}</button>
+        <div class="fila-op" id="op-tema">${icono("luna")}<span>Modo oscuro</span></div>
+        <div class="fila-op" id="op-instalar">${icono("descargar")}<span>Instalar la app</span></div>
+        <a href="${esc(enlaceWhatsapp(WHATSAPP, `Hola, soy ${cliente.nombre}. Necesito ayuda con Whereapp.`))}" target="_blank" rel="noopener">${icono("chat")}<span>Ayuda por WhatsApp<small>0412-3042896</small></span>${icono("flecha")}</a>
+        <a href="privacidad.html">${icono("escudo")}<span>Privacidad y cookies</span>${icono("flecha")}</a>
+      </div>
+      <button class="boton peligro" id="salir">Salir</button>`;
+    $("#op-tema").append(botonTema());
+    const inst = botonInstalar(); $("#op-instalar").append(inst); $("#op-instalar").hidden = inst.hidden;
+    $("[data-op=lugares]").onclick = () => editarLugares(() => { if (rutaActual === "cuenta") vistaCuenta(); });
+    $("#salir").onclick = () => accionSalir();
   }
   // La pantalla se encoge de vuelta a su recuadro.
   function volverInicio() {
@@ -369,7 +409,7 @@ function iniciar() {
   function cargarTienda() {
     if (tiendaLista) return;
     tiendaLista = true;
-    const repintar = () => { if (tecleando()) return; if (rutaActual === "mercado") vistaMercado(); else if (rutaActual === "comida") vistaComida(); else if (rutaActual === "negocio") vistaNegocio(); };
+    const repintar = () => { if (tecleando()) return; if (rutaActual === "inicio") vistaInicio(); else if (rutaActual === "mercado") vistaMercado(); else if (rutaActual === "comida") vistaComida(); else if (rutaActual === "negocio") vistaNegocio(); };
     cancelarSubs.push(onSnapshot(query(collection(db, "negocios"), where("activo", "==", true)), (s) => {
       negocios = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.nombre).localeCompare(b.nombre));
       repintar();
@@ -435,12 +475,12 @@ function iniciar() {
     $("#vista").innerHTML = `<h1 class="titulo">${icono("carrito")} Mercado a tu casa</h1>
       <p class="nota">Elige un negocio, arma tu pedido y un motorizado te lo lleva. Los productos se los pagas al negocio y al motorizado solo el envío.</p>
       <div class="lista">${!tiendaLista || (!lista.length && !negocios.length && !productos.length) ? cargando() : lista.length ? lista.map((n) => `
-        <article class="tarjeta tarjeta-negocio" data-negocio="${n.id}">
-          ${logoNegocio(n, "grande")}
-          <div class="info"><h3>${esc(n.nombre)}</h3><p>${icono("pin")} ${esc(n.dir || "")}</p>${n.rif ? `<p class="nota">RIF ${esc(n.rif)}</p>` : ""}
-            <p class="nota">${productos.filter((p) => p.negocioId === n.id).length} productos</p></div>
-          <div class="acciones"><button class="boton" data-abrir="${n.id}">${icono("carrito")} Ver productos</button>
-            <a class="boton secundario" href="tel:${esc(n.telefono)}">${icono("telefono")} Llamar</a></div>
+        <article class="negocio-y">
+          <button class="portada-negocio-y" data-abrir="${n.id}" aria-label="Ver productos de ${esc(n.nombre)}">
+            <span class="portada-y">${n.foto ? `<img src="${esc(n.foto)}" alt="" loading="lazy">` : icono(TIPOS_NEGOCIO[n.tipo]?.icono || "carrito")}</span>
+            ${logoNegocio(n, "sobre")}
+            <span class="datos-negocio-y"><b>${esc(n.nombre)}</b><small>${productos.filter((p) => p.negocioId === n.id).length} productos · ${esc(n.dir || "")}</small></span></button>
+          <a class="llamar-y" href="tel:${esc(n.telefono)}" aria-label="Llamar">${icono("telefono")}</a>
         </article>`).join("") : `<div class="vacio">${icono("carrito")}Pronto habrá negocios aquí.</div>`}</div>`;
     $$("[data-abrir]").forEach((b) => (b.onclick = () => {
       negocioActual = negocios.find((n) => n.id === b.dataset.abrir);
@@ -456,9 +496,11 @@ function iniciar() {
     const lista = productos.filter((p) => p.negocioId === n.id);
     const tipo = TIPOS_NEGOCIO[n.tipo] || TIPOS_NEGOCIO.mercado;
     $("#vista").innerHTML = `<button class="boton secundario chico" id="volver-tienda" style="margin-top:16px">${icono("flecha", "girada")} ${esc(tipo.t)}</button>
-      <article class="tarjeta tarjeta-negocio cabeza-negocio">${logoNegocio(n, "grande")}
-        <div class="info"><h3>${esc(n.nombre)}</h3><p>${icono("pin")} ${esc(n.dir || "")}</p>${n.rif ? `<p class="nota">RIF ${esc(n.rif)}</p>` : ""}</div>
-        <div class="acciones"><a class="boton secundario" href="tel:${esc(n.telefono)}">${icono("telefono")} Llamar al negocio</a></div></article>
+      <div class="cabeza-negocio-y">
+        <span class="portada-y">${n.foto ? `<img src="${esc(n.foto)}" alt="">` : icono(tipo.icono)}</span>
+        ${logoNegocio(n, "sobre")}
+        <div class="datos-cabeza-y"><h1>${esc(n.nombre)}</h1><p>${icono("pin")} ${esc(n.dir || "")}${n.rif ? ` · RIF ${esc(n.rif)}` : ""}</p>
+          <a class="boton secundario chico" href="tel:${esc(n.telefono)}">${icono("telefono")} Llamar al negocio</a></div></div>
       <div class="lista productos">${lista.length ? lista.map((p) => tarjetaProducto(p, false)).join("") : `<div class="vacio">${icono("carrito")}Este negocio todavía no tiene productos.</div>`}</div>`;
     $("#volver-tienda").onclick = () => ir(n.tipo === "comida" ? "comida" : "mercado");
     atarProductos();
@@ -518,8 +560,10 @@ function iniciar() {
             <ul class="items-pedido">${pedido.items.map((x) => `<li><b>${x.c} ×</b> ${esc(x.n)} <span>${usd(x.p * x.c)}</span></li>`).join("")}</ul>
             <p class="total-productos">Productos: <b>${usd(totalPedido(pedido.items))}</b> <small>(se los pagas al negocio)</small></p></div></article>
         <p class="nota">El punto <b>A</b> es el negocio. Marca el punto <b>B</b>: donde quieres recibirlo. El envío se calcula por kilómetros.</p>`
-      : pub ? `<h1 class="titulo">Publica tu carrera</h1>
-        <p class="nota">Marca a dónde vas y pon cuánto quieres pagar. Todos los motorizados de turno la ven y el primero que acepte te busca.</p>`
+      : rutaActual === "viaje" || pub ? `<div class="asa-y"></div><h1 class="titulo">¿A dónde vas?</h1>
+        <div class="segmento" id="modo-precio" data-activo="${pub ? "publicar" : "viaje"}">
+          <button data-m="viaje" class="${pub ? "" : "activo"}">Precio normal</button><button data-m="publicar" class="${pub ? "activo" : ""}">Ofertar mi precio</button></div>
+        <p class="nota">${pub ? "Pon cuánto quieres pagar: los motorizados de turno aceptan o te hacen otra oferta." : "Precio por kilómetro: el primer motorizado de turno que acepte te busca."}</p>`
       : `<button class="boton secundario chico" id="volver" style="margin-top:16px">${icono("flecha", "girada")} Motorizados</button>
       <h1 class="titulo">¿A dónde vamos?</h1>`}
       ${descuento(tarifas) ? `<div class="banner-descuento">${icono("dinero")}<span><b>¡50% de descuento en todas las carreras!</b>${esc(descuento(tarifas).motivo)}</span></div>` : ""}
@@ -555,7 +599,7 @@ function iniciar() {
       </div>` : ""}
       <div id="caja-nota"><label for="nota">¿Qué hay que llevar?</label>
       <textarea id="nota" placeholder="Ej.: una pizza de la pizzería…, un sobre, unas compras">${esc(pedido.nota)}</textarea></div>
-      <button class="boton" id="pedir" ${activa ? "disabled" : ""}>${enc ? `${icono("moto")} Pedir el envío` : pedido.para ? `Pedir a ${esc(pedido.para.nombre)}` : "Pedir a todos los motorizados"}</button>
+      <button class="boton" id="pedir" ${activa ? "disabled" : ""}>${enc ? `${icono("moto")} Pedir el envío` : pedido.para ? `Pedir a ${esc(pedido.para.nombre)}` : rutaActual === "viaje" ? `${icono("moto")} Pedir mototaxi` : "Pedir a todos los motorizados"}</button>
       ${activa ? `<p class="nota">Ya tienes una carrera en curso. Mírala en "Mi carrera".</p>` : ""}
       ${pub ? htmlAnuncio() + verPublicidad() : ""}`;
     if (pub) atarAnuncios();
@@ -592,6 +636,7 @@ function iniciar() {
     $$("#tipo button").forEach((b) => b.classList.toggle("activo", b.dataset.t === pedido.tipo));
     if ($("#tipo")) $("#tipo").dataset.activo = pedido.tipo;
     $("#caja-nota").hidden = pedido.tipo === "mototaxi" || enc;
+    $$("#modo-precio button").forEach((b) => (b.onclick = () => { if (b.dataset.m !== rutaActual) ir(b.dataset.m, true); }));
     if ($("#volver-encargo")) $("#volver-encargo").onclick = () => { const n = negocios.find((x) => x.id === pedido.negocio.id); if (pedido.volverA === "mercado" && n) { negocioActual = n; ir("negocio"); } else ir(pedido.volverA || "comida"); };
     // Solo si sigue en esta pantalla (el GPS o la ruta pueden responder cuando ya cambió de pestaña).
     pintarListaPuntos(() => { if (enPedido() && !$(".selector")) vistaPedir(); });
@@ -1620,7 +1665,7 @@ function iniciar() {
     seguimiento.alMover = null;
     if (!c) {
       const pasadas = carreras.filter((x) => x.estado === "terminada" || x.estado === "cancelada").sort((a, b) => tiempo(b) - tiempo(a)).slice(0, 15);
-      $("#vista").innerHTML = `<div class="vacio">${icono("ruta")}No tienes carreras en curso.<br><button class="boton" id="ir-pedir">Publicar una carrera</button></div>
+      $("#vista").innerHTML = `<div class="vacio">${icono("ruta")}No tienes carreras en curso.<br><button class="boton" id="ir-pedir">${icono("moto")} Pedir un mototaxi</button></div>
         ${pasadas.length ? `<h1 class="titulo">${icono("reloj")} Tus viajes</h1><div class="lista">${pasadas.map((x) => `
           <article class="tarjeta"><div class="info">
             <h3>${esc(x.origen.dir)} ${icono("flecha")} ${esc(x.destino.dir)}</h3>
@@ -1628,7 +1673,7 @@ function iniciar() {
             <p>${x.estado === "terminada" ? `<span class="pildora ok">Terminada</span> con ${esc(x.motoNombre || "")}` : `<span class="pildora mal">Cancelada</span>`}</p></div>
             ${x.negocio ? "" : `<div class="acciones"><button class="boton secundario" data-repetir="${x.id}">${icono("deshacer")} Repetir este viaje</button></div>`}
           </article>`).join("")}</div>` : ""}`;
-      $("#ir-pedir").onclick = () => ir("publicar");
+      $("#ir-pedir").onclick = () => ir("viaje");
       $$("[data-repetir]").forEach((b) => (b.onclick = () => repetir(carreras.find((x) => x.id === b.dataset.repetir))));
       return;
     }

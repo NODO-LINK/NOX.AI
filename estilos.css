@@ -1094,3 +1094,105 @@ button.chip-punto { border: 0; color: inherit; font-family: inherit; cursor: poi
 .qr-grande { margin: 12px auto; width: min(78vw, 320px); aspect-ratio: 1; border-radius: 24px; overflow: hidden; background: #fff; box-shadow: var(--sombra-2); padding: 8px; }
 .qr-grande canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
 .qr-nombre { margin: 6px 0 12px; }
+
+/* =========================================================================
+   Pasajero estilo "super app": inicio, cuenta, pedir moto y tiendas
+   ========================================================================= */
+/* Inicio */
+.inicio-y { padding: 10px 0 18px; }
+.saludo-y { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 6px 2px 14px; }
+.saludo-y h1 { margin: 0; font-size: 1.55rem; font-weight: 900; letter-spacing: -.02em; }
+.saludo-y p { margin: 2px 0 0; color: var(--texto-2); font-weight: 700; font-size: .88rem; }
+.saludo-y p .ico { color: var(--marca); }
+.avatar-y { width: 46px; height: 46px; border-radius: 50%; border: 0; background: var(--degradado); color: #fff; font: inherit; font-weight: 900; box-shadow: var(--brillo); cursor: pointer; }
+.buscador-y { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 14px 14px 18px; border: 1px solid var(--borde); border-radius: 22px;
+  background: var(--superficie); color: var(--texto-2); font: inherit; font-size: 1.05rem; font-weight: 800; text-align: left; box-shadow: var(--sombra-2); cursor: pointer; }
+.buscador-y > .ico { width: 22px; height: 22px; color: var(--marca); }
+.buscador-y span { flex: 1; }
+.buscador-y b { width: 40px; height: 40px; border-radius: 14px; display: grid; place-items: center; background: var(--degradado); color: #fff; }
+.activa-y { width: 100%; margin-top: 12px; display: flex; align-items: center; gap: 10px; padding: 12px 16px; border: 0; border-radius: 18px; background: var(--suave-verde); color: var(--verde); font: inherit; cursor: pointer; }
+.activa-y b { flex: 1; text-align: left; }
+.servicios-y { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 18px 0 16px; }
+.servicio-y { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 12px 4px 10px; border: 1px solid var(--borde); border-radius: 22px;
+  background: var(--superficie); color: var(--texto); font: inherit; cursor: pointer; box-shadow: var(--sombra-1); animation: recuadro-entra .5s var(--resorte) both; transition: transform .2s var(--resorte); }
+.servicio-y:active { transform: scale(.93); }
+.servicio-y b { font-size: .74rem; font-weight: 900; line-height: 1.1; text-align: center; }
+.ico-y { width: 52px; height: 52px; border-radius: 18px; display: grid; place-items: center; background: var(--marca-suave); color: var(--marca); }
+.ico-y .ico { width: 28px; height: 28px; }
+.servicio-y[data-seccion="viaje"] .ico-y { background: var(--degradado); color: #fff; box-shadow: var(--brillo); }
+.carrusel-y { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -16px; padding: 4px 16px 10px; scrollbar-width: none; }
+.carrusel-y::-webkit-scrollbar, .fila-negocios-y::-webkit-scrollbar { display: none; }
+.banner-y { flex: 0 0 82%; scroll-snap-align: center; min-height: 112px; display: flex; align-items: center; gap: 10px; padding: 18px; border: 0; border-radius: 24px;
+  color: #fff; font: inherit; text-align: left; cursor: pointer; position: relative; overflow: hidden; box-shadow: var(--sombra-2); }
+.banner-y span { flex: 1; display: flex; flex-direction: column; gap: 4px; position: relative; z-index: 1; }
+.banner-y b { font-size: 1.3rem; font-weight: 900; line-height: 1.05; }
+.banner-y small { font-weight: 700; opacity: .92; font-size: .85rem; }
+.banner-y > .ico { width: 64px; height: 64px; opacity: .9; position: relative; z-index: 1; }
+.banner-y::after { content: ""; position: absolute; width: 180px; height: 180px; border-radius: 50%; right: -50px; top: -60px; background: rgba(255, 255, 255, .14); }
+.b-descuento { background: linear-gradient(135deg, #f59e0b, #ea580c); }
+.b-seguro { background: var(--degradado); }
+.b-comida { background: linear-gradient(135deg, #ef4444, #be123c); }
+.b-mercado { background: linear-gradient(135deg, #16a34a, #0f766e); }
+.titulo-y { display: flex; align-items: center; justify-content: space-between; margin: 14px 2px 8px; }
+.titulo-y h2 { margin: 0; font-size: 1.1rem; font-weight: 900; }
+.titulo-y button { border: 0; background: none; color: var(--marca); font: inherit; font-weight: 800; font-size: .85rem; cursor: pointer; }
+.fila-negocios-y { display: flex; gap: 12px; overflow-x: auto; margin: 0 -16px; padding: 4px 16px 12px; scrollbar-width: none; scroll-snap-type: x proximity; }
+.negocio-mini-y { flex: 0 0 140px; scroll-snap-align: start; display: flex; flex-direction: column; gap: 3px; padding: 0 0 8px; border: 0; background: none; color: var(--texto); font: inherit; text-align: left; cursor: pointer; }
+.negocio-mini-y .portada-y { height: 100px; border-radius: 18px; }
+.negocio-mini-y b { font-size: .9rem; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.negocio-mini-y small { color: var(--texto-2); font-size: .75rem; font-weight: 700; padding: 0 4px; }
+.portada-y { display: grid; place-items: center; width: 100%; overflow: hidden; background: linear-gradient(135deg, var(--marca-suave), var(--fondo-2)); color: var(--marca); box-shadow: var(--sombra-1); }
+.portada-y img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.portada-y .ico { width: 38px; height: 38px; }
+
+/* Cuenta */
+.perfil-cuenta { display: flex; align-items: center; gap: 14px; }
+.perfil-cuenta .avatar { width: 58px; height: 58px; font-size: 1.2rem; }
+.perfil-cuenta b { display: block; font-size: 1.1rem; }
+.perfil-cuenta small { color: var(--texto-2); font-weight: 700; }
+.opciones-cuenta { padding: 6px 4px; }
+.opciones-cuenta > a, .opciones-cuenta > button, .fila-op { width: 100%; display: flex; align-items: center; gap: 14px; padding: 13px 12px; border: 0; border-bottom: 1px solid var(--borde);
+  background: none; color: var(--texto); font: inherit; font-weight: 800; text-align: left; text-decoration: none; cursor: pointer; }
+.opciones-cuenta > :last-child { border-bottom: 0; }
+.opciones-cuenta > * > .ico:first-child { width: 22px; height: 22px; color: var(--marca); }
+.opciones-cuenta span { flex: 1; display: flex; flex-direction: column; }
+.opciones-cuenta small { color: var(--texto-2); font-weight: 700; font-size: .8rem; }
+.fila-op[hidden] { display: none; }
+
+/* Pedir moto: mapa grande de fondo y el formulario en un panel que se desliza encima */
+body.modo-viaje #vista { position: relative; padding-top: 46vh; }
+body.modo-viaje #vista::before { content: ""; position: absolute; left: 0; right: 0; top: calc(46vh - 22px); bottom: 0; z-index: 1;
+  background: var(--fondo-pagina); border-radius: 28px 28px 0 0; box-shadow: 0 -12px 30px rgba(15, 30, 80, .16); }
+body.modo-viaje #vista > * { position: relative; z-index: 2; }
+body.modo-viaje #vista > .vista-mapa { position: fixed; top: 0; left: 0; right: 0; height: 56vh; margin: 0; z-index: 0; border-radius: 0; }
+body.modo-viaje #vista > .vista-mapa .mapa { height: 100%; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+body.modo-viaje #vista > .vista-mapa .vista-mapa-boton { bottom: calc(10vh + 6px); }
+body.modo-viaje #vista.entrar > .vista-mapa { animation: none !important; }
+.asa-y { width: 44px; height: 5px; border-radius: 3px; background: var(--apagado); margin: -6px auto 4px; }
+body.modo-viaje #vista > .titulo:first-of-type, body.modo-viaje .asa-y + .titulo { margin-top: 6px; }
+.segmento[data-activo="publicar"]::before { transform: translateX(100%); }
+
+/* Tiendas: tarjetas con foto grande */
+.negocio-y { position: relative; border-radius: 24px; overflow: hidden; background: var(--superficie); box-shadow: var(--sombra-2); }
+.portada-negocio-y { display: block; width: 100%; padding: 0 0 14px; border: 0; background: none; color: var(--texto); font: inherit; text-align: left; cursor: pointer; }
+.portada-negocio-y .portada-y { height: 150px; border-radius: 0; box-shadow: none; }
+.logo-negocio.sobre { position: absolute; width: 62px; height: 62px; border-radius: 50%; border: 3px solid var(--superficie); left: 16px; box-shadow: var(--sombra-2); }
+.negocio-y .logo-negocio.sobre { top: 118px; }
+.datos-negocio-y { display: flex; flex-direction: column; padding: 34px 16px 0; }
+.datos-negocio-y b { font-size: 1.1rem; font-weight: 900; }
+.datos-negocio-y small { color: var(--texto-2); font-weight: 700; }
+.llamar-y { position: absolute; right: 14px; top: 162px; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: var(--marca-suave); color: var(--marca); }
+.cabeza-negocio-y { position: relative; margin: 12px -16px 6px; }
+.cabeza-negocio-y .portada-y { height: 180px; border-radius: 0; box-shadow: none; }
+.cabeza-negocio-y .logo-negocio.sobre { top: 146px; width: 72px; height: 72px; }
+.datos-cabeza-y { padding: 30px 16px 0; }
+.datos-cabeza-y h1 { margin: 10px 0 2px; font-size: 1.4rem; font-weight: 900; }
+.datos-cabeza-y p { margin: 0 0 10px; color: var(--texto-2); font-weight: 700; font-size: .88rem; }
+.lista.productos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.lista.productos > .vacio { grid-column: 1 / -1; }
+.lista.productos .producto { flex-direction: column; align-items: stretch; gap: 8px; padding: 0 0 10px; border-radius: 20px; overflow: hidden; }
+.lista.productos .producto .foto-producto { width: 100%; height: auto; aspect-ratio: 1; border-radius: 0; box-shadow: none; }
+.lista.productos .producto .foto-producto .ico { width: 34px; height: 34px; }
+.lista.productos .producto .info { padding: 0 10px; }
+.lista.productos .contador-producto { flex-direction: row; justify-content: space-between; padding: 0 10px; }
+.lista.productos .contador-producto .boton { width: 34px; height: 34px; }
