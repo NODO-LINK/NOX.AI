@@ -16,7 +16,7 @@ export const appCheckClave = "6LdeFOQtAAAAANqUXqGagMnYL8WBRl2j2Sw1nYzb";
 // Avisos push (con la app cerrada): pega aquí la "Clave pública" del par de claves de Web Push.
 // Se saca en: Consola de Firebase → Configuración del proyecto → Cloud Messaging → Certificados push web → Generar par de claves.
 // Mientras esté vacía, los avisos solo llegan con la app abierta (como antes).
-export const vapidClave = "";
+export const vapidClave = "BMpFkHUl1SGfs2yIvOjG8HmlZ1YNhBtYJbQ6QxAwLDdwGdS0c74zD3tzxUbLUukBahSMpctAgTClGGBasY1EF2A";
 
 // Mapa y buscador de Google: pega aquí la "clave de API" de Google Maps (Google Cloud → APIs y servicios → Credenciales).
 // Necesita activadas "Map Tiles API" y "Places API (New)". Restríngela a tu página (nodo-link.github.io).
