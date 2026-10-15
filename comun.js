@@ -6,8 +6,8 @@ import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
-import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=85";
-import { icono, pintarIconos } from "./iconos.js?v=85";
+import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=86";
+import { icono, pintarIconos } from "./iconos.js?v=86";
 
 export { icono };
 pintarIconos();
@@ -1132,6 +1132,16 @@ export async function activarPush(uid, rol) {
     localStorage.setItem(clave, t);
   } catch (e) { console.warn("Avisos push", e); }
 }
+// Al abrir la app (pasajero o motorizado) se piden de una vez los permisos de notificaciones y ubicación.
+(function permisosAlAbrir() {
+  if (ROL === "admin" || /seguir\.html$/.test(location.pathname)) return;
+  setTimeout(() => {
+    try { if (avisosPosibles() && Notification.permission === "default") Notification.requestPermission().catch(() => {}); } catch {}
+    try {
+      if (navigator.geolocation) navigator.geolocation.getCurrentPosition(() => {}, () => {}, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+    } catch {}
+  }, 600);
+})();
 // Avisos push apenas entra: si ya dio permiso se activan; si no, se pide con el primer toque (los teléfonos lo exigen así).
 export function avisosAlEntrar(uid, rol) {
   if (!avisosPosibles()) return;

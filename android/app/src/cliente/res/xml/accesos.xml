@@ -4,11 +4,11 @@
     <shortcut android:shortcutId="pedir" android:enabled="true" android:icon="@drawable/acceso_moto"
         android:shortcutShortLabel="@string/acceso_pedir" android:shortcutLongLabel="@string/acceso_pedir">
         <intent android:action="android.intent.action.VIEW" android:targetPackage="com.whereapp.cliente"
-            android:targetClass="com.google.androidbrowserhelper.trusted.LauncherActivity" android:data="https://nodo-link.github.io/NOX.AI/?ir=viaje" />
+            android:targetClass="com.whereapp.cliente.Inicio" android:data="https://nodo-link.github.io/NOX.AI/?ir=viaje" />
     </shortcut>
     <shortcut android:shortcutId="casa" android:enabled="true" android:icon="@drawable/acceso_casa"
         android:shortcutShortLabel="@string/acceso_casa" android:shortcutLongLabel="@string/acceso_casa">
         <intent android:action="android.intent.action.VIEW" android:targetPackage="com.whereapp.cliente"
-            android:targetClass="com.google.androidbrowserhelper.trusted.LauncherActivity" android:data="https://nodo-link.github.io/NOX.AI/?ir=casa" />
+            android:targetClass="com.whereapp.cliente.Inicio" android:data="https://nodo-link.github.io/NOX.AI/?ir=casa" />
     </shortcut>
 </shortcuts>

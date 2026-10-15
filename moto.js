@@ -11,7 +11,7 @@ import {
   DOCUMENTOS, estadoDoc,
   enApp, textoDescuento, totalPedido, enlaceDescarga,
   RAPIDOS_MOTO, enviarMensaje, botonesRapidos, activarPush, avisosAlEntrar,
-} from "./comun.js?v=85";
+} from "./comun.js?v=86";
 
 if (!avisoSinConfigurar()) iniciar();
 

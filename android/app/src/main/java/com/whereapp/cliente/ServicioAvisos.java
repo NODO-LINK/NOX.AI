@@ -7,6 +7,7 @@ import android.media.AudioAttributes;
 import android.net.Uri;
 import android.os.Build;
 
+import com.google.androidbrowserhelper.locationdelegation.LocationDelegationExtraCommandHandler;
 import com.google.androidbrowserhelper.trusted.DelegationService;
 
 /**
@@ -18,6 +19,11 @@ public class ServicioAvisos extends DelegationService {
     private static final String CANAL_CLAXON = "whereapp_claxon_v1";
     private static final String CANAL_NORMAL = "whereapp_avisos_v1";
     private static final String CANAL_SILENCIO = "whereapp_viaje_v1";
+
+    // La ubicación de la página usa el permiso de la app (el que se pide al abrirla).
+    public ServicioAvisos() {
+        registerExtraCommandHandler(new LocationDelegationExtraCommandHandler());
+    }
 
     @Override
     public boolean onNotifyNotificationWithChannel(String etiqueta, int id, Notification aviso, String canal) {

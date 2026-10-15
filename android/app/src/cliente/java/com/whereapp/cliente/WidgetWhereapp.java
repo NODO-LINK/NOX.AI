@@ -8,7 +8,6 @@ import android.content.Intent;
 import android.net.Uri;
 import android.widget.RemoteViews;
 
-import com.google.androidbrowserhelper.trusted.LauncherActivity;
 
 /** Widget de Whereapp: tres botones que abren la app directo en Pedir moto, Ir a casa o Mi viaje. */
 public class WidgetWhereapp extends AppWidgetProvider {
@@ -27,7 +26,7 @@ public class WidgetWhereapp extends AppWidgetProvider {
     }
 
     private static PendingIntent abrir(Context context, String ruta, int codigo) {
-        Intent intent = new Intent(context, LauncherActivity.class);
+        Intent intent = new Intent(context, Inicio.class);
         intent.setAction(Intent.ACTION_VIEW);
         intent.setData(Uri.parse(PAGINA + "?ir=" + ruta));
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
