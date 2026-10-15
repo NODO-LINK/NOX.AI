@@ -6,8 +6,8 @@ import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
-import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=91";
-import { icono, pintarIconos } from "./iconos.js?v=91";
+import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=92";
+import { icono, pintarIconos } from "./iconos.js?v=92";
 
 export { icono };
 pintarIconos();
@@ -492,6 +492,8 @@ export function nuevoMapa(id, modo = "", { yo = false } = {}) {
     // Movimiento más suave: zoom sin saltos bruscos al pellizcar y deslizamiento con inercia.
     zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 100, inertiaDeceleration: 2600, bounceAtZoomLimits: false,
   }).setView(CENTRO, 14);
+  // Sin el texto «Leaflet» (y su bandera); queda solo el crédito del mapa, que Google exige mostrar.
+  if (m.attributionControl) m.attributionControl.setPrefix(false);
   ponerFondo(m, leerFondo());
   if (mini) return m;
   m.miUbicacion = yo ? seguirMiUbicacion(m) : Promise.resolve(null);
