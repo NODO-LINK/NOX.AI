@@ -1,4 +1,4 @@
-# Compila la APK de Whereapp (una sola app para pasajeros y motorizados, con widget y claxon de moto en las notificaciones).
+# Compila la APK de Whereapp y el .aab para Play Store (una sola app para pasajeros y motorizados, con widget y claxon de moto en las notificaciones).
 # Quedan para descargar en Actions → esta ejecución → Artifacts.
 # Para que se instale encima de la actual de pasajeros se firma con la MISMA llave. Agrégala en:
 # GitHub → Settings → Secrets and variables → Actions → New repository secret
@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       version_code:
-        description: "Número de versión (más alto que el de la APK instalada)"
-        required: true
-        default: "100"
+        description: "Número de versión (vacío = automático, siempre más alto que el anterior)"
+        required: false
+        default: ""
   push:
     paths:
       - "android/**"
@@ -28,7 +28,7 @@ jobs:
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v3
         with:
-          gradle-version: "8.9"
+          gradle-version: "8.13"
       - name: Preparar las llaves de firma
         env:
           LLAVE_CLIENTE: ${{ secrets.WHEREAPP_KEYSTORE_BASE64 }}
@@ -44,9 +44,18 @@ jobs:
           WHEREAPP_STORE_PASSWORD: ${{ secrets.WHEREAPP_STORE_PASSWORD }}
           WHEREAPP_KEY_ALIAS: ${{ secrets.WHEREAPP_KEY_ALIAS }}
           WHEREAPP_KEY_PASSWORD: ${{ secrets.WHEREAPP_KEY_PASSWORD }}
-          WHEREAPP_VERSION_CODE: ${{ github.event.inputs.version_code || '100' }}
-        run: gradle -p android assembleClienteRelease --no-daemon
+          VERSION_ELEGIDA: ${{ github.event.inputs.version_code }}
+        run: |
+          # Play Store exige que cada versión tenga un número más alto: si no se escribe uno, se usa 200 + el número de esta ejecución.
+          export WHEREAPP_VERSION_CODE="${VERSION_ELEGIDA:-$((GITHUB_RUN_NUMBER + 200))}"
+          echo "Versión: $WHEREAPP_VERSION_CODE"
+          gradle -p android assembleClienteRelease bundleClienteRelease --no-daemon
       - uses: actions/upload-artifact@v4
         with:
           name: Whereapp-apk
           path: android/app/build/outputs/apk/cliente/release/*.apk
+      # Para Play Store: el archivo .aab (Android App Bundle) es el que se sube en Play Console.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Whereapp-playstore-aab
+          path: android/app/build/outputs/bundle/clienteRelease/*.aab

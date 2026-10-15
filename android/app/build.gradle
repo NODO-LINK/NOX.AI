@@ -5,10 +5,10 @@ def llaveCliente = System.getenv("WHEREAPP_KEYSTORE")
 
 android {
     namespace "com.whereapp.cliente"
-    compileSdk 34
+    compileSdk 36
     defaultConfig {
         minSdk 21
-        targetSdk 34
+        targetSdk 36
         versionCode Integer.parseInt(System.getenv("WHEREAPP_VERSION_CODE") ?: "100")
         versionName System.getenv("WHEREAPP_VERSION_NAME") ?: "2.0"
     }
