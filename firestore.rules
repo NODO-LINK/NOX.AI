@@ -190,6 +190,8 @@ service cloud.firestore {
                 && (resource == null || !('ultimaCarrera' in resource.data) || resource.data.ultimaCarrera < request.time - duration.value(20, 's')
                     || resource.data.ultimaCarrera == request.time)))
         && (resource == null || !('ultimaCarrera' in resource.data) || 'ultimaCarrera' in request.resource.data);
+      // Puede eliminar su cuenta (Play Store lo exige). Los bloqueos por teléfono siguen en /bloqueados.
+      allow delete: if dentro() && request.auth.uid == uid;
       allow read, update: if esAdmin();
     }
 

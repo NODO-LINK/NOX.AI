@@ -10,20 +10,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="estilos.css?v=89" />
-  <script>
-    // Mismo modo claro/oscuro que la app.
-    try {
-      const t = localStorage.getItem("whereapp.tema") || (matchMedia("(prefers-color-scheme: dark)").matches ? "oscuro" : "claro");
-      document.documentElement.dataset.tema = t;
-    } catch {}
-  </script>
+  <link rel="stylesheet" href="estilos.css?v=90" />
 </head>
 <body class="sin-barra">
   <main class="vista legal">
     <a class="boton secundario chico" href="./" onclick="if (history.length > 1) { history.back(); return false; }" style="margin-top:16px;display:inline-flex">← Volver a Whereapp</a>
     <h1 class="titulo">Política de privacidad</h1>
-    <p class="nota">Última actualización: 4 de octubre de 2026</p>
+    <p class="nota">Última actualización: 15 de octubre de 2026</p>
 
     <div class="caja">
       <p>Whereapp es una aplicación para pedir mototaxi en El Moján (estado Zulia, Venezuela). Conecta a clientes con motorizados independientes. Esta política explica qué datos usamos, para qué, con quién se comparten y cómo puedes pedir que se borren.</p>
@@ -61,7 +54,7 @@
         <li>Para la seguridad de todos: calificaciones, reportes, y bloquear a clientes o motorizados que abusen del servicio.</li>
         <li>Para administrar a los motorizados: activarlos, controlar el pago de la cuota y ver estadísticas.</li>
       </ul>
-      <p>No vendemos tus datos ni los usamos para publicidad.</p>
+      <p>No vendemos tus datos. Los anuncios de negocios de la zona que salen en el inicio son iguales para todos: no usan tus datos personales.</p>
     </div>
 
     <h2 class="subtitulo">3. Quién ve tus datos</h2>
@@ -74,15 +67,16 @@
       </ul>
       <p><b>Servicios que usamos para funcionar:</b></p>
       <ul>
-        <li><b>Google Firebase:</b> base de datos e inicio de sesión. Los datos se guardan en sus servidores.</li>
-        <li><b>Mapas y rutas:</b> OpenStreetMap, CARTO, Esri y OSRM, para las imágenes del mapa y para calcular distancias. Reciben las coordenadas necesarias y tu dirección de internet (IP), como cualquier página web.</li>
+        <li><b>Google Firebase:</b> base de datos, inicio de sesión y notificaciones (Firebase Cloud Messaging). Los datos se guardan en sus servidores.</li>
+        <li><b>Google Maps Platform:</b> las imágenes del mapa y la búsqueda de lugares. Recibe lo que escribes en el buscador y la zona del mapa que ves.</li>
+        <li><b>Mapas y rutas de respaldo:</b> OpenStreetMap, CARTO, Esri y OSRM, para las imágenes del mapa y para calcular distancias. Reciben las coordenadas necesarias y tu dirección de internet (IP), como cualquier página web.</li>
         <li><b>Google Fonts:</b> el tipo de letra de la app.</li>
       </ul>
     </div>
 
     <h2 class="subtitulo">4. Cuánto tiempo los guardamos</h2>
     <div class="caja">
-      <p>Guardamos tus datos mientras uses Whereapp y el tiempo razonable para atender reclamos o reportes de seguridad. Puedes pedir que se borren en cualquier momento (punto 6).</p>
+      <p>Guardamos tus datos mientras uses Whereapp. Si eliminas tu cuenta, se borran tu nombre, tu teléfono y tu usuario; el registro de los viajes ya hechos y los reportes de seguridad se guardan hasta 12 meses para atender reclamos (punto 6).</p>
       <p>Los datos guardados en tu teléfono (tus datos para entrar rápido y tus lugares) se borran si borras los datos de la app o del navegador.</p>
     </div>
 
@@ -100,7 +94,8 @@
         <li>Pedir que se borren.</li>
         <li>Quitar el permiso de ubicación o de notificaciones cuando quieras, desde los ajustes de tu teléfono.</li>
       </ul>
-      <p>Para pedirlo, escribe a <a href="mailto:braian150609@gmail.com">braian150609@gmail.com</a> con tu nombre y tu teléfono. Te responderemos en un máximo de 30 días.</p>
+      <p><b>Eliminar tu cuenta:</b> si eres cliente, entra a <b>Cuenta → Eliminar mi cuenta</b> y se borra al momento. Si eres motorizado, o no puedes entrar a la app, sigue los pasos de <a href="eliminar-cuenta.html">Eliminar mi cuenta</a>.</p>
+      <p>Para lo demás, escribe a <a href="mailto:braian150609@gmail.com">braian150609@gmail.com</a> con tu nombre y tu teléfono. Te responderemos en un máximo de 30 días.</p>
     </div>
 
     <h2 class="subtitulo">7. Menores de edad</h2>
@@ -123,7 +118,7 @@
         <tr><td>Tu nombre y teléfono</td><td>Entrar con un toque la próxima vez.</td></tr>
         <tr><td>Tus lugares guardados</td><td>Casa, Trabajo y los que agregues.</td></tr>
         <tr><td>Lugares del mapa (7 días)</td><td>Que el mapa cargue más rápido.</td></tr>
-        <tr><td>Modo claro/oscuro, tipo de mapa y forma de pago</td><td>Recordar tus preferencias.</td></tr>
+        <tr><td>Tipo de mapa y forma de pago</td><td>Recordar tus preferencias.</td></tr>
         <tr><td>Copia de la app (service worker)</td><td>Que abra aunque haya poca señal.</td></tr>
         <tr><td>Que aceptaste esta política</td><td>No volver a preguntarte.</td></tr>
       </table>

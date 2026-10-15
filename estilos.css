@@ -1348,3 +1348,6 @@ details.codigo-promo { display: block; }
 body.modo-viaje #vista > *:focus-within { z-index: 30; }
 .parada-fila:focus-within { position: relative; z-index: 30; }
 .campo-lugar .sugerencias { z-index: 40; }
+
+/* Eliminar cuenta (Play Store): enlace discreto en rojo */
+.enlace-borrar { display: block; margin: 14px auto 4px; padding: 6px 10px; background: none; border: 0; text-align: center; color: #c62828; font: inherit; font-size: .84rem; font-weight: 700; text-decoration: underline; cursor: pointer; }

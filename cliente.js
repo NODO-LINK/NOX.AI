@@ -1,10 +1,10 @@
 // Whereapp — app del cliente: pedir carrera, ver motorizados, seguir la carrera y calificar.
 
 import {
-  signInAnonymously, onAuthStateChanged, signOut,
+  signInAnonymously, onAuthStateChanged, signOut, deleteUser,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  doc, getDoc, setDoc, addDoc, updateDoc, writeBatch, collection, query, where, onSnapshot, serverTimestamp, increment,
+  doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, writeBatch, collection, query, where, onSnapshot, serverTimestamp, increment,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, precioLleno, descuento, textoDescuento, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
@@ -14,8 +14,8 @@ import {
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca, enlaceDescarga, TIPOS_NEGOCIO, numeroWhatsapp, totalPedido, resumenPedido, mensajePedido,
   precioCodigo, textoRecibo, RAPIDOS_CLIENTE, enviarMensaje, botonesRapidos, conBs, activarPush, avisosAlEntrar, hayBuscadorGoogle, buscarGoogle, lugarGoogle,
-} from "./comun.js?v=89";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=89";
+} from "./comun.js?v=90";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=90";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -498,11 +498,29 @@ function iniciar() {
         <a href="privacidad.html">${icono("escudo")}<span>Privacidad y cookies</span>${icono("flecha")}</a>
         <a href="moto.html" data-modo="moto">${icono("moto")}<span>Entrar como motorizado<small>Para quienes trabajan con Whereapp</small></span>${icono("flecha")}</a>
       </div>
-      <button class="boton peligro" id="salir">Salir</button>`;
+      <button class="boton peligro" id="salir">Salir</button>
+      <button class="enlace-borrar" id="borrar-cuenta">Eliminar mi cuenta</button>`;
     const inst = botonInstalar(); $("#op-instalar").append(inst); $("#op-instalar").hidden = inst.hidden;
     $("[data-op=lugares]").onclick = () => editarLugares(() => { if (rutaActual === "cuenta") vistaCuenta(); });
     $("[data-op=contacto]").onclick = async () => { if ((await elegirContacto()) && rutaActual === "cuenta") vistaCuenta(); };
     $("#salir").onclick = () => accionSalir();
+    $("#borrar-cuenta").onclick = eliminarCuenta;
+  }
+  // Eliminar la cuenta (lo exige Play Store): borra sus datos, sus avisos y su usuario, y lo que guardó en el teléfono.
+  async function eliminarCuenta() {
+    const c = carreraActual();
+    if (c && c.estado !== "terminada") return aviso("Tienes una carrera en curso: termínala o cancélala antes de eliminar tu cuenta.");
+    if (!confirm("¿Eliminar tu cuenta de Whereapp?\n\nSe borran tu nombre, tu teléfono y tus lugares guardados. No se puede deshacer.")) return;
+    const u = auth.currentUser;
+    if (!u) return;
+    try {
+      await deleteDoc(doc(db, "tokens", u.uid)).catch(() => {});
+      await deleteDoc(doc(db, "clientes", u.uid));
+    } catch (e) { console.error(e); return aviso("No se pudo eliminar. Revisa tu internet e inténtalo otra vez."); }
+    try { Object.keys(localStorage).filter((k) => k.startsWith("whereapp.")).forEach((k) => localStorage.removeItem(k)); } catch {}
+    try { await deleteUser(u); } catch { await signOut(auth).catch(() => {}); }
+    aviso("Tu cuenta fue eliminada");
+    setTimeout(() => location.replace("index.html?pasajero"), 1200);
   }
   // La pantalla se encoge de vuelta a su recuadro.
   function volverInicio() {

@@ -9,9 +9,9 @@ import {
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar, escucharTarifas, aBs, lineaRecta,
   hoyLocal,
   DOCUMENTOS, estadoDoc,
-  enApp, textoDescuento, totalPedido,
+  enApp, textoDescuento, totalPedido, WHATSAPP, enlaceWhatsapp,
   RAPIDOS_MOTO, enviarMensaje, botonesRapidos, activarPush, avisosAlEntrar,
-} from "./comun.js?v=89";
+} from "./comun.js?v=90";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -489,6 +489,8 @@ function iniciar() {
           <button class="boton secundario" id="editar-pm" style="margin-top:10px">${icono("telefono")} ${pm.telefono ? "Cambiar datos" : "Registrar pago móvil"}</button></div>`;
     }
     if (!miCarrera) html += `<a class="enlace-modo" href="index.html?pasajero" data-modo="pasajero">Usar la app como pasajero</a>`;
+    // Play Store exige poder pedir que se borre la cuenta: el motorizado lo pide al administrador (tiene documentos y pagos de cuota).
+    if (!miCarrera && perfil) html += `<a class="enlace-borrar" href="${esc(enlaceWhatsapp(WHATSAPP, `Hola, soy ${perfil.nombre || "motorizado"}. Quiero eliminar mi cuenta de motorizado de Whereapp.`))}" target="_blank" rel="noopener">Pedir eliminar mi cuenta</a>`;
     $("#vista").innerHTML = html;
     // Animar la entrada solo cuando cambia lo que se muestra (lista, carrera o aviso de inactivo).
     const modo = `${ok}-${miCarrera ? miCarrera.id : "lista"}-${miCarrera ? !!miCarrera.recogido : ""}`;
