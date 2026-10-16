@@ -15,8 +15,8 @@ import {
   enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad, enlacePublicidad,
   DOCUMENTOS, estadoDoc, resumenDocs,
   filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles, textoDescuento,
-  TIPOS_NEGOCIO, CENTRO, numeroWhatsapp, avisosAlEntrar,
-} from "./comun.js?v=92";
+  TIPOS_NEGOCIO, CENTRO, numeroWhatsapp, avisosAlEntrar, olvidarPush,
+} from "./comun.js?v=93";
 
 if (!avisoSinConfigurar()) iniciar();
 // Estrellas dibujadas (sin emojis): llenas y, si se pide, también las apagadas.
@@ -60,7 +60,7 @@ function iniciar() {
     $("#cabecera").hidden = false; $("#barra").hidden = false;
     $("#cabecera").innerHTML = `<div class="dentro"><div><div class="logo">${NOMBRE}</div><div class="logo-sub">Administración</div></div>
       <div class="derecha"><button class="boton secundario chico" id="salir">Salir</button></div></div>`;
-    $("#salir").onclick = () => signOut(auth);
+    $("#salir").onclick = async () => { await olvidarPush(auth.currentUser && auth.currentUser.uid); signOut(auth); };
     $("#cabecera .derecha").prepend(botonInstalar(), botonTema());
     $$("#barra button").forEach((b) => (b.onclick = () => ir(b.dataset.ruta)));
     tarifas = await leerTarifas();
@@ -812,14 +812,15 @@ function iniciar() {
   // ---------- Reseñas ----------
   let resenasAbiertas = false;   // las aprobadas van plegadas: son muchas
   function vistaResenas() {
-    const grave = (r) => (r.seguro === false ? 2 : 0) + ((r.malos || []).length ? 1 : 0);
+    const lista = (x) => (Array.isArray(x) ? x : []);
+    const grave = (r) => (r.seguro === false ? 2 : 0) + (lista(r.malos).length ? 1 : 0);
     const pendientes = resenas.filter((r) => !r.aprobada).sort((a, b) => grave(b) - grave(a)), aprobadas = resenas.filter((r) => r.aprobada);
     const texto = (lista, k) => (lista.find((a) => a.k === k) || { t: k }).t;
-    const tarjeta = (r, botones) => `<article class="tarjeta ${r.seguro === false || (r.malos || []).length ? "reporte" : ""}"><div class="info">
+    const tarjeta = (r, botones) => `<article class="tarjeta ${r.seguro === false || lista(r.malos).length ? "reporte" : ""}"><div class="info">
       <h3><span class="rating">${[1, 2, 3, 4, 5].map((n) => icono("estrella", n <= r.estrellas ? "" : "apagada")).join("")}</span> para ${esc((motos.find((m) => m.id === r.motoUid) || {}).nombre || r.motoNombre)}</h3>
       ${r.seguro === false ? `<p class="pildora riesgo">${icono("alerta")} El cliente NO se sintió seguro</p>` : r.seguro ? `<p class="pildora seguro">${icono("escudo")} Viaje seguro</p>` : ""}
-      ${(r.malos || []).length ? `<div class="etiquetas">${r.malos.map((k) => `<span class="pildora riesgo">${icono("alerta")} ${esc(texto(ASPECTOS.malos, k))}</span>`).join("")}</div>` : ""}
-      ${(r.buenos || []).length ? `<div class="etiquetas">${r.buenos.map((k) => `<span class="pildora insignia">${icono("check")} ${esc(texto(ASPECTOS.buenos, k))}</span>`).join("")}</div>` : ""}
+      ${lista(r.malos).length ? `<div class="etiquetas">${lista(r.malos).map((k) => `<span class="pildora riesgo">${icono("alerta")} ${esc(texto(ASPECTOS.malos, k))}</span>`).join("")}</div>` : ""}
+      ${lista(r.buenos).length ? `<div class="etiquetas">${lista(r.buenos).map((k) => `<span class="pildora insignia">${icono("check")} ${esc(texto(ASPECTOS.buenos, k))}</span>`).join("")}</div>` : ""}
       ${r.comentario ? `<p>“${esc(r.comentario)}”</p>` : `<p><i>Sin comentario</i></p>`}
       <p>De ${esc(r.clienteNombre)} · ${fechaTexto(r.fecha)}</p></div>${botones}</article>`;
     $("#vista").innerHTML = `
@@ -945,7 +946,7 @@ function iniciar() {
         descuento: { activa: fd.get("descuentoActiva") === "on", motivo: String(fd.get("descuentoMotivo") || "").trim().slice(0, 80) },
         tasa: num("tasa"),
         cobro: { banco: String(fd.get("cobroBanco") || "").trim(), telefono: String(fd.get("cobroTel") || "").trim(), cedula: String(fd.get("cobroCed") || "").trim() },
-        tasaFecha: num("tasa") !== (t.tasa || 0) ? new Date() : (t.tasaFecha || new Date()),
+        tasaFecha: new Date(),   // al guardar, la tasa queda confirmada para hoy (aunque sea el mismo número)
       };
       if (nuevas.descuento.activa && !nuevas.descuento.motivo) return aviso("Escribe el motivo del descuento");
       const bt = $("button", e.target); bt.disabled = true;

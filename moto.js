@@ -10,8 +10,8 @@ import {
   hoyLocal,
   DOCUMENTOS, estadoDoc,
   enApp, textoDescuento, totalPedido, WHATSAPP, enlaceWhatsapp,
-  RAPIDOS_MOTO, enviarMensaje, botonesRapidos, activarPush, avisosAlEntrar,
-} from "./comun.js?v=92";
+  RAPIDOS_MOTO, enviarMensaje, botonesRapidos, activarPush, avisosAlEntrar, olvidarPush,
+} from "./comun.js?v=93";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -438,6 +438,7 @@ function iniciar() {
       if (miCarrera && !confirm("Tienes una carrera en curso. Si sales, el cliente dejará de verte llegar. ¿Salir de todos modos?")) return;
       await retirarTodasOfertas();
       if (!miCarrera) await updateDoc(doc(db, "motorizados", yo.uid), { deTurno: false }).catch(() => {});
+      await olvidarPush(yo.uid);
       signOut(auth);
     };
     $("#cabecera .derecha").prepend(botonInstalar(), botonTema());

@@ -13,9 +13,9 @@ import {
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca, enlaceDescarga, TIPOS_NEGOCIO, numeroWhatsapp, totalPedido, resumenPedido, mensajePedido,
-  precioCodigo, textoRecibo, RAPIDOS_CLIENTE, enviarMensaje, botonesRapidos, conBs, activarPush, avisosAlEntrar, hayBuscadorGoogle, buscarGoogle, lugarGoogle,
-} from "./comun.js?v=92";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=92";
+  precioCodigo, textoRecibo, RAPIDOS_CLIENTE, enviarMensaje, botonesRapidos, conBs, activarPush, avisosAlEntrar, olvidarPush, hayBuscadorGoogle, buscarGoogle, lugarGoogle,
+} from "./comun.js?v=93";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=93";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -179,7 +179,7 @@ function iniciar() {
     const salir = () => {
       const c = carreraActual();
       if (c && c.estado !== "terminada") return aviso("Tienes una carrera en curso: termínala o cancélala antes de salir.");
-      if (confirm("¿Salir de Whereapp?")) signOut(auth);
+      if (confirm("¿Salir de Whereapp?")) olvidarPush(auth.currentUser && auth.currentUser.uid).then(() => signOut(auth));
     };
     accionSalir = salir;
     $("#widget").onclick = () => ir("carrera");

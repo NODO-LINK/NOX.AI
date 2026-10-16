@@ -379,6 +379,10 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/carreras/$(request.resource.data.carreraId)).data.estado == 'terminada'
         && get(/databases/$(database)/documents/carreras/$(request.resource.data.carreraId)).data.get('calificada', false) == false
         && (!('comentario' in request.resource.data) || (request.resource.data.comentario is string && request.resource.data.comentario.size() <= 500))
+        // Etiquetas como listas y "seguro" sí/no (un dato raro dejaba en blanco la pantalla de reseñas del admin).
+        && (!('malos' in request.resource.data) || (request.resource.data.malos is list && request.resource.data.malos.size() <= 10))
+        && (!('buenos' in request.resource.data) || (request.resource.data.buenos is list && request.resource.data.buenos.size() <= 10))
+        && (!('seguro' in request.resource.data) || request.resource.data.seguro is bool || request.resource.data.seguro == null)
         && request.resource.data.aprobada == false
         && request.resource.data.estrellas is int
         && request.resource.data.estrellas >= 1 && request.resource.data.estrellas <= 5;

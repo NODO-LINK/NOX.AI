@@ -1,6 +1,6 @@
 // Whereapp — service worker: avisos en la barra de notificaciones e instalar la app.
 // Guarda una copia de la app para abrirla aunque falle la señal (primero intenta internet).
-const CACHE = "whereapp-v4";
+const CACHE = "whereapp-v5";
 // Archivos de Firebase con versión fija: nunca cambian, se sirven de la copia (así abre sin señal).
 const FIREBASE = /^https:\/\/www\.gstatic\.com\/firebasejs\/10\.12\.2\//;
 
@@ -41,7 +41,8 @@ self.addEventListener("fetch", (e) => {
     // Con señal muy mala no se espera para siempre: a los 5 s se usa la copia guardada (si hay).
     const pronto = await Promise.race([red.catch(() => null), new Promise((r) => setTimeout(() => r(null), 5000))]);
     if (pronto) return pronto;
-    const guardada = await caches.match(req) || await caches.match(req, { ignoreSearch: true });
+    // Copia sin importar el ?v= solo para las páginas: con los .js se mezclarían versiones viejas y nuevas.
+    const guardada = await caches.match(req) || (req.mode === "navigate" ? await caches.match(req, { ignoreSearch: true }) : null);
     return guardada || red;
   })());
 });

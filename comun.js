@@ -6,8 +6,8 @@ import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
-import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=92";
-import { icono, pintarIconos } from "./iconos.js?v=92";
+import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=93";
+import { icono, pintarIconos } from "./iconos.js?v=93";
 
 export { icono };
 pintarIconos();
@@ -1133,6 +1133,15 @@ export async function activarPush(uid, rol) {
     await guardar(doc(db, "tokens", uid), { t, rol, actualizado: serverTimestamp() });
     localStorage.setItem(clave, t);
   } catch (e) { console.warn("Avisos push", e); }
+}
+// Al salir de la cuenta: este teléfono deja de recibir los avisos de esa persona (si entra otra, no le llegan los de la anterior).
+export async function olvidarPush(uid) {
+  if (!uid) return;
+  try { localStorage.removeItem("whereapp.push." + uid); } catch {}
+  try {
+    const { deleteDoc: borrar } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
+    await borrar(doc(db, "tokens", uid));
+  } catch {}
 }
 // Al abrir la app (pasajero o motorizado) se piden de una vez los permisos de notificaciones y ubicación.
 (function permisosAlAbrir() {

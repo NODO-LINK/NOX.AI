@@ -12,6 +12,9 @@ const PAGINA = "https://nodo-link.github.io/NOX.AI/";
 const usd = (n) => "$" + Number(n || 0).toFixed(2);
 const nombre1 = (n) => String(n || "").split(" ")[0];
 
+// Token que ya no sirve (desinstaló la app, borró datos o el texto no es un token): se borra.
+const tokenMalo = (codigo) => ["messaging/registration-token-not-registered", "messaging/invalid-registration-token", "messaging/invalid-argument"].includes(codigo);
+
 // Envía un aviso a las personas (uids) que tienen un token guardado. Borra los tokens que ya no sirven.
 async function avisar(uids, { titulo, cuerpo, url, tag, urgente = true, extra = {} }) {
   uids = [...new Set(uids.filter(Boolean))];
@@ -27,7 +30,7 @@ async function avisar(uids, { titulo, cuerpo, url, tag, urgente = true, extra = 
   });
   await Promise.all(r.responses.map((x, i) => {
     const codigo = x.error && x.error.code;
-    if (codigo === "messaging/registration-token-not-registered" || codigo === "messaging/invalid-registration-token") return conToken[i].ref.delete();
+    if (tokenMalo(codigo)) return conToken[i].ref.delete();
     return null;
   }));
 }
@@ -46,7 +49,7 @@ async function enviarATokens(docs, datos) {
     ok += r.successCount;
     await Promise.all(r.responses.map((x, k) => {
       const codigo = x.error && x.error.code;
-      return codigo === "messaging/registration-token-not-registered" || codigo === "messaging/invalid-registration-token" ? grupo[k].ref.delete() : null;
+      return tokenMalo(codigo) ? grupo[k].ref.delete() : null;
     }));
   }
   return ok;
@@ -63,6 +66,10 @@ const horaSilencio = () => { const h = horaVe(); return h >= 21 || h < 7; };
 exports.carreraNueva = onDocumentCreated("carreras/{id}", async (e) => {
   const c = e.data && e.data.data();
   if (!c || c.estado !== "esperando") return;
+  return avisarMotos(e.params.id, c);
+});
+// También cuando un motorizado la cancela y vuelve a quedar disponible (menos al que la soltó).
+async function avisarMotos(id, c, sinUid = null) {
   let uids;
   if (c.paraMoto) uids = [c.paraMoto];
   else {
@@ -71,15 +78,15 @@ exports.carreraNueva = onDocumentCreated("carreras/{id}", async (e) => {
     uids = s.docs.filter((d) => {
       const m = d.data();
       return m.deTurno !== false && !m.enCarrera && m.pagadoHasta && m.pagadoHasta.toMillis() > ahora;
-    }).map((d) => d.id);
+    }).map((d) => d.id).filter((u) => u !== sinUid);
   }
   const ruta = `${(c.origen && c.origen.dir) || ""} → ${(c.destino && c.destino.dir) || ""}`;
   await avisar(uids, {
     titulo: c.paraMoto ? "¡Un cliente te pidió a ti!" : c.negocio ? `Pedido de ${c.negocio.nombre}` : "¡Carrera nueva!",
     cuerpo: `${usd(c.precio)} · ${c.km || 0} km\n${ruta}`,
-    url: PAGINA + "moto.html", tag: "carrera-" + e.params.id,
+    url: PAGINA + "moto.html", tag: "carrera-" + id,
   });
-});
+}
 
 // Cambios de la carrera: aceptó, llegó, terminó (al cliente) y canceló (al motorizado).
 exports.carreraCambio = onDocumentUpdated("carreras/{id}", async (e) => {
@@ -88,14 +95,23 @@ exports.carreraCambio = onDocumentUpdated("carreras/{id}", async (e) => {
   const alCliente = (titulo, cuerpo) => avisar([c.clienteUid], { titulo, cuerpo, url: PAGINA, tag: "whereapp-alerta" });
   const quien = nombre1(c.motoNombre) || "Tu motorizado";
   // SOS del pasajero: al admin, urgente.
-  if (c.sos && (!a.sos || !a.sos.isEqual(c.sos)))
+  if (c.sos && (!a.sos || !(a.sos.isEqual ? a.sos.isEqual(c.sos) : a.sos === c.sos)))
     await avisarAdmins(`SOS: ${c.clienteNombre}`, `En carrera con ${c.motoNombre || "un motorizado"}${c.motoPlaca ? ` (placa ${c.motoPlaca})` : ""}. Abre el panel.`, true);
   if (a.estado === "esperando" && c.estado === "aceptada")
     return alCliente(`¡${quien} aceptó tu ${c.negocio ? "pedido" : "carrera"}!`, `${c.motoMoto || "Moto"}${c.motoPlaca ? ` · Placa ${c.motoPlaca}` : ""}`);
   if (!a.llegoEn && c.llegoEn && !c.recogido)
     return alCliente(`¡${quien} llegó!`, c.negocio ? `Está en ${c.negocio.nombre} retirando tu pedido` : "Está afuera esperándote");
-  if (a.estado === "aceptada" && (c.estado === "terminada" || c.estado === "cancelada" || c.estado === "esperando"))
+  if (a.estado === "aceptada" && (c.estado === "terminada" || c.estado === "cancelada" || c.estado === "esperando")) {
+    // Fin del viaje en vivo: se marca primero, así un aviso "Faltan 2 min" que venía en camino ya no se manda.
+    await db.doc(`seguimientoPush/${e.params.id}`).set({ fin: true, t: Date.now() });
     await avisar([c.clienteUid], { titulo: "-", cuerpo: "-", url: PAGINA, tag: "whereapp-cerrar", urgente: false, extra: { cerrar: "whereapp-carrera" } });
+  }
+  // El motorizado soltó la carrera: se avisa al pasajero y a los demás motorizados, y el admin vuelve a vigilarla.
+  if (a.estado === "aceptada" && c.estado === "esperando") {
+    await e.data.after.ref.update({ avisoAdmin: false });
+    await alCliente(`${nombre1(a.motoNombre) || "El motorizado"} no puede ir`, "Ya estamos buscando otro motorizado para ti");
+    return avisarMotos(e.params.id, c, a.motoUid);
+  }
   if (a.estado === "aceptada" && c.estado === "terminada")
     return alCliente("¡Llegaste!", `Toca para calificar a ${quien}`);
   if (a.estado === "aceptada" && c.estado === "cancelada" && a.motoUid)
@@ -211,9 +227,18 @@ async function recordarMotorizados(hoy) {
 // Pasajeros que no piden hace 7 días (como mucho un aviso cada 14 días por persona).
 async function teExtranamos() {
   const corte = admin.firestore.Timestamp.fromMillis(Date.now() - 7 * 864e5);
-  const s = await db.collection("clientes").where("ultimaVez", "<", corte).limit(400).get();
   const hace14 = Date.now() - 14 * 864e5;
-  for (const c of s.docs) {
+  // Se recorren todos en grupos de 300 (antes siempre salían los mismos 400 y los demás nunca recibían el aviso).
+  const todos = [];
+  for (let ultimo = null; ;) {
+    let q = db.collection("clientes").where("ultimaVez", "<", corte).orderBy("ultimaVez").limit(300);
+    if (ultimo) q = q.startAfter(ultimo);
+    const s = await q.get();
+    todos.push(...s.docs);
+    if (s.size < 300) break;
+    ultimo = s.docs[s.docs.length - 1];
+  }
+  for (const c of todos) {
     const u = c.get("ultimaCarrera");
     if (u && u.toMillis() > corte.toMillis()) continue;
     const r = db.doc(`recordatorios/${c.id}`);
@@ -240,7 +265,9 @@ exports.viajeEnVivo = onDocumentWritten("ubicaciones/{uid}", async (e) => {
   if (s.empty) return;
   const d = s.docs[0], c = d.data();
   const ref = db.doc(`seguimientoPush/${d.id}`);
-  const prev = (await ref.get()).data() || {};
+  let prev = (await ref.get()).data() || {};
+  // Otro motorizado (la anterior la soltó) o un viaje ya cerrado: se empieza de cero.
+  if (prev.moto !== e.params.uid) prev = {};
   if (prev.t && Date.now() - prev.t < 30000 && prev.recogido === !!c.recogido && prev.llego === !!c.llegoEn) return;
   const meta = c.recogido ? c.destino : c.origen;
   const km = kmEntre(u, meta);
@@ -255,7 +282,15 @@ exports.viajeEnVivo = onDocumentWritten("ubicaciones/{uid}", async (e) => {
   const textoKm = km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
   const cuerpo = (c.llegoEn && !c.recogido ? "Está afuera esperándote" : km < 0.1 ? "Está llegando" : `Faltan ${min} min · ${textoKm}`)
     + `${c.motoPlaca ? ` · Placa ${c.motoPlaca}` : ""} (${pct}%)`;
-  await ref.set({ t: Date.now(), inicial: inicial || km, recogido: !!c.recogido, llego: !!c.llegoEn });
+  // Justo antes de mandar: si la carrera ya terminó o la soltó, no se manda (no queda una notificación pegada).
+  const sigue = await db.runTransaction(async (tx) => {
+    const [cAhora, pAhora] = await Promise.all([tx.get(d.ref), tx.get(ref)]);
+    if (cAhora.get("estado") !== "aceptada" || cAhora.get("motoUid") !== e.params.uid) return false;
+    if (pAhora.exists && pAhora.get("fin") && pAhora.get("moto") === e.params.uid) return false;
+    tx.set(ref, { t: Date.now(), inicial: inicial || km, recogido: !!c.recogido, llego: !!c.llegoEn, moto: e.params.uid });
+    return true;
+  });
+  if (!sigue) return;
   const enlace = `${PAGINA}seguir.html?c=${d.id}`;
   await avisar([c.clienteUid], {
     titulo, cuerpo, url: PAGINA, tag: "whereapp-carrera", urgente: false,
