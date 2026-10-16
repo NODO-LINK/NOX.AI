@@ -6,8 +6,8 @@ import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
-import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=93";
-import { icono, pintarIconos } from "./iconos.js?v=93";
+import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=94";
+import { icono, pintarIconos } from "./iconos.js?v=94";
 
 export { icono };
 pintarIconos();
@@ -1138,10 +1138,10 @@ export async function activarPush(uid, rol) {
 export async function olvidarPush(uid) {
   if (!uid) return;
   try { localStorage.removeItem("whereapp.push." + uid); } catch {}
-  try {
-    const { deleteDoc: borrar } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
-    await borrar(doc(db, "tokens", uid));
-  } catch {}
+  // Sin señal el borrado queda en cola: no se espera más de 2,5 s para poder salir igual.
+  const borrado = import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js")
+    .then(({ deleteDoc: borrar }) => borrar(doc(db, "tokens", uid))).catch(() => {});
+  await Promise.race([borrado, new Promise((r) => setTimeout(r, 2500))]);
 }
 // Al abrir la app (pasajero o motorizado) se piden de una vez los permisos de notificaciones y ubicación.
 (function permisosAlAbrir() {

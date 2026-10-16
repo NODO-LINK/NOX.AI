@@ -11,7 +11,7 @@ import {
   DOCUMENTOS, estadoDoc,
   enApp, textoDescuento, totalPedido, WHATSAPP, enlaceWhatsapp,
   RAPIDOS_MOTO, enviarMensaje, botonesRapidos, activarPush, avisosAlEntrar, olvidarPush,
-} from "./comun.js?v=93";
+} from "./comun.js?v=94";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -59,6 +59,10 @@ function iniciar() {
     if (chat.quitar) chat.quitar();
     chat = { id: null, quitar: null, sinLeer: 0, ajenos: null };
     cerrarChat(); cerradasPorMi.clear();
+    // Que no quede la pantalla encendida, el GPS del mapa ni la alarma de la cuenta anterior.
+    if (mapa) { mapa.remove(); mapa = null; }
+    pararAlarma();
+    if (bloqueoPantalla) { const b = bloqueoPantalla; bloqueoPantalla = null; b.release().catch(() => {}); }
     misOfertas.clear(); aceptadasPorMi.clear(); revisadas.clear(); conocidas = new Set();
     Object.assign(opiniones, { abiertas: false, html: "" });
     terminadas = []; reportes = []; tarifas = null; misDocs = null; primeraCarga = true;
@@ -140,6 +144,7 @@ function iniciar() {
           if (d.exists() && d.data().estado === "cancelada") {
             const por = d.data().cancelacion?.por === "admin" ? "El administrador" : "El cliente";
             sonar(); aviso(`${por} canceló la carrera`);
+            deleteDoc(doc(db, "ubicaciones", yo.uid)).catch(() => {});   // su última posición no queda a la vista
             notificar("Carrera cancelada", `${por} canceló: ${previa.origen?.dir || ""}`, { tag: "whereapp-moto", urgente: true });
           }
         }).catch(() => {});
@@ -174,11 +179,13 @@ function iniciar() {
       disponibles = s.docs.map((d) => limpiarCarrera({ id: d.id, ...d.data() }))
         .filter((c) => carreraValida(c) && (!c.paraMoto || c.paraMoto === yo.uid))
         .sort((a, b) => (fecha(a.creada) || 0) - (fecha(b.creada) || 0));
-      const nuevas = disponibles.filter((c) => !conocidas.has(c.id));
-      nuevas.forEach((c) => conocidas.add(c.id));
+      // Solo se recuerdan las que siguen en la lista: si alguien la tomó y la soltó, vuelve a sonar.
+      // Las que llegan mientras está en una carrera no se marcan: suenan al terminarla.
+      const nuevas = miCarrera ? [] : disponibles.filter((c) => !conocidas.has(c.id) && !cerradasPorMi.has(c.id));
+      if (!miCarrera) conocidas = new Set(disponibles.map((c) => c.id));
       if (nuevas.length && !primeraCarga && !miCarrera) {
         sonar();
-        iniciarAlarma();
+        iniciarAlarma(nuevas.map((c) => c.id));
         aviso(nuevas.length > 1 ? `¡${nuevas.length} carreras nuevas!` : nuevas[0].ofertaCliente ? "¡Carrera publicada! El cliente puso su precio" : "¡Carrera nueva!");
         // Una notificación por cada carrera, en la barra del teléfono (aunque la app esté minimizada).
         nuevas.forEach((c) => {
@@ -225,9 +232,10 @@ function iniciar() {
       // Mensaje nuevo = llegó uno más del cliente (aunque ya haya leído los anteriores).
       const nuevo = chat.ajenos !== null && ajenos > chat.ajenos;
       chat.ajenos = ajenos;
-      chat.sinLeer = $(".chat") ? 0 : sinLeer;
+      const n = $(".chat") ? 0 : sinLeer;
+      chat.sinLeer = n;
       const b = $("#chat-sin-leer");
-      if (b) { b.hidden = !sinLeer; b.textContent = sinLeer; }
+      if (b) { b.hidden = !n; b.textContent = n; }
       const ult = msgs[msgs.length - 1];
       if (nuevo && ult && ult.de !== yo.uid) {
         sonar();
@@ -372,11 +380,12 @@ function iniciar() {
 
   // ---------- Alarma de carrera nueva: suena cada 4 s hasta que toque la pantalla (máximo 2 minutos) ----------
   let alarma = null;
-  function iniciarAlarma() {
+  function iniciarAlarma(ids = []) {
     pararAlarma();
-    const fin = Date.now() + 120000;
+    const fin = Date.now() + 120000, suyas = new Set(ids);
     alarma = setInterval(() => {
-      if (Date.now() > fin || miCarrera || !disponibles.length) return pararAlarma();
+      // Se calla sola si ya no está ninguna de las carreras que la hicieron sonar (otro la tomó o la cancelaron).
+      if (Date.now() > fin || miCarrera || !disponibles.some((c) => !suyas.size || suyas.has(c.id))) return pararAlarma();
       sonar();
     }, 4000);
     const b = document.createElement("button");
@@ -436,9 +445,11 @@ function iniciar() {
     // Al salir deja de estar de turno: así no sale como disponible con el teléfono apagado.
     $("#salir").onclick = async () => {
       if (miCarrera && !confirm("Tienes una carrera en curso. Si sales, el cliente dejará de verte llegar. ¿Salir de todos modos?")) return;
-      await retirarTodasOfertas();
-      if (!miCarrera) await updateDoc(doc(db, "motorizados", yo.uid), { deTurno: false }).catch(() => {});
-      await olvidarPush(yo.uid);
+      // Sin señal estas escrituras quedan en cola: se espera como mucho 3 s y sale igual.
+      await Promise.race([
+        Promise.all([retirarTodasOfertas().catch(() => {}), miCarrera ? null : updateDoc(doc(db, "motorizados", yo.uid), { deTurno: false }).catch(() => {}), olvidarPush(yo.uid)]),
+        new Promise((r) => setTimeout(r, 3000)),
+      ]);
       signOut(auth);
     };
     $("#cabecera .derecha").prepend(botonInstalar(), botonTema());
@@ -793,16 +804,19 @@ function iniciar() {
       // Con código: el pasajero se lo dice al montarse (así sabe que es la moto correcta).
       const pin = c.conPin ? await pedirPin(c) : null;
       if (c.conPin && !pin) return;
+      if (!navigator.onLine) return aviso("No tienes señal. Intenta de nuevo cuando vuelva.");
       recogi.disabled = true;
       try { await updateDoc(doc(db, "carreras", c.id), { recogido: true, recogidoEn: serverTimestamp(), ...(pin ? { pin } : {}) }); aviso("¡Vamos hacia el punto B!"); }
       catch (e) {
         recogi.disabled = false;
-        aviso(c.conPin && e.code === "permission-denied" ? "Ese código no es. Pídeselo otra vez al pasajero." : "No se pudo guardar. Puede que el cliente haya cancelado; revisa tu internet.");
+        if (!miCarrera || miCarrera.id !== c.id) return aviso("Esta carrera ya no está activa: el cliente la canceló.");
+        aviso(c.conPin && e.code === "permission-denied" ? "Ese código no es. Pídeselo otra vez al pasajero." : "No se pudo guardar. Revisa tu internet e intenta de nuevo.");
       }
     };
     const termine = $("#termine");
     if (termine) termine.onclick = async () => {
       if (!confirm("¿Entregaste y cobraste la carrera?")) return;
+      if (!navigator.onLine) return aviso("No tienes señal. Intenta de nuevo cuando vuelva.");
       termine.disabled = true;
       cerradasPorMi.add(c.id);
       aviso("Guardando…");
@@ -829,7 +843,7 @@ function iniciar() {
       lote.update(doc(db, "carreras", c.id), {
         estado: "esperando", motoUid: null, paraMoto: null, paraMotoNombre: null, recogido: false, llegoEn: null,
         motoNombre: null, motoTel: null, motoMoto: null, motoPlaca: null,
-        precio: c.precioCliente ?? c.precio, precioBs: c.precioBsCliente ?? c.precioBs ?? null, contraoferta: false,
+        precio: c.precioCliente ?? c.precio, precioBs: "precioBsCliente" in c ? c.precioBsCliente : (c.precioBs ?? null), contraoferta: false,
         cancelaciones: arrayUnion({ por: "motorizado", motoUid: yo.uid, motoNombre: perfil.nombre, motivo, fecha: new Date() }),
       });
       if (c.ofertaCliente) lote.delete(doc(db, "carreras", c.id, "ofertas", yo.uid));

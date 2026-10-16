@@ -14,8 +14,8 @@ import {
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca, enlaceDescarga, TIPOS_NEGOCIO, numeroWhatsapp, totalPedido, resumenPedido, mensajePedido,
   precioCodigo, textoRecibo, RAPIDOS_CLIENTE, enviarMensaje, botonesRapidos, conBs, activarPush, avisosAlEntrar, olvidarPush, hayBuscadorGoogle, buscarGoogle, lugarGoogle,
-} from "./comun.js?v=93";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=93";
+} from "./comun.js?v=94";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=94";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -25,6 +25,7 @@ function iniciar() {
   let rutaActual = "inicio", mapa = null;
   const PRINCIPALES = ["inicio", "carrera", "cuenta"];
   let accionSalir = () => {};
+  let escuchaAtras = false;
   // QR del motorizado (…/?moto=ID): al entrar se abre su perfil para pedirle.
   let motoDelQr = new URLSearchParams(location.search).get("moto");
   let motos = [], carreras = [], cancelarSubs = [];
@@ -48,13 +49,15 @@ function iniciar() {
       escucharOfertas(null);
       cerrarNotificacion();
     }
-    carreras = []; motos = [];
+    carreras = []; motos = []; tiendaLista = false;   // al cambiar de cuenta, la tienda se vuelve a escuchar
     Object.assign(pedido, { puntos: [], refs: [], retorno: false, agregando: false, km: null, linea: null, nota: "", para: null, oferta: null, ofertaBs: null, ofertaTocada: false, paradaPendiente: false, yoIntentado: false });
     usuario = u;
     if (registrando) return;
     if (!u) return pantallaEntrada();
-    const s = await getDoc(doc(db, "clientes", u.uid)).catch(() => null);
-    cliente = s && s.exists() ? s.data() : null;
+    const s = await getDoc(doc(db, "clientes", u.uid)).catch(() => "sin-senal");
+    // Sin señal no se sabe si tiene ficha: se usan los datos guardados en el teléfono (antes salía la pantalla de entrar).
+    if (s === "sin-senal") { const r = recordados.leer(); cliente = r && r.nombre ? r : null; }
+    else cliente = s && s.exists() ? s.data() : null;
     if (!cliente || !cliente.nombre) return pantallaEntrada();
     recordados.guardar({ nombre: cliente.nombre, telefono: cliente.telefono, ...(cliente.cedula ? { cedula: cliente.cedula } : {}) });
     arrancar();
@@ -184,10 +187,13 @@ function iniciar() {
     accionSalir = salir;
     $("#widget").onclick = () => ir("carrera");
     $("#atras").onclick = () => atras();
-    addEventListener("popstate", (e) => {
-      // Llegó al fondo del historial (sin ventana abierta): vuelve al inicio.
-      if (!e.state && rutaActual !== "inicio" && !$("body > .modal, body > .selector")) volverInicio();
-    });
+    if (!escuchaAtras) {
+      escuchaAtras = true;
+      addEventListener("popstate", (e) => {
+        // Llegó al fondo del historial (sin ventana abierta): vuelve al inicio.
+        if (cliente && !e.state && rutaActual !== "inicio" && !$("body > .modal, body > .selector")) volverInicio();
+      });
+    }
     tarifas = await leerTarifas();
     // Tarifas en vivo: el recargo de lluvia aparece apenas el admin lo enciende.
     // Si está escribiendo, se espera a que termine (si no, se le cierra el teclado).
@@ -345,6 +351,8 @@ function iniciar() {
     document.body.classList.toggle("sin-barra", !principal);
     document.body.classList.toggle("modo-viaje", r === "viaje" || r === "publicar" || r === "pedir" || r === "encargo");
     if (r !== "inicio" && !(history.state && history.state.seccion)) history.pushState({ seccion: 1 }, "");
+    // Al volver al inicio con la barra se quita la entrada extra: así un solo "atrás" sale de la app.
+    if (r === "inicio" && history.state && history.state.seccion) history.back();
     if (principal) activarBarra(r);
     if (mapa) { mapa.remove(); mapa = null; }
     // El mapa del selector se cierra bien (si no, su GPS seguiría encendido).
@@ -539,14 +547,20 @@ function iniciar() {
   function cargarTienda() {
     if (tiendaLista) return;
     tiendaLista = true;
-    const repintar = () => { if (tecleando()) return; if (rutaActual === "inicio") vistaInicio(); else if (rutaActual === "mercado") vistaMercado(); else if (rutaActual === "comida") vistaComida(); else if (rutaActual === "negocio") vistaNegocio(); else if (rutaActual === "carrera" && carreraActual()?.negocio && !$(".modal")) vistaCarrera(); };
+    const repintar = () => { if (tecleando()) return; if (rutaActual === "inicio") vistaInicio(); else if (rutaActual === "mercado") vistaMercado(); else if (rutaActual === "comida") vistaComida(); else if (rutaActual === "negocio") vistaNegocio(); else if (rutaActual === "carrera" && carreraActual()?.negocio && carreraActual().estado !== "terminada" && !$(".modal") && !$(".calificar")) vistaCarrera(); };
     cancelarSubs.push(onSnapshot(query(collection(db, "negocios"), where("activo", "==", true)), (s) => {
       negocios = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.nombre).localeCompare(b.nombre));
       repintar();
     }, (e) => console.error(e)));
     cancelarSubs.push(onSnapshot(query(collection(db, "productos"), where("activo", "==", true)), (s) => {
+      // Si solo cambió "vendidos" (otro cliente pidió), no se repinta: si no, la pantalla saltaba sola.
+      const soloVendidos = productos.length && s.docChanges().length && s.docChanges().every((x) => {
+        if (x.type !== "modified") return false;
+        const viejo = productos.find((p) => p.id === x.doc.id); if (!viejo) return false;
+        const nuevo = x.doc.data(); return Object.keys(nuevo).every((k) => k === "vendidos" || JSON.stringify(nuevo[k]) === JSON.stringify(viejo[k]));
+      });
       productos = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((p) => p.negocioActivo !== false).sort((a, b) => String(a.nombre).localeCompare(b.nombre));
-      repintar();
+      if (!soloVendidos) repintar();
     }, (e) => console.error(e)));
   }
   const cargando = () => `<div class="vacio">${icono("reloj")}Cargando…</div>`;
@@ -947,7 +961,9 @@ function iniciar() {
   }
 
   // Precio normal del viaje: con código de promoción si se aplicó uno (si no, el de siempre, con el 50% si está activo).
-  const precioPedido = () => (pedido.codigo ? precioCodigo(tarifas, pedido.tipo, pedido.km, pedido.codigo.pct) : precio(tarifas, pedido.tipo, pedido.km));
+  // Igual que al enviar: si el 50% del admin es mejor que el código, vale el 50%.
+  const codigoVale = () => pedido.codigo && !(descuento(tarifas) && pedido.codigo.pct <= 50);
+  const precioPedido = () => (codigoVale() ? precioCodigo(tarifas, pedido.tipo, pedido.km, pedido.codigo.pct) : precio(tarifas, pedido.tipo, pedido.km));
   async function aplicarCodigo(texto) {
     const c = String(texto || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
     if (c.length < 3) return aviso("Escribe el código");
@@ -1454,9 +1470,10 @@ function iniciar() {
       const agregarBtn = $("#sel-agregar", caja);
       agregarBtn.disabled = n < 2 || n >= MAX_PUNTOS;
       agregarBtn.classList.toggle("activo", pedido.agregando);
-      $("#listo", caja).innerHTML = n < 2 ? "Listo" : pedido.km != null ? `Listo · ${resumenRecorrido()} · ${usd(precio(tarifas, pedido.tipo, pedido.km))}` : "Calculando…";
+      $("#listo", caja).innerHTML = n < 2 ? "Listo" : pedido.km != null ? `Listo · ${resumenRecorrido()} · ${usd(precioPedido())}` : "Calculando…";
     };
-    const cambiar = async () => { pedido.km = null; pintar(); await recalcular(); if (document.body.contains(caja)) pintar(); };
+    // Si cerró el mapa antes de que llegara la ruta, se repinta el pedido (si no, se quedaba "Calculando el precio…").
+    const cambiar = async () => { pedido.km = null; pintar(); await recalcular(); if (document.body.contains(caja)) pintar(); else if (enPedido() && !$(".selector")) vistaPedir(); };
 
     // Agrega un punto: 1.º = A, 2.º = B; con "Parada" se mete antes de B.
     const poner = (latlng, nombre = "") => {
@@ -2182,6 +2199,7 @@ function iniciar() {
 
   // Carga los mismos puntos de un viaje anterior. Si su motorizado está disponible, se le pide a él.
   function repetir(x) {
+    if (pedido.negocio) limpiarEncargo();   // si dejó un pedido de tienda a medias, no borra el viaje que se va a cargar
     const pts = [x.origen, ...(x.paradas || []), x.destino];
     Object.assign(pedido, {
       puntos: pts.map((p) => L.latLng(p.lat, p.lng)), refs: pts.map((p) => p.dir || ""),
@@ -2365,7 +2383,8 @@ function iniciar() {
     if (c && c.estado === "terminada" && antes && antes.estado === "aceptada") {
       notificar("¡Llegaste a tu destino!", `Toca para calificar a ${c.motoNombre.split(" ")[0]}`, { sonar: true });
     }
-    if (!c) cerrarNotificacion();
+    // La notificación fija del viaje solo vive mientras está aceptada (si el motorizado la soltó o terminó, se quita).
+    if (!c || c.estado !== "aceptada") cerrarNotificacion();
     refrescarVivo();
   }
 
