@@ -195,6 +195,33 @@ service cloud.firestore {
       allow read, update: if esAdmin();
     }
 
+    // Solicitudes para trabajar como motorizado: cada persona (cuenta anónima) envía la suya; solo ella y el admin la ven.
+    // Puede reenviarla si se la rechazaron. El admin la aprueba (y crea la cuenta) o la rechaza con un motivo.
+    function solicitudOk(d) {
+      return d.keys().hasOnly(['nombre', 'telefono', 'cedula', 'moto', 'placa', 'color', 'estado', 'creada'])
+        && d.nombre is string && d.nombre.size() >= 5 && d.nombre.size() <= 80
+        && d.telefono is string && d.telefono.matches('^[+]58[0-9]{10}$')
+        && d.cedula is string && d.cedula.matches('^[VE]-[0-9]{6,9}$')
+        && texto(d.moto, 60) && d.moto.size() > 0 && texto(d.placa, 12) && d.placa.size() > 0 && texto(d.get('color', ''), 30)
+        && d.estado == 'pendiente' && d.creada == request.time;
+    }
+    match /solicitudes/{uid} {
+      allow get: if esAdmin() || (dentro() && request.auth.uid == uid);
+      allow list: if esAdmin();
+      allow create: if dentro() && request.auth.uid == uid && solicitudOk(request.resource.data);
+      allow update: if esAdmin()
+        || (dentro() && request.auth.uid == uid && resource.data.estado == 'rechazada' && solicitudOk(request.resource.data));
+      allow delete: if esAdmin();
+      match /fotos/{k} {
+        allow read: if esAdmin() || (dentro() && request.auth.uid == uid);
+        allow create, update: if dentro() && request.auth.uid == uid
+          && k in ['persona', 'moto', 'cedula', 'licencia', 'medico', 'rcv']
+          && request.resource.data.keys().hasOnly(['foto']) && request.resource.data.foto is string
+          && request.resource.data.foto.size() < 900000;
+        allow delete: if esAdmin();
+      }
+    }
+
     // Clientes bloqueados por el administrador (por cuenta, teléfono o cédula): no pueden pedir carreras.
     match /bloqueados/{cedula} {
       allow get: if dentro();

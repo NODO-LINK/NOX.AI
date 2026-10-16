@@ -1385,3 +1385,22 @@ body.modo-viaje #vista > *:focus-within { z-index: 30; }
 
 /* Listas largas: lo que está fuera de la pantalla no se dibuja hasta que llegas. */
 .lista > .tarjeta, .lista > article, .historial > * { content-visibility: auto; contain-intrinsic-size: auto 140px; }
+
+/* Solicitud para trabajar como motorizado */
+.pedir-trabajo { display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 16px; padding: 14px 16px; border-radius: 18px; border: 2px solid var(--marca-clara, #93c5fd); background: var(--marca-suave, #eff6ff); color: var(--texto); text-align: left; cursor: pointer; font: inherit; }
+.pedir-trabajo > .ico { width: 26px; height: 26px; color: var(--marca); flex: 0 0 auto; }
+.pedir-trabajo span { flex: 1; display: grid; }
+.pedir-trabajo small { color: var(--marca); font-weight: 800; }
+.fotos-solicitud { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0 12px; }
+.fotos-solicitud .doc-foto { display: grid; gap: 4px; padding: 0; border: 0; background: none; text-align: center; font: inherit; color: inherit; }
+.fotos-solicitud .foto-vista { display: grid; place-items: center; border-radius: 14px; background-size: cover; background-position: center; color: var(--marca); }
+.fotos-solicitud small { font-size: .75rem; font-weight: 700; color: var(--texto-2); }
+.cedula-fila { display: flex; gap: 8px; }
+.cedula-fila select { flex: 0 0 72px; }
+.cedula-fila input { flex: 1; min-width: 0; }
+.estado-solicitud { display: grid; gap: 10px; }
+.estado-solicitud .pildora { justify-self: start; }
+.fila-solicitud { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-top: 1px solid var(--borde); }
+.fila-solicitud small { display: block; color: var(--texto-2); font-size: .8rem; }
+.solicitudes-admin { border: 2px solid var(--marca); }
+.solicitud .dos { align-items: end; }

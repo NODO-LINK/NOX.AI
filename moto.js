@@ -1,6 +1,6 @@
 // Whereapp — apartado de motorizados: ver carreras nuevas, aceptarlas, compartir ubicación y terminarlas.
 
-import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { signInWithEmailAndPassword, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   doc, getDoc, setDoc, deleteDoc, addDoc, writeBatch, onSnapshot, updateDoc, collection, query, where, runTransaction, serverTimestamp, arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -9,9 +9,9 @@ import {
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar, escucharTarifas, aBs, lineaRecta,
   hoyLocal,
   DOCUMENTOS, estadoDoc,
-  enApp, textoDescuento, totalPedido, WHATSAPP, enlaceWhatsapp,
+  enApp, textoDescuento, totalPedido, WHATSAPP, enlaceWhatsapp, FOTOS_SOLICITUD, normalizarTel, achicarFoto,
   RAPIDOS_MOTO, enviarMensaje, botonesRapidos, activarPush, avisosAlEntrar, olvidarPush,
-} from "./comun.js?v=95";
+} from "./comun.js?v=96";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -68,7 +68,8 @@ function iniciar() {
     terminadas = []; reportes = []; tarifas = null; misDocs = null; primeraCarga = true;
     $$(".modal").forEach((m) => m.remove());
     yo = u; perfil = null; miCarrera = null; disponibles = []; ultimoModo = null;
-    if (!u) return pantallaEntrada();
+    // Cuenta anónima = la del pasajero en este teléfono (o la de quien pide trabajo): no se cierra, solo se muestra la entrada.
+    if (!u || u.isAnonymous) return solicitando && u ? vistaSolicitud() : pantallaEntrada();
     pedirAvisosAlTocar();
     subs.push(onSnapshot(doc(db, "motorizados", u.uid), (s) => {
       if (!s.exists()) { aviso("Esta cuenta no es de un motorizado"); signOut(auth); return; }
@@ -117,11 +118,106 @@ function iniciar() {
         <button class="boton">Entrar</button>
         <a class="enlace-modo" href="index.html?pasajero" data-modo="pasajero">Entrar como pasajero</a>
         <p class="nota">El usuario y la clave te los da el administrador.</p>
+        <button type="button" class="pedir-trabajo" id="pedir-trabajo">${icono("moto")}<span><b>¿Quieres trabajar con ${NOMBRE}?</b><small>Solicítalo aquí</small></span>${icono("flecha")}</button>
         <p class="nota">Al entrar aceptas la ${ENLACE_POLITICAS.replace("Política", "política")}.</p></form></div>`;
     $("#login").onsubmit = async (e) => {
       e.preventDefault();
       try { await signInWithEmailAndPassword(auth, correoDe($("#usuario").value), $("#clave").value); }
       catch (err) { console.error(err); aviso(motivoEntrada(err)); }
+    };
+    $("#pedir-trabajo").onclick = async () => {
+      solicitando = true;
+      if (auth.currentUser) return vistaSolicitud();
+      const b = $("#pedir-trabajo"); b.disabled = true;
+      // Sin cuenta: se crea una anónima solo para guardar la solicitud (el aviso de cambio de sesión abre el formulario).
+      try { await signInAnonymously(auth); } catch (e) { console.error(e); b.disabled = false; solicitando = false; aviso("No se pudo abrir. Revisa tu internet."); }
+    };
+  }
+
+  // ---------- Solicitud para trabajar como motorizado ----------
+  let solicitando = false;
+  async function vistaSolicitud(corregir = false) {
+    const u = auth.currentUser;
+    if (!u) return pantallaEntrada();
+    $("#cabecera").hidden = true;
+    $("#vista").innerHTML = `<div class="entrada"><div class="logo">${NOMBRE}</div><div class="caja"><p class="nota">Cargando…</p></div></div>`;
+    const prev = await getDoc(doc(db, "solicitudes", u.uid)).then((d) => (d.exists() ? d.data() : null)).catch(() => null);
+    const volver = () => { solicitando = false; pantallaEntrada(); };
+    if (prev && !corregir && prev.estado !== "borrador") {
+      const est = prev.estado === "aprobada"
+        ? `<span class="pildora ok">${icono("check")} Aprobada</span><p>¡Bienvenido! Te enviamos por WhatsApp tu <b>usuario</b> y tu <b>clave</b>. Escríbelos en «Entrar como motorizado».</p>`
+        : prev.estado === "rechazada"
+          ? `<span class="pildora mal">${icono("alerta")} No aprobada</span><p>${prev.motivo ? `Motivo: <b>${esc(prev.motivo)}</b>` : "Escríbenos para saber el motivo."}</p><p class="nota">Puedes corregir y enviarla otra vez.</p>`
+          : `<span class="pildora medio">${icono("reloj")} En revisión</span><p>Recibimos tu solicitud. El administrador la revisa y te escribe por WhatsApp al <b>${esc(String(prev.telefono || "").replace(/^\+58(\d{3})(\d{7})$/, "0$1-$2"))}</b>.</p>`;
+      $("#vista").innerHTML = `<div class="entrada"><div class="logo">${NOMBRE}</div><div class="logo-sub">Trabaja con nosotros</div>
+        <div class="caja estado-solicitud"><h2>Tu solicitud</h2>${est}
+          <a class="boton secundario" target="_blank" rel="noopener" href="${esc(enlaceWhatsapp(WHATSAPP, `Hola, soy ${prev.nombre}. Envié mi solicitud para trabajar como motorizado en ${NOMBRE}.`))}">${icono("chat")} Escribir al administrador</a>
+          ${prev.estado === "rechazada" ? `<button class="boton" id="otra-vez">Corregir y enviar otra vez</button>` : ""}
+          <button class="boton secundario" id="volver">${prev.estado === "aprobada" ? "Ir a entrar" : "Volver"}</button></div></div>`;
+      $("#volver").onclick = volver;
+      if ($("#otra-vez")) $("#otra-vez").onclick = () => vistaSolicitud(true);
+      return;
+    }
+    const p = prev || {};
+    const fotos = {};
+    const cedNum = String(p.cedula || "").replace(/^[VE]-/, ""), cedTipo = String(p.cedula || "V").charAt(0);
+    $("#vista").innerHTML = `<div class="entrada"><div class="logo">${NOMBRE}</div><div class="logo-sub">Trabaja con nosotros</div>
+      <form class="caja solicitud" id="solicitud"><h2>${icono("moto")} Pide trabajar como motorizado</h2>
+        <p class="nota">Llena tus datos y sube las fotos. El administrador revisa tu solicitud y te escribe por WhatsApp con tu usuario y clave.</p>
+        <label for="s-nombre">Nombre y apellido</label><input id="s-nombre" name="nombre" required minlength="5" maxlength="80" autocomplete="name" value="${esc(p.nombre || "")}">
+        <label for="s-tel">Teléfono (WhatsApp)</label><input id="s-tel" name="telefono" type="tel" required placeholder="0414-1234567" value="${esc(String(p.telefono || "").replace(/^\+58(\d{3})(\d{7})$/, "0$1-$2"))}">
+        <label for="s-ced">Cédula</label>
+        <div class="cedula-fila"><select name="tipo" aria-label="Tipo de cédula"><option ${cedTipo === "V" ? "selected" : ""}>V</option><option ${cedTipo === "E" ? "selected" : ""}>E</option></select>
+          <input id="s-ced" name="cedula" inputmode="numeric" required placeholder="12345678" value="${esc(cedNum)}"></div>
+        <div class="dos"><div><label for="s-moto">Moto (marca y modelo)</label><input id="s-moto" name="moto" required maxlength="60" placeholder="Bera SBR 150" value="${esc(p.moto || "")}"></div>
+          <div><label for="s-placa">Placa</label><input id="s-placa" name="placa" required maxlength="12" autocapitalize="characters" value="${esc(p.placa || "")}"></div></div>
+        <label for="s-color">Color de la moto</label><input id="s-color" name="color" maxlength="30" placeholder="Roja con negro" value="${esc(p.color || "")}">
+        <h3>Fotos</h3>
+        <p class="nota">Toca cada cuadro para tomar o elegir la foto. Que se lea bien.</p>
+        <div class="fotos-solicitud">${FOTOS_SOLICITUD.map((x) => `<label class="doc-foto"><span class="foto-vista" data-vista="${x.k}">${icono(x.k === "moto" ? "moto" : x.k === "persona" ? "usuario" : "tarjeta")}</span>
+          <input type="file" accept="image/*" data-archivo="${x.k}" hidden><small>${esc(x.t)}${x.obligatoria ? " *" : ""}</small></label>`).join("")}</div>
+        <p class="nota">Al enviarla aceptas la ${ENLACE_POLITICAS.replace("Política", "política")}. Tus datos y fotos solo los ve el administrador.</p>
+        <button class="boton" id="enviar-solicitud">Enviar solicitud</button>
+        <button type="button" class="boton secundario" id="volver">Volver</button></form></div>`;
+    $("#volver").onclick = volver;
+    $$("[data-archivo]").forEach((inp) => (inp.onchange = async () => {
+      const a = inp.files[0]; if (!a) return;
+      try {
+        fotos[inp.dataset.archivo] = await achicarFoto(a, inp.dataset.archivo === "persona" ? 640 : 1280);
+        const v = $(`[data-vista=${inp.dataset.archivo}]`);
+        v.style.backgroundImage = `url('${fotos[inp.dataset.archivo]}')`; v.innerHTML = ""; v.classList.add("con-foto");
+      } catch { aviso("No se pudo leer esa imagen"); }
+    }));
+    $("#solicitud").onsubmit = async (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const telefono = normalizarTel(f.get("telefono"));
+      if (!telefono) return aviso("Escribe un teléfono válido, por ejemplo 0414-1234567");
+      const num = String(f.get("cedula") || "").replace(/\D/g, "");
+      if (num.length < 6 || num.length > 9) return aviso("Escribe tu cédula (solo números)");
+      const falta = FOTOS_SOLICITUD.find((x) => x.obligatoria && !fotos[x.k] && !(prev && corregir));
+      if (falta) return aviso(`Falta la foto: ${falta.t}`);
+      if (!navigator.onLine) return aviso("No tienes señal. Inténtalo cuando vuelva.");
+      const bt = $("#enviar-solicitud"); bt.disabled = true;
+      try {
+        // Primero las fotos (cada una aparte, pesan) y al final la solicitud: así al admin le llega completa.
+        const ks = Object.keys(fotos);
+        for (let i = 0; i < ks.length; i++) {
+          bt.textContent = `Subiendo fotos (${i + 1} de ${ks.length})…`;
+          await setDoc(doc(db, "solicitudes", u.uid, "fotos", ks[i]), { foto: fotos[ks[i]] });
+        }
+        bt.textContent = "Enviando…";
+        await setDoc(doc(db, "solicitudes", u.uid), {
+          nombre: String(f.get("nombre") || "").trim().slice(0, 80), telefono, cedula: `${f.get("tipo") === "E" ? "E" : "V"}-${num}`,
+          moto: String(f.get("moto") || "").trim().slice(0, 60), placa: String(f.get("placa") || "").trim().toUpperCase().slice(0, 12),
+          color: String(f.get("color") || "").trim().slice(0, 30), estado: "pendiente", creada: serverTimestamp(),
+        });
+        aviso("¡Solicitud enviada!");
+        vistaSolicitud();
+      } catch (err) {
+        console.error(err); bt.disabled = false; bt.textContent = "Enviar solicitud";
+        aviso("No se pudo enviar. Revisa tu internet e inténtalo otra vez.");
+      }
     };
   }
 

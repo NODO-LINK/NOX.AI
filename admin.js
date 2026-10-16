@@ -15,8 +15,8 @@ import {
   enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad, enlacePublicidad,
   DOCUMENTOS, estadoDoc, resumenDocs,
   filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles, textoDescuento,
-  TIPOS_NEGOCIO, CENTRO, numeroWhatsapp, avisosAlEntrar, olvidarPush,
-} from "./comun.js?v=95";
+  TIPOS_NEGOCIO, CENTRO, numeroWhatsapp, avisosAlEntrar, olvidarPush, FOTOS_SOLICITUD,
+} from "./comun.js?v=96";
 
 if (!avisoSinConfigurar()) iniciar();
 // Estrellas dibujadas (sin emojis): llenas y, si se pide, también las apagadas.
@@ -26,7 +26,7 @@ function iniciar() {
   let subs = [], ruta = "motos", tarifas = null;
   let motos = [], carreras = [], resenas = [], pagos = [], llamadas = {}, visitas = {}, cedulas = {}, clientes = [], bloqueados = {}, notasClientes = {};
   let mapaVivo = null, marcasVivo = {}, filtroClientes = "";
-  let lugaresPropios = [], mapaLugares = null, reportesPago = [];
+  let lugaresPropios = [], mapaLugares = null, reportesPago = [], solicitudes = [];
   let anuncios = [], promos = [];
   let anuncio = null, publicidad = null, toquesPub = 0;
   let negocios = [], productos = [];   // Mercado a tu casa y Comida rápida
@@ -82,6 +82,10 @@ function iniciar() {
     escuchar(query(collection(db, "resenas"), orderBy("fecha", "desc"), limit(100)), (s) => { resenas = s.docs.map((d) => ({ id: d.id, ...d.data() })); publicarAprobadasViejas(); });
     escuchar(query(collection(db, "pagos"), orderBy("fecha", "desc"), limit(500)), (s) => { pagos = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
     escuchar(collection(db, "llamadas"), (s) => { llamadas = Object.fromEntries(s.docs.map((d) => [d.id, Number(d.data().n) || 0])); return ruta === "mas"; });
+    // Personas que pidieron trabajar como motorizado (desde «Entrar como motorizado»).
+    escuchar(query(collection(db, "solicitudes"), where("estado", "==", "pendiente")), (s) => {
+      solicitudes = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (fecha(a.creada) || 0) - (fecha(b.creada) || 0));
+    });
     escuchar(collection(db, "documentos"), (s) => { documentos = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); });
     escuchar(doc(db, "config", "anuncio"), (d) => { anuncio = d.exists() ? d.data() : null; });
     escuchar(doc(db, "config", "publicidad"), (d) => { publicidad = d.exists() ? d.data() : null; });
@@ -211,6 +215,9 @@ function iniciar() {
         return mal.length ? `<div class="banner-aviso docs-aviso">${icono("alerta")}<div><span><b>Documentos por revisar:</b> ${mal.map((m) => `${esc(m.nombre)} (${resumenDocs(documentos[m.id]).t.toLowerCase()})`).join(" · ")}</span>
           <div class="botones"><button class="boton chico" id="copiar-docs">${icono("copiar")} Copiar lista</button>
           <a class="boton chico verde" target="_blank" rel="noopener" href="${esc("https://wa.me/?text=" + encodeURIComponent(listaFallas(mal)))}">${icono("chat")} Enviar por WhatsApp</a></div></div></div>` : ""; })()}
+      ${solicitudes.length ? `<div class="caja solicitudes-admin"><h2>${icono("usuario")} Quieren trabajar (${solicitudes.length})</h2>
+        ${solicitudes.map((x) => `<div class="fila-solicitud"><div><b>${esc(x.nombre)}</b><small>${esc(x.moto)} · Placa ${esc(x.placa)} · ${esc(telLocal(x.telefono))}</small></div>
+          <button class="boton chico" data-solicitud="${x.id}">Ver</button></div>`).join("")}</div>` : ""}
       <button class="boton" id="nuevo">+ Agregar motorizado</button>
       ${motos.some((x) => x.usuario === "prueba") ? "" : `<button class="boton secundario" id="prueba">${icono("moto")} Crear motorizado de prueba</button>`}
       <div class="lista" style="margin-top:12px">${motos.map((m) => `
@@ -237,6 +244,7 @@ function iniciar() {
     if (puntos.length > 1) mapaVivo.fitBounds(window.L.latLngBounds(puntos).pad(0.3), { animate: false });
     else if (puntos.length === 1) mapaVivo.setView(puntos[0], 15, { animate: false });
     $("#nuevo").onclick = () => formularioMoto();
+    $$("[data-solicitud]").forEach((b) => (b.onclick = () => verSolicitud(solicitudes.find((x) => x.id === b.dataset.solicitud))));
     if ($("#prueba")) $("#prueba").onclick = () => crearMotoPrueba($("#prueba"));
     $$("[data-activo]").forEach((b) => (b.onclick = () => {
       const m = motos.find((x) => x.id === b.dataset.activo);
@@ -483,10 +491,91 @@ function iniciar() {
         throw e;
       }
       if (pagado && cobrar) await addDoc(collection(db, "pagos"), { motoUid: cred.user.uid, nombre: datos.nombre, monto: tarifas.cuota, fecha: serverTimestamp() });
+      return cred.user.uid;
     } finally {
       await signOut(authSeg).catch(() => {});
       await deleteApp(authSeg.app).catch(() => {});
     }
+  }
+
+  // ---------- Solicitudes: ver los datos y fotos, y con un botón crear la cuenta con todo ----------
+  function verSolicitud(x) {
+    if (!x) return;
+    const fotos = {};
+    const fondo = document.createElement("div");
+    fondo.className = "modal";
+    fondo.innerHTML = `<div class="ventana"><h2>${icono("usuario")} ${esc(x.nombre)}</h2>
+      <div class="fila"><span>Teléfono</span><b>${esc(telLocal(x.telefono))}</b></div>
+      <div class="fila"><span>Cédula</span><b>${esc(x.cedula)}</b></div>
+      <div class="fila"><span>Moto</span><b>${esc(x.moto)}${x.color ? ` · ${esc(x.color)}` : ""}</b></div>
+      <div class="fila"><span>Placa</span><b>${esc(x.placa)}</b></div>
+      <div class="fila"><span>Envió</span><b>${fechaTexto(x.creada)}</b></div>
+      <div class="fotos-solicitud">${FOTOS_SOLICITUD.map((f) => `<button type="button" class="doc-foto" data-ver="${f.k}"><span class="foto-vista" data-vista="${f.k}">${icono("reloj")}</span><small>${esc(f.t.replace(" (si lo tienes)", ""))}</small></button>`).join("")}</div>
+      <p class="nota">«Aprobar y agregar» crea su cuenta (usuario y clave automáticos), le pasa sus fotos y documentos, lo marca verificado y te deja el mensaje listo para mandarle por WhatsApp. Su cuota la registras en Pagos.</p>
+      <button class="boton verde" data-aprobar>${icono("check")} Aprobar y agregar</button>
+      <a class="boton secundario" target="_blank" rel="noopener" href="${esc(enlaceWhatsapp(x.telefono, `Hola ${String(x.nombre).split(" ")[0]}, te escribo de ${NOMBRE} por tu solicitud para trabajar como motorizado.`))}">${icono("chat")} Escribirle por WhatsApp</a>
+      <button class="boton peligro" data-rechazar>Rechazar</button>
+      <button class="boton secundario" data-cerrar>Cerrar</button></div>`;
+    document.body.append(fondo);
+    const cerrar = () => { fondo.remove(); ir(ruta, true); };
+    $("[data-cerrar]", fondo).onclick = cerrar;
+    FOTOS_SOLICITUD.forEach((f) => getDoc(doc(db, "solicitudes", x.id, "fotos", f.k)).then((d) => {
+      const v = $(`[data-vista=${f.k}]`, fondo);
+      if (d.exists() && d.data().foto) { fotos[f.k] = d.data().foto; v.style.backgroundImage = `url('${fotos[f.k]}')`; v.innerHTML = ""; v.classList.add("con-foto"); }
+      else v.innerHTML = `<small>No envió</small>`;
+    }).catch(() => {}));
+    $$("[data-ver]", fondo).forEach((b) => (b.onclick = () => {
+      const url = fotos[b.dataset.ver]; if (!url) return;
+      const v = document.createElement("div"); v.className = "modal visor-doc";
+      v.innerHTML = `<img src="${url}" alt=""><button class="boton secundario" data-cerrar>Cerrar</button>`;
+      document.body.append(v); $("[data-cerrar]", v).onclick = () => v.remove();
+    }));
+    $("[data-rechazar]", fondo).onclick = async () => {
+      const motivo = prompt("¿Por qué no se aprueba? (lo verá la persona)", "Faltan documentos");
+      if (motivo === null) return;
+      try {
+        await updateDoc(doc(db, "solicitudes", x.id), { estado: "rechazada", motivo: motivo.trim().slice(0, 200), revisada: serverTimestamp() });
+        aviso("Solicitud rechazada"); cerrar();
+      } catch (e) { console.error(e); aviso("No se pudo guardar. ¿Publicaste las reglas nuevas?"); }
+    };
+    $("[data-aprobar]", fondo).onclick = async () => {
+      if (motos.some((m) => m.telefono === x.telefono)) return aviso("Ya hay un motorizado con ese teléfono");
+      const bt = $("[data-aprobar]", fondo); bt.disabled = true; bt.textContent = "Creando la cuenta…";
+      // Usuario: nombre.apellido sin acentos (si ya existe, se le suma un número). Clave: 8 letras y números al azar.
+      const base = String(x.nombre).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z ]/g, "").trim().split(/\s+/).slice(0, 2).join(".") || "moto";
+      const clave = Math.random().toString(36).slice(2, 6) + Math.floor(1000 + Math.random() * 9000);
+      let usuario = base, uid = null;
+      for (let n = 1; n <= 9 && !uid; n++) {
+        usuario = n === 1 ? base : `${base}${n}`;
+        if (motos.some((m) => m.usuario === usuario)) continue;
+        try {
+          uid = await crearMoto({ nombre: x.nombre, telefono: x.telefono, moto: x.moto, placa: x.placa, color: x.color || "" }, usuario, clave, { activo: true });
+        } catch (e) { if (e.code !== "auth/email-already-in-use") { console.error(e); bt.disabled = false; bt.textContent = "Aprobar y agregar"; return aviso("No se pudo crear la cuenta: " + motivoEntrada(e)); } }
+      }
+      if (!uid) { bt.disabled = false; bt.textContent = "Aprobar y agregar"; return aviso("No se encontró un usuario libre. Agrégalo a mano."); }
+      bt.textContent = "Pasando fotos y documentos…";
+      try {
+        const lote = writeBatch(db);
+        lote.set(doc(db, "fotos", uid), { persona: fotos.persona || null, moto: fotos.moto || null, actualizado: serverTimestamp() });
+        const resumen = { actualizado: serverTimestamp() };
+        DOCUMENTOS.forEach((d) => {
+          resumen[d.k] = { vence: null, tiene: !!fotos[d.k] };
+          if (fotos[d.k]) lote.set(doc(db, "documentos", uid, "fotos", d.k), { foto: fotos[d.k], actualizado: serverTimestamp() });
+        });
+        lote.set(doc(db, "documentos", uid), resumen);
+        lote.update(doc(db, "motorizados", uid), { verificado: true });
+        lote.update(doc(db, "solicitudes", x.id), { estado: "aprobada", motoUid: uid, usuario, revisada: serverTimestamp() });
+        await lote.commit();
+      } catch (e) { console.error(e); aviso("La cuenta se creó, pero no se pasaron las fotos. Súbelas en Fotos y Documentos."); }
+      olvidarFotos(uid);
+      const msj = `¡Hola ${String(x.nombre).split(" ")[0]}! Fuiste aprobado para trabajar con ${NOMBRE}.\n\nEntra en la app → «Entrar como motorizado» con:\nUsuario: ${usuario}\nClave: ${clave}\n\nAntes de salir a trabajar, paga tu cuota y ponle la fecha de vencimiento a tus documentos.`;
+      $(".ventana", fondo).innerHTML = `<h2>${icono("check")} ${esc(x.nombre)} ya es motorizado</h2>
+        <div class="fila"><span>Usuario</span><b>${esc(usuario)}</b></div><div class="fila"><span>Clave</span><b>${esc(clave)}</b></div>
+        <p class="nota">Mándale sus datos para entrar. Después registra su cuota en Pagos y ponle las fechas de vencimiento en Documentos.</p>
+        <a class="boton verde" target="_blank" rel="noopener" href="${esc(enlaceWhatsapp(x.telefono, msj))}">${icono("chat")} Enviarle usuario y clave por WhatsApp</a>
+        <button class="boton secundario" data-cerrar>Listo</button>`;
+      $("[data-cerrar]", fondo).onclick = cerrar;
+    };
   }
 
   async function crearMotoPrueba(boton) {

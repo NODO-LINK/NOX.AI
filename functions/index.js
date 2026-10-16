@@ -119,6 +119,19 @@ exports.carreraCambio = onDocumentUpdated("carreras/{id}", async (e) => {
   return null;
 });
 
+// Solicitud para trabajar como motorizado: aviso al admin cuando llega (o la reenvían) y a la persona cuando se decide.
+exports.solicitudCambio = onDocumentWritten("solicitudes/{uid}", async (e) => {
+  const a = e.data.before.exists ? e.data.before.data() : null, s = e.data.after.exists ? e.data.after.data() : null;
+  if (!s) return null;
+  if (s.estado === "pendiente" && (!a || a.estado !== "pendiente"))
+    return avisarAdmins("Quieren trabajar contigo", `${s.nombre} · ${s.moto} · Placa ${s.placa}. Revisa la solicitud en Motos.`, true);
+  if (a && a.estado === "pendiente" && s.estado === "aprobada")
+    return avisar([e.params.uid], { titulo: "¡Fuiste aprobado!", cuerpo: "Te enviamos por WhatsApp tu usuario y clave de motorizado.", url: PAGINA + "moto.html", tag: "whereapp-alerta" });
+  if (a && a.estado === "pendiente" && s.estado === "rechazada")
+    return avisar([e.params.uid], { titulo: "Tu solicitud no fue aprobada", cuerpo: s.motivo || "Escríbenos para saber más.", url: PAGINA + "moto.html", tag: "whereapp-alerta" });
+  return null;
+});
+
 // Mensaje del chat: al otro.
 exports.mensajeNuevo = onDocumentCreated("carreras/{cid}/mensajes/{mid}", async (e) => {
   const m = e.data && e.data.data();

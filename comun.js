@@ -6,8 +6,8 @@ import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
-import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=95";
-import { icono, pintarIconos } from "./iconos.js?v=95";
+import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=96";
+import { icono, pintarIconos } from "./iconos.js?v=96";
 
 export { icono };
 pintarIconos();
@@ -101,6 +101,22 @@ export const DOCUMENTOS = [
   { k: "origen", t: "Certificado de origen o carnet de circulación", sinVence: true },
   { k: "cedula", t: "Cédula de identidad", sinVence: true },
 ];
+// Fotos que manda quien pide trabajar como motorizado (las obligatorias van primero).
+export const FOTOS_SOLICITUD = [
+  { k: "persona", t: "Tu foto (selfie)", obligatoria: true },
+  { k: "moto", t: "Tu moto con la placa a la vista", obligatoria: true },
+  { k: "cedula", t: "Cédula de identidad", obligatoria: true },
+  { k: "licencia", t: "Licencia de conducir", obligatoria: true },
+  { k: "medico", t: "Certificado médico (si lo tienes)" },
+  { k: "rcv", t: "RCV (si lo tienes)" },
+];
+// Teléfono venezolano en formato +58XXXXXXXXXX (acepta 0414-1234567, 414 1234567, +58…).
+export function normalizarTel(v) {
+  let d = String(v || "").replace(/\D/g, "");
+  if (d.startsWith("58")) d = d.slice(2);
+  if (d.startsWith("0")) d = d.slice(1);
+  return d.length === 10 ? "+58" + d : null;
+}
 // Estado de un documento: { c: clase de la píldora, t: texto, n: 0 al día · 1 vence pronto · 2 vencido · 3 falta }
 export function estadoDoc(d, tipo) {
   if (tipo && tipo.sinVence) return d && d.tiene ? { c: "ok", t: "Cargado", n: 0 } : { c: "mal", t: "Falta", n: 3 };
