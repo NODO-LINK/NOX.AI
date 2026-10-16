@@ -6,8 +6,8 @@ import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
-import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=94";
-import { icono, pintarIconos } from "./iconos.js?v=94";
+import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=95";
+import { icono, pintarIconos } from "./iconos.js?v=95";
 
 export { icono };
 pintarIconos();
@@ -574,9 +574,8 @@ export function avisoSinConfigurar() {
 
 // Sin pellizcar para hacer zoom (el mapa sí se puede pellizcar).
 document.addEventListener("gesturestart", (e) => { if (!e.target.closest?.(".leaflet-container")) e.preventDefault(); });
-document.addEventListener("touchmove", (e) => {
-  if (e.touches.length > 1 && !e.target.closest?.(".leaflet-container")) e.preventDefault();
-}, { passive: false });
+// (El viewport ya trae user-scalable=no. Antes había aquí un "touchmove" que no era pasivo: obligaba al teléfono
+// a esperar a JavaScript en cada movimiento del dedo y el desplazamiento iba a saltos.)
 document.addEventListener("wheel", (e) => { if (e.ctrlKey && !e.target.closest?.(".leaflet-container")) e.preventDefault(); }, { passive: false });
 
 // Onda que sale desde donde tocas un botón.

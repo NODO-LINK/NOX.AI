@@ -1354,3 +1354,34 @@ body.modo-viaje #vista > *:focus-within { z-index: 30; }
 /* Cabecera: en teléfonos angostos se acorta el nombre, nunca los botones de la derecha */
 .cabecera .dentro > div:first-child { min-width: 0; }
 .cabecera .derecha { flex-shrink: 0; }
+
+/* ---------- Fluidez (60 cuadros por segundo) ----------
+   Los pulsos ya no animan "box-shadow" (eso obliga a redibujar en cada cuadro): un anillo aparte crece y se apaga
+   con transform y opacity, que los hace la tarjeta gráfica sola. */
+.yo-punto, .en-vivo, .boton-sos { animation: none; }
+.yo-punto { box-shadow: 0 2px 6px rgba(0, 0, 0, .35); position: relative; }
+.en-vivo { box-shadow: none; position: relative; display: inline-block; }
+.boton-sos { box-shadow: 0 6px 18px rgba(220, 38, 38, .45); }
+.yo-punto::after, .en-vivo::after, .boton-sos::after {
+  content: ""; position: absolute; inset: -3px; border-radius: 50%; pointer-events: none;
+  animation: anillo 2s ease-out infinite; will-change: transform, opacity;
+}
+.yo-punto::after { background: rgba(37, 99, 235, .45); }
+.en-vivo::after { background: rgba(22, 163, 74, .5); animation-duration: 1.6s; }
+.boton-sos::after { inset: -3px; border: 3px solid rgba(220, 38, 38, .6); animation-duration: 2.4s; }
+@keyframes anillo { from { transform: scale(1); opacity: .9; } to { transform: scale(2.3); opacity: 0; } }
+/* Puntos pequeños: parpadeo suave (solo opacidad). */
+.pildora.ok::before, .pildora.ocupado::before, .barra b { animation-name: parpadeo; animation-timing-function: ease-in-out; }
+@keyframes parpadeo { 50% { opacity: .35; } }
+
+/* En teléfonos (pantalla táctil) sin vidrio esmerilado en lo que queda fijo encima del contenido:
+   difuminar lo de atrás en cada cuadro del desplazamiento es lo que más baja los cuadros por segundo. */
+@media (pointer: coarse) {
+  .cabecera, .barra, .widget, .modal, .selector, .aviso, .sugerencias, .isla, .aviso-cookies {
+    backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  .cabecera, .barra, .widget, .isla, .aviso-cookies { background: var(--vidrio-fuerte); }
+  .modal { background: rgba(28, 21, 48, .5); }
+}
+
+/* Listas largas: lo que está fuera de la pantalla no se dibuja hasta que llegas. */
+.lista > .tarjeta, .lista > article, .historial > * { content-visibility: auto; contain-intrinsic-size: auto 140px; }

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#ffffff" />
   <title>Whereapp — Privacidad y cookies</title>
   <meta name="description" content="Política de privacidad y de cookies de Whereapp, mototaxi en El Moján." />
@@ -10,13 +10,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="estilos.css?v=94" />
+  <link rel="stylesheet" href="estilos.css?v=95" />
 </head>
 <body class="sin-barra">
   <main class="vista legal">
     <a class="boton secundario chico" href="./" onclick="if (history.length > 1) { history.back(); return false; }" style="margin-top:16px;display:inline-flex">← Volver a Whereapp</a>
     <h1 class="titulo">Política de privacidad</h1>
-    <p class="nota">Última actualización: 15 de octubre de 2026</p>
+    <p class="nota">Última actualización: 16 de octubre de 2026</p>
 
     <div class="caja">
       <p>Whereapp es una aplicación para pedir mototaxi en El Moján (estado Zulia, Venezuela). Conecta a clientes con motorizados independientes. Esta política explica qué datos usamos, para qué, con quién se comparten y cómo puedes pedir que se borren.</p>
@@ -76,16 +76,28 @@
 
     <h2 class="subtitulo">4. Cuánto tiempo los guardamos</h2>
     <div class="caja">
-      <p>Guardamos tus datos mientras uses Whereapp. Si eliminas tu cuenta, se borran tu nombre, tu teléfono y tu usuario; el registro de los viajes ya hechos y los reportes de seguridad se guardan hasta 12 meses para atender reclamos (punto 6).</p>
+      <p>Guardamos tus datos mientras uses Whereapp. Si eliminas tu cuenta, se borran tu nombre, tu teléfono y tu usuario; el registro de los viajes ya hechos y los reportes de seguridad se guardan hasta 12 meses para atender reclamos (punto 7).</p>
       <p>Los datos guardados en tu teléfono (tus datos para entrar rápido y tus lugares) se borran si borras los datos de la app o del navegador.</p>
     </div>
 
-    <h2 class="subtitulo">5. Seguridad</h2>
+    <h2 class="subtitulo">5. Permisos que pide la app</h2>
+    <div class="caja">
+      <p>Whereapp pide los permisos al abrirla por primera vez. Puedes negarlos o quitarlos cuando quieras en los ajustes del teléfono (Apps → Whereapp → Permisos); la app sigue funcionando, con menos ayudas.</p>
+      <table class="tabla">
+        <tr><th>Permiso</th><th>Para qué</th><th>Si no lo das</th></tr>
+        <tr><td><b>Ubicación</b> (precisa y aproximada), solo con la app abierta</td><td>Pasajero: poner el punto A solo y ver los motorizados cercanos. Motorizado: que el pasajero vea por dónde viene mientras está de turno o en una carrera.</td><td>Marcas el punto A a mano en el mapa. El motorizado no puede trabajar de turno.</td></tr>
+        <tr><td><b>Notificaciones</b></td><td>Avisarte cuando te aceptan, llega la moto, te escriben o termina el viaje; al motorizado, las carreras nuevas; y el viaje en curso en la barra del teléfono.</td><td>Solo ves los avisos con la app abierta.</td></tr>
+        <tr><td><b>Internet</b></td><td>Pedir y seguir carreras.</td><td>—</td></tr>
+      </table>
+      <p>Whereapp <b>no</b> usa la ubicación en segundo plano, ni la cámara, el micrófono, tus contactos, tus fotos ni tus archivos. El contacto de confianza lo escribes tú y se guarda solo en tu teléfono.</p>
+    </div>
+
+    <h2 class="subtitulo">6. Seguridad</h2>
     <div class="caja">
       <p>Usamos conexiones cifradas (HTTPS) y reglas de acceso para que cada persona vea solo lo que le corresponde. Ningún sistema es 100% seguro; si detectamos un problema que afecte tus datos, te avisaremos.</p>
     </div>
 
-    <h2 class="subtitulo">6. Tus derechos</h2>
+    <h2 class="subtitulo">7. Tus derechos</h2>
     <div class="caja">
       <p>Conforme a la Constitución de Venezuela (artículos 28 y 60, habeas data), puedes:</p>
       <ul>
@@ -98,12 +110,12 @@
       <p>Para lo demás, escribe a <a href="mailto:braian150609@gmail.com">braian150609@gmail.com</a> con tu nombre y tu teléfono. Te responderemos en un máximo de 30 días.</p>
     </div>
 
-    <h2 class="subtitulo">7. Menores de edad</h2>
+    <h2 class="subtitulo">8. Menores de edad</h2>
     <div class="caja">
       <p>Whereapp es para mayores de 18 años. Un menor solo debe usarla con permiso y acompañamiento de su representante.</p>
     </div>
 
-    <h2 class="subtitulo">8. Cambios a esta política</h2>
+    <h2 class="subtitulo">9. Cambios a esta política</h2>
     <div class="caja">
       <p>Si cambiamos esta política, actualizaremos la fecha de arriba. Si el cambio es importante, te lo pediremos aceptar de nuevo en la app.</p>
     </div>
@@ -116,9 +128,15 @@
         <tr><th>Qué se guarda</th><th>Para qué</th></tr>
         <tr><td>Tu sesión (Firebase)</td><td>Que no tengas que entrar cada vez.</td></tr>
         <tr><td>Tu nombre y teléfono</td><td>Entrar con un toque la próxima vez.</td></tr>
-        <tr><td>Tus lugares guardados</td><td>Casa, Trabajo y los que agregues.</td></tr>
-        <tr><td>Lugares del mapa (7 días)</td><td>Que el mapa cargue más rápido.</td></tr>
-        <tr><td>Tipo de mapa y forma de pago</td><td>Recordar tus preferencias.</td></tr>
+        <tr><td>Tus lugares guardados y destinos recientes</td><td>Casa, Trabajo y los que agregues; pedir más rápido.</td></tr>
+        <tr><td>Contacto de confianza</td><td>Avisarle de tu viaje o en un SOS. No sale de tu teléfono.</td></tr>
+        <tr><td>Tu pedido de tienda sin enviar</td><td>Que no se pierda si cierras la app.</td></tr>
+        <tr><td>Código de tu viaje (PIN) y mensajes leídos</td><td>Mostrártelo durante el viaje y saber qué mensajes ya viste.</td></tr>
+        <tr><td>Lugares del mapa (7 días) y sesión del mapa de Google</td><td>Que el mapa cargue más rápido.</td></tr>
+        <tr><td>Tipo de mapa, forma de pago y si entras como pasajero o motorizado</td><td>Recordar tus preferencias.</td></tr>
+        <tr><td>Consejos ya vistos y anuncios cerrados</td><td>No mostrártelos otra vez.</td></tr>
+        <tr><td>Un aviso de uso por día</td><td>Contar visitas y si usas la app instalada (sin rastrearte).</td></tr>
+        <tr><td>Permiso de notificaciones (token)</td><td>Enviarte los avisos. Se borra al salir de tu cuenta.</td></tr>
         <tr><td>Copia de la app (service worker)</td><td>Que abra aunque haya poca señal.</td></tr>
         <tr><td>Que aceptaste esta política</td><td>No volver a preguntarte.</td></tr>
       </table>
