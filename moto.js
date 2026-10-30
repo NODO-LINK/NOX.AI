@@ -11,7 +11,7 @@ import {
   DOCUMENTOS, estadoDoc,
   enApp, textoDescuento, totalPedido, WHATSAPP, enlaceWhatsapp, FOTOS_SOLICITUD, normalizarTel, achicarFoto,
   RAPIDOS_MOTO, enviarMensaje, botonesRapidos, activarPush, avisosAlEntrar, olvidarPush,
-} from "./comun.js?v=96";
+} from "./comun.js?v=97";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -520,7 +520,8 @@ function iniciar() {
         setDoc(doc(db, "ubicaciones", yo.uid), { ...pos, t: new Date() }).catch(() => {});
       }
       const movido = ultPos ? lineaRecta(ultPos, pos) : Infinity;
-      if ((movido > 0.15 && ahora - ultFicha >= 180000) || ahora - ultFicha >= 480000) {
+      // Para el mapa en vivo del admin y la lista de los pasajeros: cada minuto si se movió (80 m), y al menos cada 5 min.
+      if ((movido > 0.08 && ahora - ultFicha >= 60000) || ahora - ultFicha >= 300000) {
         ultFicha = ahora; ultPos = pos;
         updateDoc(doc(db, "motorizados", yo.uid), { ubicacion: { ...pos, t: new Date() } }).catch(() => {});
       }

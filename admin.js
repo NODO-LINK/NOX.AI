@@ -16,7 +16,7 @@ import {
   DOCUMENTOS, estadoDoc, resumenDocs,
   filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles, textoDescuento,
   TIPOS_NEGOCIO, CENTRO, numeroWhatsapp, avisosAlEntrar, olvidarPush, FOTOS_SOLICITUD,
-} from "./comun.js?v=96";
+} from "./comun.js?v=97";
 
 if (!avisoSinConfigurar()) iniciar();
 // Estrellas dibujadas (sin emojis): llenas y, si se pide, también las apagadas.
@@ -25,7 +25,7 @@ const estrellasVec = (n, conApagadas = false) => [1, 2, 3, 4, 5].filter((k) => c
 function iniciar() {
   let subs = [], ruta = "motos", tarifas = null;
   let motos = [], carreras = [], resenas = [], pagos = [], llamadas = {}, visitas = {}, cedulas = {}, clientes = [], bloqueados = {}, notasClientes = {};
-  let mapaVivo = null, marcasVivo = {}, filtroClientes = "";
+  let mapaVivo = null, marcasVivo = {}, filtroClientes = "", enVivo = {};
   let lugaresPropios = [], mapaLugares = null, reportesPago = [], solicitudes = [];
   let anuncios = [], promos = [];
   let anuncio = null, publicidad = null, toquesPub = 0;
@@ -85,6 +85,12 @@ function iniciar() {
     // Personas que pidieron trabajar como motorizado (desde «Entrar como motorizado»).
     escuchar(query(collection(db, "solicitudes"), where("estado", "==", "pendiente")), (s) => {
       solicitudes = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (fecha(a.creada) || 0) - (fecha(b.creada) || 0));
+    });
+    // Posición en vivo de los motorizados en carrera (la mandan cada 8 s): solo mueve los pines, no redibuja el panel.
+    escuchar(collection(db, "ubicaciones"), (s) => {
+      enVivo = Object.fromEntries(s.docs.map((d) => [d.id, d.data()]));
+      moverMapaVivo();
+      return false;
     });
     escuchar(collection(db, "documentos"), (s) => { documentos = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); });
     escuchar(doc(db, "config", "anuncio"), (d) => { anuncio = d.exists() ? d.data() : null; });
@@ -191,7 +197,7 @@ function iniciar() {
     if (!mapaVivo) return;
     const L = window.L;
     for (const m of motos) {
-      const u = m.ubicacion;
+      const u = posicion(m);
       if (!ubicOk(u)) continue;
       const icono = L.divIcon({ className: "", html: `<div class="pin" style="background:${colorMoto(m)}"><span>${esc(m.nombre.slice(0, 1).toUpperCase())}</span></div>`, iconSize: [30, 30], iconAnchor: [15, 30] });
       const texto = `<b>${esc(m.nombre)}</b><br>${estadoMoto(m)}<br><small>${fechaTexto(u.t)}</small>`;
@@ -199,12 +205,19 @@ function iniciar() {
       else marcasVivo[m.id].setLatLng([u.lat, u.lng]).setIcon(icono).setPopupContent(texto);
     }
     // Quita los pines de motorizados borrados o sin ubicación.
-    for (const id of Object.keys(marcasVivo)) if (!motos.some((m) => m.id === id && ubicOk(m.ubicacion))) { marcasVivo[id].remove(); delete marcasVivo[id]; }
+    for (const id of Object.keys(marcasVivo)) if (!motos.some((m) => m.id === id && ubicOk(posicion(m)))) { marcasVivo[id].remove(); delete marcasVivo[id]; }
+  }
+  // La posición más nueva: la en vivo (si está en carrera) o la de su ficha.
+  function posicion(m) {
+    const v = enVivo[m.id], f = m.ubicacion;
+    if (!ubicOk(v)) return f;
+    if (!ubicOk(f)) return v;
+    return (fecha(v.t) || 0) >= (fecha(f.t) || 0) ? v : f;
   }
 
   function vistaMotos() {
     if (mapaVivo) { mapaVivo.remove(); mapaVivo = null; marcasVivo = {}; }
-    const conUbic = motos.filter((m) => ubicOk(m.ubicacion)).length;
+    const conUbic = motos.filter((m) => ubicOk(posicion(m))).length;
     $("#vista").innerHTML = `
       <h1 class="titulo">${icono("pin")} Mapa en vivo</h1>
       <div class="mapa" id="mapa-vivo"></div>
@@ -240,7 +253,7 @@ function iniciar() {
         </article>`).join("") || `<div class="vacio">${icono("moto")}Aún no hay motorizados.</div>`}</div>`;
     mapaVivo = nuevoMapa("mapa-vivo");
     moverMapaVivo();
-    const puntos = motos.filter((m) => ubicOk(m.ubicacion)).map((m) => [Number(m.ubicacion.lat), Number(m.ubicacion.lng)]);
+    const puntos = motos.map(posicion).filter(ubicOk).map((u) => [Number(u.lat), Number(u.lng)]);
     if (puntos.length > 1) mapaVivo.fitBounds(window.L.latLngBounds(puntos).pad(0.3), { animate: false });
     else if (puntos.length === 1) mapaVivo.setView(puntos[0], 15, { animate: false });
     $("#nuevo").onclick = () => formularioMoto();
