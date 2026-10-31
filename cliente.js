@@ -9,13 +9,13 @@ import {
 import {
   auth, db, NOMBRE, SERVICIOS, $, $$, esc, usd, fecha, fechaTexto, estrellas, promedio, habilitado, leerTarifas, escucharTarifas, recargos, precio, precioLleno, descuento, textoDescuento, ruta, botonTema, botonInstalar, registroSw, escucharChat, abrirChat,
   ICONOS, icono, nuevoMapa, mostrarLugares, tipoLugar, normalizar, marcarRecorrido, filasRecorrido, transicion, activarBarra, progreso, afinarEta, lineaRecta, compartirCarrera, aviso, elegirMotivo, MOTIVOS_CLIENTE, avisoSinConfigurar,
-  pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
+  pintarFotos, fotosDe, leerOpiniones, listaOpiniones, coincideLugar, politicasAceptadas, aceptarPoliticas, ENLACE_POLITICAS, VERSION_POLITICAS, PIE_LEGAL, avisoCookies, sonarAlerta, cargarLugares, CENTRO, ASPECTOS, insigniasSeguridad, FORMAS_PAGO, aBs, bs, textoCobro,
   hoyLocal,
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca, enlaceDescarga, TIPOS_NEGOCIO, numeroWhatsapp, totalPedido, resumenPedido, mensajePedido,
   precioCodigo, textoRecibo, RAPIDOS_CLIENTE, enviarMensaje, botonesRapidos, conBs, activarPush, avisosAlEntrar, olvidarPush, hayBuscadorGoogle, buscarGoogle, lugarGoogle,
-} from "./comun.js?v=97";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=97";
+} from "./comun.js?v=98";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=98";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -25,7 +25,7 @@ function iniciar() {
   let rutaActual = "inicio", mapa = null;
   const PRINCIPALES = ["inicio", "carrera", "cuenta"];
   let accionSalir = () => {};
-  let escuchaAtras = false;
+  let escuchaAtras = false, entradaPropia = false;
   // QR del motorizado (…/?moto=ID): al entrar se abre su perfil para pedirle.
   let motoDelQr = new URLSearchParams(location.search).get("moto");
   let motos = [], carreras = [], cancelarSubs = [];
@@ -76,11 +76,11 @@ function iniciar() {
     $("#cabecera").hidden = true; $("#barra").hidden = true; $("#widget").hidden = true; document.body.classList.add("sin-barra");
     document.body.classList.remove("con-widget");
     const guardados = forzarFormulario ? null : recordados.leer();
-    const pie = `<p class="nota" style="text-align:center;margin-top:18px">${ENLACE_POLITICAS}</p>`;
+    const pie = `<p class="nota" style="text-align:center;margin-top:18px">${PIE_LEGAL}</p>`;
     // Una sola app: los motorizados entran desde aquí (la app recuerda el modo para la próxima vez).
     const enlaceMoto = `<a class="enlace-modo" href="moto.html" data-modo="moto">Entrar como motorizado</a>`;
     // Casilla para aceptar la política (solo si no la ha aceptado en este teléfono).
-    const casilla = politicasAceptadas() ? "" : `<label class="opcion acepto"><input type="checkbox" id="acepto"><span>Acepto la <a href="privacidad.html" target="_blank">política de privacidad y de cookies</a></span></label>`;
+    const casilla = politicasAceptadas() ? "" : `<label class="opcion acepto"><input type="checkbox" id="acepto"><span>Acepto los <a href="terminos.html" target="_blank">términos y condiciones</a> y la <a href="privacidad.html" target="_blank">política de privacidad y de cookies</a></span></label>`;
     const falta = () => {
       if (!$("#acepto") || $("#acepto").checked) return false;
       aviso("Para entrar, acepta la política de privacidad y de cookies");
@@ -185,6 +185,8 @@ function iniciar() {
       if (confirm("¿Salir de Whereapp?")) olvidarPush(auth.currentUser && auth.currentUser.uid).then(() => signOut(auth));
     };
     accionSalir = salir;
+    // Si actualizamos los términos o la privacidad, se avisa una vez (con «Entendido» quedan aceptados).
+    if (!politicasAceptadas()) setTimeout(avisoCookies, 2000);
     $("#widget").onclick = () => ir("carrera");
     $("#atras").onclick = () => atras();
     if (!escuchaAtras) {
@@ -350,9 +352,12 @@ function iniciar() {
     $("#barra").hidden = !principal;
     document.body.classList.toggle("sin-barra", !principal);
     document.body.classList.toggle("modo-viaje", r === "viaje" || r === "publicar" || r === "pedir" || r === "encargo");
-    if (r !== "inicio" && !(history.state && history.state.seccion)) history.pushState({ seccion: 1 }, "");
-    // Al volver al inicio con la barra se quita la entrada extra: así un solo "atrás" sale de la app.
-    if (r === "inicio" && history.state && history.state.seccion) history.back();
+    if (r !== "inicio" && !(history.state && history.state.seccion)) { history.pushState({ seccion: 1 }, ""); entradaPropia = true; }
+    // Al volver al inicio con la barra se quita la entrada extra (solo la que puso esta misma visita): así un solo "atrás" sale de la app.
+    if (r === "inicio" && history.state && history.state.seccion) {
+      if (entradaPropia) history.back(); else history.replaceState(null, "");
+      entradaPropia = false;
+    }
     if (principal) activarBarra(r);
     if (mapa) { mapa.remove(); mapa = null; }
     // El mapa del selector se cierra bien (si no, su GPS seguiría encendido).
@@ -415,7 +420,7 @@ function iniciar() {
             <span class="portada-y">${n.foto ? `<img src="${esc(n.foto)}" alt="" loading="lazy">` : icono(TIPOS_NEGOCIO[n.tipo]?.icono || "carrito")}</span>
             <b>${esc(n.nombre)}</b><small>${esc(TIPOS_NEGOCIO[n.tipo]?.corto || "")}</small></button>`).join("")}</div>` : ""}
       ${htmlAnuncio()}
-      <p class="nota pie-legal">${ENLACE_POLITICAS}</p></div>`;
+      <p class="nota pie-legal">${PIE_LEGAL}</p></div>`;
     atarAnuncios();
     const abrir = (el, r) => { if (!tarifas) return aviso("Cargando… un momento"); transicionCompartida(el, () => ir(r, true), () => $("#vista")); };
     $$(".servicio-y").forEach((b) => (b.onclick = () => abrir(b, b.dataset.seccion)));
@@ -503,6 +508,7 @@ function iniciar() {
         <button data-op="contacto">${icono("usuario")}<span>Contacto de confianza<small>${contactoSos.leer() ? esc(contactoSos.leer().nombre) : "Para avisarle de tus viajes y en un SOS"}</small></span>${icono("flecha")}</button>
         <div class="fila-op" id="op-instalar">${icono("descargar")}<span>Instalar la app</span></div>
         <a href="${esc(enlaceWhatsapp(WHATSAPP, `Hola, soy ${cliente.nombre}. Necesito ayuda con Whereapp.`))}" target="_blank" rel="noopener">${icono("chat")}<span>Ayuda por WhatsApp<small>0412-3042896</small></span>${icono("flecha")}</a>
+        <a href="terminos.html">${icono("tarjeta")}<span>Términos y condiciones</span>${icono("flecha")}</a>
         <a href="privacidad.html">${icono("escudo")}<span>Privacidad y cookies</span>${icono("flecha")}</a>
         <a href="moto.html" data-modo="moto">${icono("moto")}<span>Entrar como motorizado<small>Para quienes trabajan con Whereapp</small></span>${icono("flecha")}</a>
       </div>
@@ -1621,7 +1627,7 @@ function iniciar() {
     esperandoSenal = false;
     if (enPedido() && !carreraActual()) setTimeout(() => enviarPedido(true), 1200);
   });
-  async function enviarPedido(reintento = false) {
+  async function enviarPedido(reintento = false, otraVez = false) {
     if (bloqueado) return aviso(textoBloqueo());
     if (carreraActual()) return aviso("Ya tienes una carrera en curso");
     const n = pedido.puntos.length;
@@ -1719,7 +1725,15 @@ function iniciar() {
       contarVendidos();
       if (reintento) aviso("¡Volvió la señal! Tu pedido ya se envió");
       listo();
-    } catch (e) { fallo(e); }
+    } catch (e) {
+      // Pidió otro viaje hace menos de 20 s (por ejemplo, al volver la señal): se espera y se reintenta solo, una vez.
+      if (e && e.code === "permission-denied" && !otraVez && !bloqueado) {
+        aviso("Un momento: enviamos tu pedido en unos segundos…");
+        setTimeout(() => { if (enPedido() && !carreraActual() && pedido.km != null) enviarPedido(reintento, true); else if ($("#pedir")) $("#pedir").disabled = false; }, 21000);
+        return;
+      }
+      fallo(e);
+    }
   }
 
   // ---------- Motorizados activos ----------
@@ -1773,7 +1787,7 @@ function iniciar() {
           </div>
         </article>`).join("") : `<div class="vacio">${icono("moto")}<b>No hay motorizados de turno ahora.</b><br>Intenta en un rato; esta lista se actualiza sola.</div>`}
       </div>`;
-    $("#vista").insertAdjacentHTML("beforeend", `<p class="nota pie-legal">${ENLACE_POLITICAS}</p>`);
+    $("#vista").insertAdjacentHTML("beforeend", `<p class="nota pie-legal">${PIE_LEGAL}</p>`);
     $$("[data-perfil]").forEach((b) => (b.onclick = () => verPerfil(motos.find((x) => x.id === b.dataset.perfil), b.closest("article")?.querySelector(".avatar"))));
     pintarFotos($("#vista"));
     atarAnuncios();

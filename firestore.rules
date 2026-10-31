@@ -192,7 +192,7 @@ service cloud.firestore {
         && (resource == null || !('ultimaCarrera' in resource.data) || 'ultimaCarrera' in request.resource.data);
       // Puede eliminar su cuenta (Play Store lo exige). Los bloqueos por teléfono siguen en /bloqueados.
       allow delete: if dentro() && request.auth.uid == uid;
-      allow read, update: if esAdmin();
+      allow read, update, delete: if esAdmin();
     }
 
     // Solicitudes para trabajar como motorizado: cada persona (cuenta anónima) envía la suya; solo ella y el admin la ven.
@@ -269,6 +269,8 @@ service cloud.firestore {
         || (esMoto() && resource.data.estado == 'esperando' && motoHabilitado());
 
       allow create: if dentro() && idNormal(id) && carreraNuevaOk(id, request.resource.data);
+      // El admin puede borrar carreras (limpieza de datos de prueba antes del lanzamiento).
+      allow delete: if esAdmin();
 
       allow update: if esAdmin()
         // El cliente cancela su carrera…
@@ -347,6 +349,7 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/carreras/$(cid)).data.clienteUid == request.auth.uid
         && getAfter(/databases/$(database)/documents/carreras/$(cid)).data.get('conPin', false) == true
         && request.resource.data.keys().hasOnly(['pin']) && request.resource.data.pin is string && request.resource.data.pin.matches('^[0-9]{4}$');
+      allow list, delete: if esAdmin();
     }
 
     // Contraofertas: cada motorizado propone su precio en una carrera publicada por el cliente.
@@ -361,7 +364,7 @@ service cloud.firestore {
         && request.resource.data.nombre == motoData(motoId).nombre
         && (request.resource.data.get('precioBs', null) == null || request.resource.data.precioBs is number)
         && ahora('fecha');
-      allow delete: if dentro() && request.auth.uid == motoId;
+      allow delete: if esAdmin() || (dentro() && request.auth.uid == motoId);
     }
 
     // Chat de la carrera: solo el cliente y el motorizado asignado (el admin puede leer).
@@ -377,6 +380,7 @@ service cloud.firestore {
         && request.resource.data.de == request.auth.uid
         && request.resource.data.texto is string
         && request.resource.data.texto.size() > 0 && request.resource.data.texto.size() <= 500;
+      allow delete: if esAdmin();
     }
 
     // El motorizado califica al cliente al terminar (solo el admin las ve).
@@ -391,7 +395,7 @@ service cloud.firestore {
         && texto(request.resource.data.get('comentario', ''), 300) && ahora('fecha')
         && request.resource.data.estrellas is int
         && request.resource.data.estrellas >= 1 && request.resource.data.estrellas <= 5;
-      allow read: if esAdmin();
+      allow read, delete: if esAdmin();
     }
 
     match /resenas/{id} {
@@ -472,7 +476,7 @@ service cloud.firestore {
     }
 
     match /stats/visitas {
-      allow read: if esAdmin();
+      allow read, delete: if esAdmin();
       // Solo se puede sumar 1 visita (nada de borrar ni poner textos raros).
       allow create: if dentro() && request.resource.data.keys().hasOnly(['total', 'dias'])
         && request.resource.data.total == 1 && request.resource.data.dias is map && request.resource.data.dias.size() == 1;

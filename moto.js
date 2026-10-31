@@ -5,13 +5,13 @@ import {
   doc, getDoc, setDoc, deleteDoc, addDoc, writeBatch, onSnapshot, updateDoc, collection, query, where, runTransaction, serverTimestamp, arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  pedirAvisosAlTocar, leerOpiniones, listaOpiniones, ENLACE_POLITICAS, sonarAlerta, ASPECTOS, insigniasSeguridad, textoCobro, FORMAS_PAGO, bs, auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
+  pedirAvisosAlTocar, leerOpiniones, listaOpiniones, ENLACE_POLITICAS, ENLACE_TERMINOS, sonarAlerta, ASPECTOS, insigniasSeguridad, textoCobro, FORMAS_PAGO, bs, auth, db, NOMBRE, motivoEntrada, correoDe, $, $$, esc, usd, fecha, fechaTexto, estrellas, habilitado, ICONOS, icono, botonTema, botonInstalar, pedirPermisoAvisos, notificar, escucharChat, abrirChat, nuevoMapa, mostrarLugares, marcarRecorrido, filasRecorrido, mapsRuta, transicion,
   mapsLink, aviso, elegirMotivo, MOTIVOS_MOTO, avisoSinConfigurar, escucharTarifas, aBs, lineaRecta,
   hoyLocal,
   DOCUMENTOS, estadoDoc,
   enApp, textoDescuento, totalPedido, WHATSAPP, enlaceWhatsapp, FOTOS_SOLICITUD, normalizarTel, achicarFoto,
   RAPIDOS_MOTO, enviarMensaje, botonesRapidos, activarPush, avisosAlEntrar, olvidarPush,
-} from "./comun.js?v=97";
+} from "./comun.js?v=98";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -119,7 +119,7 @@ function iniciar() {
         <a class="enlace-modo" href="index.html?pasajero" data-modo="pasajero">Entrar como pasajero</a>
         <p class="nota">El usuario y la clave te los da el administrador.</p>
         <button type="button" class="pedir-trabajo" id="pedir-trabajo">${icono("moto")}<span><b>¿Quieres trabajar con ${NOMBRE}?</b><small>Solicítalo aquí</small></span>${icono("flecha")}</button>
-        <p class="nota">Al entrar aceptas la ${ENLACE_POLITICAS.replace("Política", "política")}.</p></form></div>`;
+        <p class="nota">Al entrar aceptas los ${ENLACE_TERMINOS.replace("Términos", "términos")} y la ${ENLACE_POLITICAS.replace("Política", "política")}.</p></form></div>`;
     $("#login").onsubmit = async (e) => {
       e.preventDefault();
       try { await signInWithEmailAndPassword(auth, correoDe($("#usuario").value), $("#clave").value); }
@@ -176,7 +176,7 @@ function iniciar() {
         <p class="nota">Toca cada cuadro para tomar o elegir la foto. Que se lea bien.</p>
         <div class="fotos-solicitud">${FOTOS_SOLICITUD.map((x) => `<label class="doc-foto"><span class="foto-vista" data-vista="${x.k}">${icono(x.k === "moto" ? "moto" : x.k === "persona" ? "usuario" : "tarjeta")}</span>
           <input type="file" accept="image/*" data-archivo="${x.k}" hidden><small>${esc(x.t)}${x.obligatoria ? " *" : ""}</small></label>`).join("")}</div>
-        <p class="nota">Al enviarla aceptas la ${ENLACE_POLITICAS.replace("Política", "política")}. Tus datos y fotos solo los ve el administrador.</p>
+        <p class="nota">Al enviarla aceptas los ${ENLACE_TERMINOS.replace("Términos", "términos")} y la ${ENLACE_POLITICAS.replace("Política", "política")}. Tus datos y fotos solo los ve el administrador.</p>
         <button class="boton" id="enviar-solicitud">Enviar solicitud</button>
         <button type="button" class="boton secundario" id="volver">Volver</button></form></div>`;
     $("#volver").onclick = volver;

@@ -6,8 +6,8 @@ import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
-import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=97";
-import { icono, pintarIconos } from "./iconos.js?v=97";
+import { firebaseConfig as configReal, appCheckClave, vapidClave, mapsClave } from "./firebase-config.js?v=98";
+import { icono, pintarIconos } from "./iconos.js?v=98";
 
 export { icono };
 pintarIconos();
@@ -1060,17 +1060,20 @@ export function botonInstalar() {
 
 // ---------- Política de privacidad y cookies ----------
 // Si la política cambia, sube la versión para que todos la acepten de nuevo.
-export const VERSION_POLITICAS = "2026-10-04";
+export const VERSION_POLITICAS = "2026-10-31";
 const CLAVE_POLITICAS = "whereapp.politicas";
 export const politicasAceptadas = () => { try { return localStorage.getItem(CLAVE_POLITICAS) === VERSION_POLITICAS; } catch { return false; } };
 export const aceptarPoliticas = () => { try { localStorage.setItem(CLAVE_POLITICAS, VERSION_POLITICAS); } catch {} };
 export const ENLACE_POLITICAS = `<a href="privacidad.html" class="enlace">Política de privacidad y cookies</a>`;
+export const ENLACE_TERMINOS = `<a href="terminos.html" class="enlace">Términos y condiciones</a>`;
+// Pie legal: términos y privacidad juntos.
+export const PIE_LEGAL = `${ENLACE_TERMINOS} · ${ENLACE_POLITICAS}`;
 // Aviso de cookies abajo (motorizados, panel y seguimiento; el cliente acepta al entrar).
 export function avisoCookies() {
   if (politicasAceptadas() || $("#aviso-cookies")) return;
   const a = document.createElement("div");
   a.id = "aviso-cookies"; a.className = "aviso-cookies";
-  a.innerHTML = `<p>${icono("escudo")} <span>Whereapp guarda tu sesión y preferencias en este teléfono para funcionar. No usamos cookies de publicidad ni de rastreo. <a href="privacidad.html#cookies">Más información</a></span></p>
+  a.innerHTML = `<p>${icono("escudo")} <span>Al usar Whereapp aceptas los <a href="terminos.html">términos y condiciones</a> y la <a href="privacidad.html">política de privacidad</a>. Guardamos tu sesión y preferencias en este teléfono; no usamos cookies de publicidad ni de rastreo.</span></p>
     <button class="boton chico">Entendido</button>`;
   $("button", a).onclick = () => { aceptarPoliticas(); a.classList.add("fuera"); setTimeout(() => a.remove(), 300); };
   document.body.append(a);

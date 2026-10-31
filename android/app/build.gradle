@@ -10,7 +10,7 @@ android {
         minSdk 21
         targetSdk 36
         versionCode Integer.parseInt(System.getenv("WHEREAPP_VERSION_CODE") ?: "100")
-        versionName System.getenv("WHEREAPP_VERSION_NAME") ?: "2.0"
+        versionName System.getenv("WHEREAPP_VERSION_NAME") ?: "1.0"
     }
     signingConfigs {
         if (llaveCliente) {

@@ -16,7 +16,7 @@ import {
   DOCUMENTOS, estadoDoc, resumenDocs,
   filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles, textoDescuento,
   TIPOS_NEGOCIO, CENTRO, numeroWhatsapp, avisosAlEntrar, olvidarPush, FOTOS_SOLICITUD,
-} from "./comun.js?v=97";
+} from "./comun.js?v=98";
 
 if (!avisoSinConfigurar()) iniciar();
 // Estrellas dibujadas (sin emojis): llenas y, si se pide, también las apagadas.
@@ -1167,6 +1167,57 @@ function iniciar() {
       <button class="boton secundario chico" id="actualizar-reportes">${icono("deshacer")} Actualizar reportes</button>`;
   }
 
+  // ---------- Antes del lanzamiento: borrar los datos de prueba de una vez ----------
+  // Se quedan: motorizados, negocios, productos, tarifas, lugares, códigos y publicidad.
+  const LIMPIEZA = [
+    { k: "carreras", t: "Carreras, chats, ofertas y PIN", sub: ["mensajes", "ofertas", "privado"], tambien: ["resenas", "calificacionesClientes"] },
+    { k: "clientes", t: "Clientes (pasajeros) registrados" },
+    { k: "pagos", t: "Pagos y reportes de cuota", tambien: ["reportesPago"] },
+    { k: "stats", t: "Números: visitas, llamadas y toques" },
+  ];
+  function cajaLimpiar(cont) {
+    const caja = document.createElement("div");
+    caja.className = "caja limpiar-pruebas";
+    caja.innerHTML = `<h2>${icono("basura")} Borrar datos de prueba</h2>
+      <p class="nota">Úsalo <b>una sola vez antes del lanzamiento</b>, para empezar en cero. Se quedan los motorizados, negocios, productos, tarifas, lugares, códigos y publicidad. <b>No se puede deshacer.</b></p>
+      ${LIMPIEZA.map((x) => `<label class="opcion"><input type="checkbox" data-limpiar="${x.k}" checked><span>${esc(x.t)}</span></label>`).join("")}
+      <button class="boton peligro" id="limpiar">Borrar lo marcado</button><p class="nota" id="limpiar-estado"></p>`;
+    cont.append(caja);
+    $("#limpiar", caja).onclick = async () => {
+      const elegidos = LIMPIEZA.filter((x) => $(`[data-limpiar=${x.k}]`, caja).checked);
+      if (!elegidos.length) return aviso("Marca lo que quieres borrar");
+      if (carreras.some((c) => c.estado === "aceptada")) return aviso("Hay una carrera en curso: espera que termine antes de borrar.");
+      const ok = prompt(`Se borrará: ${elegidos.map((x) => x.t.toLowerCase()).join(", ")}.\n\nEscribe BORRAR para confirmar.`);
+      if (String(ok || "").trim().toUpperCase() !== "BORRAR") return aviso("No se borró nada");
+      const bt = $("#limpiar", caja), estado = $("#limpiar-estado", caja); bt.disabled = true;
+      let total = 0;
+      // Borra en lotes de 400 (Firestore acepta hasta 500 por lote).
+      const borrarTodo = async (refs) => { for (let i = 0; i < refs.length; i += 400) { const b = writeBatch(db); refs.slice(i, i + 400).forEach((r) => b.delete(r)); await b.commit(); total += Math.min(400, refs.length - i); estado.textContent = `Borrando… ${total}`; } };
+      const docsDe = async (ruta) => (await getDocs(collection(db, ...ruta))).docs.map((d) => d.ref);
+      try {
+        for (const x of elegidos) {
+          if (x.k === "stats") {
+            await borrarTodo([...(await docsDe(["llamadas"])), doc(db, "stats", "visitas"), doc(db, "stats", "publicidad")]);
+            continue;
+          }
+          const refs = await docsDe([x.k]);
+          if (x.sub) for (const r of refs) for (const s of x.sub) await borrarTodo(await docsDe([x.k, r.id, s]));
+          await borrarTodo(refs);
+          for (const otra of x.tambien || []) await borrarTodo(await docsDe([otra]));
+          // Sin carreras, ningún motorizado queda "en carrera" ni con su posición en vivo.
+          if (x.k === "carreras") {
+            const b = writeBatch(db);
+            motos.forEach((m) => { b.update(doc(db, "motorizados", m.id), { enCarrera: false }); b.delete(doc(db, "ubicaciones", m.id)); });
+            await b.commit();
+          }
+        }
+        estado.textContent = `Listo: se borraron ${total} registros.`;
+        aviso("Datos de prueba borrados");
+      } catch (e) { console.error(e); estado.textContent = ""; aviso("No se pudo borrar todo. ¿Publicaste las reglas nuevas?"); }
+      bt.disabled = false;
+    };
+  }
+
   // Pestaña "Más": tarifas y números.
   let subMas = "tarifas";
   function vistaMas() {
@@ -1184,6 +1235,7 @@ function iniciar() {
     const cont = $("#sub-vista");
     vista.id = ""; cont.id = "vista";
     ({ tarifas: vistaTarifas, stats: vistaStats, lugares: vistaLugares, publicidad: vistaPublicidad, negocios: vistaNegocios })[subMas]();
+    if (subMas === "stats") cajaLimpiar(cont);
     cont.id = "sub-vista"; vista.id = real;
     $$("#sub-mas button").forEach((b) => (b.onclick = () => { subMas = b.dataset.s; vistaMas(); }));
   }
