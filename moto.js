@@ -11,7 +11,7 @@ import {
   DOCUMENTOS, estadoDoc,
   enApp, textoDescuento, totalPedido, WHATSAPP, enlaceWhatsapp, FOTOS_SOLICITUD, normalizarTel, achicarFoto,
   RAPIDOS_MOTO, enviarMensaje, botonesRapidos, activarPush, avisosAlEntrar, olvidarPush,
-} from "./comun.js?v=98";
+} from "./comun.js?v=99";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -553,7 +553,7 @@ function iniciar() {
 
     let html = "";
     if (!perfil.activo) html += perfil.motivoBloqueo
-      ? `<div class="caja"><h2>${icono("bloquear")} Estás bloqueado</h2><p class="nota">Motivo: ${esc(perfil.motivoBloqueo)}. Habla con el administrador por WhatsApp (0412-3042896).</p></div>`
+      ? `<div class="caja"><h2>${icono("bloquear")} Estás bloqueado</h2><p class="nota">Motivo: ${esc(perfil.motivoBloqueo)}. Habla con el administrador por WhatsApp (0422-0447096).</p></div>`
       : `<div class="caja"><h2>Estás inactivo</h2><p class="nota">El administrador debe activarte para que recibas carreras y salgas en la app.</p></div>`;
     else if (!ok) html += `<div class="caja"><h2>${vence ? "Quincena vencida" : "Falta tu primera cuota"}</h2><p class="nota">${vence ? `Tu pago venció el ${fechaTexto(vence)}.` : "Todavía no tienes una cuota pagada."} Paga la cuota y repórtala abajo en «Tu cuota» para volver a salir en la app.</p></div>`;
     else if (vence && vence - new Date() < 3 * 864e5) html += `<p class="pildora alerta" style="display:inline-block;margin-top:12px">Tu quincena vence el ${fechaTexto(vence)}</p>`;

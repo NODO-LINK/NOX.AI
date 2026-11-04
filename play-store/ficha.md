@@ -39,7 +39,7 @@ Y ADEMÁS
 
 ¿Trabajas con moto? Entra como motorizado desde la misma app.
 
-Ayuda por WhatsApp: 0412-3042896
+Ayuda por WhatsApp: 0422-0447096
 
 ## Categoría
 Mapas y navegación (o Viajes y guías locales)

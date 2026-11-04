@@ -14,8 +14,8 @@ import {
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca, enlaceDescarga, TIPOS_NEGOCIO, numeroWhatsapp, totalPedido, resumenPedido, mensajePedido,
   precioCodigo, textoRecibo, RAPIDOS_CLIENTE, enviarMensaje, botonesRapidos, conBs, activarPush, avisosAlEntrar, olvidarPush, hayBuscadorGoogle, buscarGoogle, lugarGoogle,
-} from "./comun.js?v=98";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=98";
+} from "./comun.js?v=99";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=99";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -279,7 +279,7 @@ function iniciar() {
     }
   }
 
-  const textoBloqueo = () => `Tu cuenta está bloqueada${bloqueado && bloqueado.motivo ? `: ${bloqueado.motivo}` : ""}. Comunícate con el administrador por WhatsApp (0412-3042896).`;
+  const textoBloqueo = () => `Tu cuenta está bloqueada${bloqueado && bloqueado.motivo ? `: ${bloqueado.motivo}` : ""}. Comunícate con el administrador por WhatsApp (0422-0447096).`;
   function abrirMotoDelQr() {
     const id = motoDelQr; motoDelQr = null;
     try { history.replaceState(history.state, "", location.pathname); } catch {}
@@ -507,7 +507,7 @@ function iniciar() {
         <button data-op="lugares">${icono("casa")}<span>Mis lugares<small>${lugaresMios ? `${lugaresMios} guardado${lugaresMios === 1 ? "" : "s"}` : "Casa, trabajo…"}</small></span>${icono("flecha")}</button>
         <button data-op="contacto">${icono("usuario")}<span>Contacto de confianza<small>${contactoSos.leer() ? esc(contactoSos.leer().nombre) : "Para avisarle de tus viajes y en un SOS"}</small></span>${icono("flecha")}</button>
         <div class="fila-op" id="op-instalar">${icono("descargar")}<span>Instalar la app</span></div>
-        <a href="${esc(enlaceWhatsapp(WHATSAPP, `Hola, soy ${cliente.nombre}. Necesito ayuda con Whereapp.`))}" target="_blank" rel="noopener">${icono("chat")}<span>Ayuda por WhatsApp<small>0412-3042896</small></span>${icono("flecha")}</a>
+        <a href="${esc(enlaceWhatsapp(WHATSAPP, `Hola, soy ${cliente.nombre}. Necesito ayuda con Whereapp.`))}" target="_blank" rel="noopener">${icono("chat")}<span>Ayuda por WhatsApp<small>0422-0447096</small></span>${icono("flecha")}</a>
         <a href="terminos.html">${icono("tarjeta")}<span>Términos y condiciones</span>${icono("flecha")}</a>
         <a href="privacidad.html">${icono("escudo")}<span>Privacidad y cookies</span>${icono("flecha")}</a>
         <a href="moto.html" data-modo="moto">${icono("moto")}<span>Entrar como motorizado<small>Para quienes trabajan con Whereapp</small></span>${icono("flecha")}</a>
