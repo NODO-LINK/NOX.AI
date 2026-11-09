@@ -7,7 +7,7 @@ android {
     namespace "com.whereapp.cliente"
     compileSdk 36
     defaultConfig {
-        minSdk 21
+        minSdk 24
         targetSdk 36
         versionCode Integer.parseInt(System.getenv("WHEREAPP_VERSION_CODE") ?: "100")
         versionName System.getenv("WHEREAPP_VERSION_NAME") ?: "1.0"
