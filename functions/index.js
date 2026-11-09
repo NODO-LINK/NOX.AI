@@ -177,6 +177,8 @@ async function enviarPromo(ref, p) {
 exports.promoNueva = onDocumentCreated("promos/{id}", async (e) => {
   const p = e.data && e.data.data();
   if (!p || p.estado !== "pendiente") return;
+  // Play Store no permite publicidad de terceros en notificaciones: solo avisos propios de Whereapp.
+  if (p.negocio) return e.data.ref.update({ estado: "error" });
   if (horaSilencio()) return e.data.ref.update({ estado: "programado" });
   return enviarPromo(e.data.ref, p);
 });
@@ -258,7 +260,7 @@ async function teExtranamos() {
     const prev = (await r.get()).data();
     if (prev && prev.extranado && prev.extranado.toMillis() > hace14) continue;
     const nombre = String(c.get("nombre") || "").split(" ")[0];
-    await avisar([c.id], { titulo: `${nombre}, te extrañamos`, cuerpo: "¿A dónde vas hoy? Pide tu mototaxi o tu comida en Whereapp.", url: PAGINA, tag: "whereapp-promo", urgente: false });
+    await avisar([c.id], { titulo: `${nombre}, te extrañamos`, cuerpo: "¿A dónde vas hoy? Pide tu mototaxi en Whereapp.", url: PAGINA, tag: "whereapp-promo", urgente: false });
     await r.set({ extranado: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
   }
 }

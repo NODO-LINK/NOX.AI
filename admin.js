@@ -16,7 +16,7 @@ import {
   DOCUMENTOS, estadoDoc, resumenDocs,
   filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles, textoDescuento,
   TIPOS_NEGOCIO, CENTRO, numeroWhatsapp, avisosAlEntrar, olvidarPush, FOTOS_SOLICITUD,
-} from "./comun.js?v=100";
+} from "./comun.js?v=101";
 
 if (!avisoSinConfigurar()) iniciar();
 // Estrellas dibujadas (sin emojis): llenas y, si se pide, también las apagadas.
@@ -1451,14 +1451,13 @@ function iniciar() {
             <p><b>${x.vistas || 0}</b> vistas · <b>${x.toques || 0}</b> toques (${pct}%)</p></div>
           <div class="acciones">
             <a class="boton verde chico" target="_blank" rel="noopener" href="${esc(enlaceWhatsapp(numeroWhatsapp(x.telefono), reporteAnuncio(x)))}">${icono("chat")} Enviar reporte</a>
-            <button class="boton secundario chico" data-push-anuncio="${x.id}">${icono("campana")} Aviso a todos</button>
             <button class="boton secundario chico" data-editar-anuncio="${x.id}">Editar</button>
             <button class="boton secundario chico" data-pausar-anuncio="${x.id}">${x.activo ? "Pausar" : "Activar"}</button>
             <button class="quitar" data-borrar-anuncio="${x.id}" aria-label="Borrar">${icono("basura")}</button></div>
         </article>`;
       }).join("") : `<div class="vacio">${icono("megafono")}Todavía no hay anuncios.</div>`}</div>
       <form class="caja" id="form-promo"><h2>${icono("campana")} Aviso a todos los pasajeros</h2>
-        <p class="nota">Les llega como notificación aunque tengan la app cerrada. Entre las 9 p.m. y las 7 a.m. no se envía: queda programado para las 7 a.m.</p>
+        <p class="nota">Les llega como notificación aunque tengan la app cerrada. Entre las 9 p.m. y las 7 a.m. no se envía: queda programado para las 7 a.m. <b>Solo noticias de Whereapp</b> (descuentos, avisos): no pongas publicidad de negocios aquí, Play Store no lo permite.</p>
         <label>Título<input name="titulo" maxlength="60" required placeholder="Ej.: ¡Hoy 50% en mototaxi!"></label>
         <label>Mensaje<textarea name="cuerpo" maxlength="160" required placeholder="Ej.: Solo hasta las 6 p.m. Pide desde la app."></textarea></label>
         <button class="boton">${icono("enviar")} Enviar aviso</button></form>
@@ -1470,14 +1469,6 @@ function iniciar() {
     $$("[data-editar-anuncio]").forEach((b) => (b.onclick = () => editarAnuncio(anuncios.find((x) => x.id === b.dataset.editarAnuncio))));
     $$("[data-pausar-anuncio]").forEach((b) => (b.onclick = () => { const x = anuncios.find((y) => y.id === b.dataset.pausarAnuncio); updateDoc(doc(db, "anuncios", x.id), { activo: !x.activo }).catch(() => aviso("No se pudo cambiar")); }));
     $$("[data-borrar-anuncio]").forEach((b) => (b.onclick = () => { const x = anuncios.find((y) => y.id === b.dataset.borrarAnuncio); if (confirm(`¿Borrar el anuncio de ${x.negocio}?`)) deleteDoc(doc(db, "anuncios", x.id)).catch(() => aviso("No se pudo borrar")); }));
-    $$("[data-push-anuncio]").forEach((b) => (b.onclick = () => {
-      const x = anuncios.find((y) => y.id === b.dataset.pushAnuncio);
-      const titulo = prompt(`Título del aviso patrocinado por ${x.negocio}:`, x.negocio);
-      if (!titulo) return;
-      const cuerpo = prompt("Mensaje (al tocarlo se abre su WhatsApp):", "Toca aquí para escribirles por WhatsApp");
-      if (!cuerpo) return;
-      enviarPromo({ titulo, cuerpo, negocio: x.negocio, telefono: x.telefono });
-    }));
     $("#form-promo").onsubmit = (e) => {
       e.preventDefault();
       const f = new FormData(e.target);
