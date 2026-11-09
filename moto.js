@@ -11,7 +11,7 @@ import {
   DOCUMENTOS, estadoDoc,
   enApp, textoDescuento, totalPedido, WHATSAPP, enlaceWhatsapp, FOTOS_SOLICITUD, normalizarTel, achicarFoto,
   RAPIDOS_MOTO, enviarMensaje, botonesRapidos, activarPush, avisosAlEntrar, olvidarPush,
-} from "./comun.js?v=99";
+} from "./comun.js?v=100";
 
 if (!avisoSinConfigurar()) iniciar();
 

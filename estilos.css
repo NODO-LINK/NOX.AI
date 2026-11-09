@@ -1108,7 +1108,7 @@ button.chip-punto { border: 0; color: inherit; font-family: inherit; cursor: poi
 .buscador-y b { width: 40px; height: 40px; border-radius: 14px; display: grid; place-items: center; background: var(--degradado); color: #fff; }
 .activa-y { width: 100%; margin-top: 12px; display: flex; align-items: center; gap: 10px; padding: 12px 16px; border: 0; border-radius: 18px; background: var(--suave-verde); color: var(--verde); font: inherit; cursor: pointer; }
 .activa-y b { flex: 1; text-align: left; }
-.servicios-y { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 18px 0 16px; }
+.servicios-y { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 10px; margin: 18px 0 16px; }
 .servicio-y { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 12px 4px 10px; border: 1px solid var(--borde); border-radius: 22px;
   background: var(--superficie); color: var(--texto); font: inherit; cursor: pointer; box-shadow: var(--sombra-1); animation: recuadro-entra .5s var(--resorte) both; transition: transform .2s var(--resorte); }
 .servicio-y:active { transform: scale(.93); }

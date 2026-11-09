@@ -14,8 +14,8 @@ import {
   enApp, WHATSAPP, enlaceWhatsapp, ANUNCIO_PREDETERMINADO, htmlPublicidad,
   colorMarca, enlaceDescarga, TIPOS_NEGOCIO, numeroWhatsapp, totalPedido, resumenPedido, mensajePedido,
   precioCodigo, textoRecibo, RAPIDOS_CLIENTE, enviarMensaje, botonesRapidos, conBs, activarPush, avisosAlEntrar, olvidarPush, hayBuscadorGoogle, buscarGoogle, lugarGoogle,
-} from "./comun.js?v=99";
-import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=99";
+} from "./comun.js?v=100";
+import { volar, dibujarLinea, confeti, isla, contar, vibrar, cambiarPestana, transicionCompartida } from "./efectos.js?v=100";
 
 if (!avisoSinConfigurar()) iniciar();
 
@@ -175,7 +175,7 @@ function iniciar() {
     // Barra de abajo (Inicio · Actividad · Cuenta) en las pantallas principales; en las demás, flecha de volver arriba.
     $("#cabecera").hidden = false;
     $("#cabecera").innerHTML = `<div class="dentro"><div class="con-atras"><button class="boton secundario redondo-chico atras-inicio" id="atras" aria-label="Volver al inicio" hidden>${icono("flecha", "girada")}</button>
-      <div><div class="logo">${NOMBRE}</div><div class="logo-sub">Mototaxi, comida y mercado</div></div></div>
+      <div><div class="logo">${NOMBRE}</div><div class="logo-sub">Mototaxi en El Moján</div></div></div>
       <div class="derecha"></div></div>`;
     $("#cabecera .derecha").prepend(botonInstalar(), botonTema());
     $$("#barra button").forEach((b) => (b.onclick = () => (!tarifas ? aviso("Cargando… un momento") : b.dataset.ruta === rutaActual ? null : cambiarPestana(b, () => ir(b.dataset.ruta, true)))));
@@ -342,6 +342,8 @@ function iniciar() {
     // Al salir de un pedido de negocio hacia un viaje normal, el formulario vuelve a empezar.
     if ((r === "publicar" || r === "pedir" || r === "viaje") && pedido.negocio) limpiarEncargo();
     if (r === "encargo" && !pedido.negocio) r = "inicio";
+    // Tienda apagada: comida y mercado no se abren (ni por enlaces viejos).
+    if (!TIENDA && ["mercado", "comida", "negocio", "encargo"].includes(r)) r = "inicio";
     if (!["viaje", "publicar", "pedir", "encargo"].includes(r)) { pedido.destinoPendiente = null; esperandoSenal = false; }
     busquedaTienda = ""; categoriaActual = null;
     if (r === "publicar" || r === "encargo") pedido.codigo = null;
@@ -373,28 +375,31 @@ function iniciar() {
   }
 
   // ---------- Inicio estilo app de servicios: saludo, buscador, servicios, banners y negocios ----------
+  // Comida rápida y Mercado están apagados por ahora (Whereapp es solo mototaxi + publicidad).
+  // Para volver a encenderlos basta con poner TIENDA = true (y mostrar Negocios en el panel).
+  const TIENDA = false;
   const SECCIONES = [
     { r: "viaje", t: "Mototaxi", i: "moto" },
-    { r: "comida", t: "Comida rápida", i: "comida" },
-    { r: "mercado", t: "Mercado", i: "carrito" },
+    TIENDA && { r: "comida", t: "Comida rápida", i: "comida" },
+    TIENDA && { r: "mercado", t: "Mercado", i: "carrito" },
     { r: "motorizados", t: "Motorizados", i: "usuario" },
-  ];
+  ].filter(Boolean);
   // A qué recuadro pertenece cada pantalla (para volver con la animación al recuadro correcto).
   const seccionDe = (r) => (r === "pedir" ? "motorizados" : r === "publicar" ? "viaje" : r === "negocio" ? (negocioActual?.tipo === "comida" ? "comida" : "mercado") : r === "encargo" ? (pedido.volverA || "mercado") : r);
   function vistaInicio() {
-    cargarTienda();
+    if (TIENDA) cargarTienda();
     const activa = carreraActual();
     const d = descuento(tarifas);
     const banners = [
       d && { a: "viaje", c: "b-descuento", t: "¡50% de descuento!", s: d.motivo, i: "dinero" },
       { a: "motorizados", c: "b-seguro", t: "Viaja seguro", s: "Revisa foto, nombre y placa antes de montarte", i: "escudo" },
-      { a: "comida", c: "b-comida", t: "¿Hambre?", s: "Pide comida rápida y te la llevan", i: "comida" },
-      { a: "mercado", c: "b-mercado", t: "Mercado a tu casa", s: "Haz tus compras sin salir", i: "carrito" },
+      TIENDA && { a: "comida", c: "b-comida", t: "¿Hambre?", s: "Pide comida rápida y te la llevan", i: "comida" },
+      TIENDA && { a: "mercado", c: "b-mercado", t: "Mercado a tu casa", s: "Haz tus compras sin salir", i: "carrito" },
     ].filter(Boolean);
     // Publicidad de negocios: después del primer banner de Whereapp.
     const pubs = anunciosVigentes();
     banners.splice(1, 0, ...pubs.map((x) => ({ pub: x })));
-    const cerca = negocios.slice(0, 10);
+    const cerca = TIENDA ? negocios.slice(0, 10) : [];
     // Atajos: Casa y Trabajo (de "Mis lugares") y los últimos destinos a los que fue.
     const favs = favoritos.leer();
     const atajos = ["casa", "trabajo"].map((t) => ({ t, f: favs.find((f) => f.tipo === t) }));
@@ -473,7 +478,7 @@ function iniciar() {
     const pasos = [
       { el: ".buscador-y", t: "Toca aquí para pedir un mototaxi. Tu ubicación se pone sola." },
       { el: ".atajos-y", t: "Guarda tu casa y tu trabajo para pedir con un solo toque." },
-      { el: ".servicios-y", t: "Comida rápida, mercado a tu casa y la lista de motorizados." },
+      { el: ".servicios-y", t: TIENDA ? "Comida rápida, mercado a tu casa y la lista de motorizados." : "Pide tu mototaxi o mira la lista de motorizados de turno." },
       { el: '#barra [data-ruta="carrera"]', t: "En Actividad ves tu viaje en vivo y tu historial con recibos." },
       { el: '#barra [data-ruta="cuenta"]', t: "En Cuenta: tus lugares, tu contacto de confianza y ayuda." },
     ];
@@ -1804,7 +1809,7 @@ function iniciar() {
   // Pago móvil del negocio (para pagar los productos), con botones para copiar.
   const negocioPm = (id) => { const n = negocios.find((x) => x.id === id); return n && n.pagoMovil && n.pagoMovil.telefono ? n.pagoMovil : null; };
   function pagoMovilNegocio(c) {
-    if (!tiendaLista) cargarTienda();
+    if (TIENDA && !tiendaLista) cargarTienda();
     const pm = negocioPm(c.negocio.id);
     if (!pm) return "";
     const total = c.totalProductos ?? totalPedido(c.pedido);

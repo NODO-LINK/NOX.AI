@@ -16,7 +16,7 @@ import {
   DOCUMENTOS, estadoDoc, resumenDocs,
   filasRecorrido, marcarRecorrido, mapsRuta, textoCobro, FORMAS_PAGO, ruta as rutaCalles, textoDescuento,
   TIPOS_NEGOCIO, CENTRO, numeroWhatsapp, avisosAlEntrar, olvidarPush, FOTOS_SOLICITUD,
-} from "./comun.js?v=99";
+} from "./comun.js?v=100";
 
 if (!avisoSinConfigurar()) iniciar();
 // Estrellas dibujadas (sin emojis): llenas y, si se pide, también las apagadas.
@@ -1219,16 +1219,19 @@ function iniciar() {
   }
 
   // Pestaña "Más": tarifas y números.
+  // Comida y mercado apagados por ahora (los datos se guardan). Poner true para volver a mostrarlos.
+  const TIENDA = false;
   let subMas = "tarifas";
   function vistaMas() {
     if (mapaLugares) { mapaLugares.remove(); mapaLugares = null; }
-    const subs = ["tarifas", "stats", "lugares", "publicidad", "negocios"];
-    $("#vista").innerHTML = `<div class="segmento cinco" id="sub-mas" data-pos="${subs.indexOf(subMas)}">
+    if (!TIENDA && subMas === "negocios") subMas = "tarifas";
+    const subs = ["tarifas", "stats", "lugares", "publicidad", ...(TIENDA ? ["negocios"] : [])];
+    $("#vista").innerHTML = `<div class="segmento ${TIENDA ? "cinco" : "cuatro"}" id="sub-mas" data-pos="${subs.indexOf(subMas)}">
       <button data-s="tarifas" class="${subMas === "tarifas" ? "activo" : ""}">${icono("dolar")} Tarifas</button>
       <button data-s="stats" class="${subMas === "stats" ? "activo" : ""}">${icono("grafica")} Números</button>
       <button data-s="lugares" class="${subMas === "lugares" ? "activo" : ""}">${icono("pin")} Lugares</button>
       <button data-s="publicidad" class="${subMas === "publicidad" ? "activo" : ""}">${icono("megafono")} Publicidad</button>
-      <button data-s="negocios" class="${subMas === "negocios" ? "activo" : ""}">${icono("carrito")} Negocios</button></div><div id="sub-vista"></div>`;
+      ${TIENDA ? `<button data-s="negocios" class="${subMas === "negocios" ? "activo" : ""}">${icono("carrito")} Negocios</button>` : ""}</div><div id="sub-vista"></div>`;
     const vista = $("#vista");
     // Las vistas escriben en #vista: se les presta un contenedor y luego se pone debajo del selector.
     const real = vista.id;

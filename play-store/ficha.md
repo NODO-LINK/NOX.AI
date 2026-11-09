@@ -6,7 +6,7 @@ Copia y pega cada texto en Play Console (Crecimiento → Presencia en Play Store
 Whereapp: Mototaxi El Moján
 
 ## Descripción breve (máx. 80)
-Pide tu mototaxi, comida y mercado en El Moján. Sigue tu moto en vivo.
+Pide tu mototaxi en El Moján, mira el precio y sigue tu moto en vivo.
 
 ## Descripción completa
 Whereapp es la app de mototaxi de El Moján (Zulia). Pide tu moto en un toque, mira por dónde viene y llega seguro.
@@ -28,14 +28,11 @@ VIAJA SEGURO
 - Código PIN de 4 números para confirmar que subes a la moto correcta.
 - Calificaciones y opiniones de otros pasajeros.
 
-COMIDA Y MERCADO
-- Pide de los negocios de la zona y te lo lleva un motorizado.
-- Busca productos, mira lo más pedido y paga por pago móvil o efectivo.
-
 Y ADEMÁS
 - Chat con tu motorizado y mensajes rápidos.
 - Historial de viajes con recibo.
 - Widget y accesos directos en tu pantalla.
+- Anuncios de negocios de El Moján.
 
 ¿Trabajas con moto? Entra como motorizado desde la misma app.
 
